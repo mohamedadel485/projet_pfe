@@ -98,7 +98,7 @@ const Login = ({ onLoginSuccess }) => {
         </div>
 
         {/* Card */}
-        <div className="bg-white rounded-lg shadow-2xl p-8">
+        <div className="bg-white rounded-lg shadow-2xl p-8 relative z-50 pointer-events-auto">
           {/* Tabs */}
           <div className="flex gap-4 mb-8 border-b border-gray-200">
             <button

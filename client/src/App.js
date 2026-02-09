@@ -24,10 +24,12 @@ import {
   Settings,
   Plus,
   Activity,
+  Trash,
 } from "lucide-react";
 import { AuthProvider } from "./contexts/AuthContext";
 import ProtectedRoute from "./components/ProtectedRoute";
 import Header from "./components/Header";
+import AddMonitorModal from "./components/AddMonitorModal";
 
 const AppContent = () => {
   const [monitors, setMonitors] = useState([
@@ -146,101 +148,21 @@ const AppContent = () => {
     return status === "up" ? "bg-green-50" : "bg-red-50";
   };
 
-  const AddMonitorModal = () => (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg p-8 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
-        <h2 className="text-2xl font-bold mb-6">Ajouter un Moniteur</h2>
-
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium mb-2">
-              Nom du Moniteur
-            </label>
-            <input
-              type="text"
-              className="w-full border rounded-lg px-4 py-2"
-              placeholder="Mon API"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium mb-2">
-              Type de Surveillance
-            </label>
-            <select className="w-full border rounded-lg px-4 py-2">
-              <option>HTTP(S)</option>
-              <option>Ping</option>
-              <option>Port TCP</option>
-              <option>Mot-clé</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium mb-2">
-              URL ou Adresse
-            </label>
-            <input
-              type="text"
-              className="w-full border rounded-lg px-4 py-2"
-              placeholder="https://api.example.com"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium mb-2">
-              Intervalle de Vérification (minutes)
-            </label>
-            <select className="w-full border rounded-lg px-4 py-2">
-              <option>1</option>
-              <option>5</option>
-              <option>10</option>
-              <option>30</option>
-              <option>60</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium mb-2">
-              Méthode d'Alerte
-            </label>
-            <div className="space-y-2">
-              <label className="flex items-center">
-                <input type="checkbox" className="mr-2" />
-                Email
-              </label>
-              <label className="flex items-center">
-                <input type="checkbox" className="mr-2" />
-                SMS
-              </label>
-              <label className="flex items-center">
-                <input type="checkbox" className="mr-2" />
-                Slack
-              </label>
-              <label className="flex items-center">
-                <input type="checkbox" className="mr-2" />
-                Discord
-              </label>
-            </div>
-          </div>
-
-          <div className="flex justify-end space-x-4 mt-6">
-            <button
-              onClick={() => setShowAddModal(false)}
-              className="px-6 py-2 border rounded-lg hover:bg-gray-50"
-            >
-              Annuler
-            </button>
-            <button
-              onClick={() => setShowAddModal(false)}
-              className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-            >
-              Créer le Moniteur
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+  const handleAddMonitor = (formData) => {
+    const newMonitor = {
+      id: Math.max(...monitors.map((m) => m.id), 0) + 1,
+      name: formData.name,
+      url: formData.url,
+      type: formData.type,
+      status: "up",
+      uptime: 100,
+      responseTime: 0,
+      lastCheck: new Date(),
+      interval: parseInt(formData.interval),
+    };
+    setMonitors([...monitors, newMonitor]);
+    setShowAddModal(false);
+  };
 
   const Dashboard = () => (
     <div className="space-y-6">
@@ -381,21 +303,36 @@ const AppContent = () => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-8 text-center">
-                <div>
-                  <p className="text-xs text-gray-500">Disponibilité</p>
-                  <p className="text-lg font-bold text-green-600">
-                    {monitor.uptime}%
-                  </p>
+              <div className="flex items-center gap-8">
+                <div className="grid grid-cols-3 gap-8 text-center">
+                  <div>
+                    <p className="text-xs text-gray-500">Disponibilité</p>
+                    <p className="text-lg font-bold text-green-600">
+                      {monitor.uptime}%
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500">Temps Réponse</p>
+                    <p className="text-lg font-bold">
+                      {monitor.responseTime}ms
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500">Intervalle</p>
+                    <p className="text-lg font-bold">{monitor.interval}min</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-xs text-gray-500">Temps Réponse</p>
-                  <p className="text-lg font-bold">{monitor.responseTime}ms</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-500">Intervalle</p>
-                  <p className="text-lg font-bold">{monitor.interval}min</p>
-                </div>
+
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setMonitors(monitors.filter((m) => m.id !== monitor.id));
+                  }}
+                  className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors flex-shrink-0"
+                  title="Supprimer ce moniteur"
+                >
+                  <Trash className="w-5 h-5" />
+                </button>
               </div>
             </div>
           </div>
@@ -567,7 +504,11 @@ const AppContent = () => {
         {activeTab === "status" && <StatusPage />}
       </div>
 
-      {showAddModal && <AddMonitorModal />}
+      <AddMonitorModal
+        isOpen={showAddModal}
+        onClose={() => setShowAddModal(false)}
+        onAdd={handleAddMonitor}
+      />
     </div>
   );
 };
