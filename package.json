@@ -1,0 +1,41 @@
+{
+  "name": "uptimewarden",
+  "version": "1.0.0",
+  "description": "Application de surveillance de disponibilité web",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js",
+    "client": "cd client && npm start",
+    "build": "cd client && npm run build",
+    "install-all": "npm install && cd client && npm install"
+  },
+  "keywords": [
+    "uptime",
+    "monitoring",
+    "surveillance",
+    "alerting"
+  ],
+  "author": "UptimeWarden Team",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "mongoose": "^7.5.0",
+    "cors": "^2.8.5",
+    "bcryptjs": "^2.4.3",
+    "jsonwebtoken": "^9.0.2",
+    "node-cron": "^3.0.2",
+    "axios": "^1.5.0",
+    "nodemailer": "^6.9.5",
+    "ws": "^8.14.2",
+    "ping": "^0.4.4",
+    "dotenv": "^16.3.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  },
+  "engines": {
+    "node": ">=16.0.0",
+    "npm": ">=8.0.0"
+  }
+}
