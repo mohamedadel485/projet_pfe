@@ -31,9 +31,12 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import Header from "./components/Header";
 import AddMonitorModal from "./components/AddMonitorModal";
 import PerformanceDashboard from "./components/PerformanceDashboard";
+import api from "./api";
 
 const AppContent = () => {
   const [monitors, setMonitors] = useState([]);
+  const [isLoadingMonitors, setIsLoadingMonitors] = useState(false);
+  const [monitorError, setMonitorError] = useState("");
 
   const [activeTab, setActiveTab] = useState("dashboard");
   const [showAddModal, setShowAddModal] = useState(false);
@@ -63,15 +66,53 @@ const AppContent = () => {
     localStorage.setItem("dashboard_widgets", JSON.stringify(dashboardWidgets));
   }, [dashboardWidgets]);
 
-  const uptimeData = [
-    { time: "00:00", uptime: 100, responseTime: 120 },
-    { time: "04:00", uptime: 100, responseTime: 135 },
-    { time: "08:00", uptime: 99.5, responseTime: 180 },
-    { time: "12:00", uptime: 98, responseTime: 250 },
-    { time: "16:00", uptime: 99, responseTime: 150 },
-    { time: "20:00", uptime: 100, responseTime: 110 },
-    { time: "24:00", uptime: 100, responseTime: 125 },
-  ];
+  const normalizeMonitor = (monitor) => ({
+    ...monitor,
+    id: monitor._id || monitor.id,
+    responseTime:
+      monitor.responseTime != null
+        ? monitor.responseTime
+        : monitor.lastResponseTime || 0,
+  });
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadMonitors = async ({ silent = false } = {}) => {
+      if (!silent) {
+        setIsLoadingMonitors(true);
+        setMonitorError("");
+      }
+      try {
+        const { data } = await api.get("/monitors");
+        if (!isMounted) return;
+        const normalized = Array.isArray(data)
+          ? data.map(normalizeMonitor)
+          : [];
+        setMonitors(normalized);
+      } catch (error) {
+        if (!isMounted) return;
+        console.error("Erreur chargement moniteurs:", error);
+        if (!silent) {
+          const msg =
+            error?.response?.data?.error ||
+            "Impossible de charger les moniteurs.";
+          setMonitorError(msg);
+        }
+      } finally {
+        if (!silent && isMounted) setIsLoadingMonitors(false);
+      }
+    };
+
+    loadMonitors();
+    const interval = setInterval(() => loadMonitors({ silent: true }), 15000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, []);
+
+  const uptimeData = [];
 
   const [incidents, setIncidents] = useState([]);
 
@@ -117,31 +158,6 @@ const AppContent = () => {
       : 0,
   };
 
-  // Add YouTube quick stat for public status (example/static)
-  const youtube = {
-    name: "YouTube",
-    status: "up",
-    uptime: 99.9,
-    responseTime: 123,
-  };
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setMonitors((prev) =>
-        prev.map((monitor) => ({
-          ...monitor,
-          lastCheck: new Date(),
-          responseTime:
-            monitor.status === "up"
-              ? Math.max(50, monitor.responseTime + Math.random() * 20 - 10)
-              : 0,
-        })),
-      );
-    }, 5000);
-
-    return () => clearInterval(interval);
-  }, []);
-
   const getStatusColor = (status) => {
     return status === "up" ? "text-green-500" : "text-red-500";
   };
@@ -150,21 +166,47 @@ const AppContent = () => {
     return status === "up" ? "bg-green-50" : "bg-red-50";
   };
 
-  const handleAddMonitor = (formData) => {
-    const newMonitor = {
-      id: Math.max(...monitors.map((m) => m.id), 0) + 1,
-      name: formData.name,
-      url: formData.url,
-      type: formData.type,
-      status: "up",
-      uptime: 100,
-      responseTime: 0,
-      tags: formData.tags || [],
-      lastCheck: new Date(),
-      interval: parseInt(formData.interval),
-    };
-    setMonitors([...monitors, newMonitor]);
-    setShowAddModal(false);
+  const handleAddMonitor = async (formData) => {
+    setMonitorError("");
+    try {
+      const payload = {
+        name: formData.name,
+        url: formData.url,
+        type: formData.type,
+        interval: parseInt(formData.interval, 10),
+        alertChannels: {
+          email: !!formData.email,
+          sms: !!formData.sms,
+          slack: !!formData.slack,
+          discord: !!formData.discord,
+        },
+        tags: formData.tags || [],
+      };
+
+      const { data } = await api.post("/monitors", payload);
+      setMonitors((prev) => [...prev, normalizeMonitor(data)]);
+      setShowAddModal(false);
+      return true;
+    } catch (error) {
+      console.error("Erreur création moniteur:", error);
+      const msg =
+        error?.response?.data?.error || "Impossible de créer le moniteur.";
+      setMonitorError(msg);
+      return false;
+    }
+  };
+
+  const handleDeleteMonitor = async (monitorId) => {
+    setMonitorError("");
+    try {
+      await api.delete(`/monitors/${monitorId}`);
+      setMonitors((prev) => prev.filter((m) => m.id !== monitorId));
+    } catch (error) {
+      console.error("Erreur suppression moniteur:", error);
+      const msg =
+        error?.response?.data?.error || "Impossible de supprimer le moniteur.";
+      setMonitorError(msg);
+    }
   };
 
   const Sparkline = ({ data }) => (
@@ -261,46 +303,58 @@ const AppContent = () => {
       {dashboardWidgets.availability && (
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6 border border-gray-200 dark:border-gray-700">
           <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">
-            Tendances de Disponibilité (24h)
+            Tendances de Disponibilite (24h)
           </h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <AreaChart data={uptimeData}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="time" />
-              <YAxis />
-              <Tooltip />
-              <Legend />
-              <Area
-                type="monotone"
-                dataKey="uptime"
-                stroke="#10b981"
-                fill="#10b98120"
-                name="Disponibilité %"
-              />
-            </AreaChart>
-          </ResponsiveContainer>
+          {uptimeData.length === 0 ? (
+            <div className="text-sm text-gray-500">
+              Aucune donnee historique disponible.
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height={300}>
+              <AreaChart data={uptimeData}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="time" />
+                <YAxis />
+                <Tooltip />
+                <Legend />
+                <Area
+                  type="monotone"
+                  dataKey="uptime"
+                  stroke="#10b981"
+                  fill="#10b98120"
+                  name="Disponibilite %"
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          )}
         </div>
       )}
 
       {dashboardWidgets.response && (
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6 border border-gray-200 dark:border-gray-700">
-          <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">Temps de Réponse (24h)</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={uptimeData}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="time" />
-              <YAxis />
-              <Tooltip />
-              <Legend />
-              <Line
-                type="monotone"
-                dataKey="responseTime"
-                stroke="#3b82f6"
-                strokeWidth={2}
-                name="Temps de réponse (ms)"
-              />
-            </LineChart>
-          </ResponsiveContainer>
+          <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">Temps de Reponse (24h)</h3>
+          {uptimeData.length === 0 ? (
+            <div className="text-sm text-gray-500">
+              Aucune donnee historique disponible.
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height={300}>
+              <LineChart data={uptimeData}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="time" />
+                <YAxis />
+                <Tooltip />
+                <Legend />
+                <Line
+                  type="monotone"
+                  dataKey="responseTime"
+                  stroke="#3b82f6"
+                  strokeWidth={2}
+                  name="Temps de reponse (ms)"
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
         </div>
       )}
     </div>
@@ -487,9 +541,7 @@ const AppContent = () => {
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            setMonitors(
-                              monitors.filter((m) => m.id !== monitor.id),
-                            );
+                            handleDeleteMonitor(monitor.id);
                           }}
                           className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors flex-shrink-0"
                           title="Supprimer ce moniteur"
@@ -590,9 +642,7 @@ const AppContent = () => {
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        setMonitors(
-                          monitors.filter((m) => m.id !== monitor.id),
-                        );
+                        handleDeleteMonitor(monitor.id);
                       }}
                       className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors flex-shrink-0"
                       title="Supprimer ce moniteur"
@@ -788,16 +838,23 @@ const AppContent = () => {
         <h2 className="text-xl font-bold mb-4 text-gray-900 dark:text-white">
           Statistiques de Disponibilité (30 jours)
         </h2>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {[...monitors, youtube].map((monitor, idx) => (
-            <div key={idx} className="text-center p-4 bg-gray-50 rounded-lg">
-              <p className="text-sm text-gray-600 mb-2">{monitor.name}</p>
-              <p className="text-2xl font-bold text-green-600">
-                {monitor.uptime}%
-              </p>
-            </div>
-          ))}
-        </div>
+        {monitors.length === 0 ? (
+          <div className="text-sm text-gray-500">Aucun moniteur.</div>
+        ) : (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {monitors.map((monitor) => (
+              <div
+                key={monitor.id}
+                className="text-center p-4 bg-gray-50 rounded-lg"
+              >
+                <p className="text-sm text-gray-600 mb-2">{monitor.name}</p>
+                <p className="text-2xl font-bold text-green-600">
+                  {monitor.uptime}%
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="bg-white rounded-lg shadow-sm p-6 border">
@@ -805,36 +862,42 @@ const AppContent = () => {
           Historique des incidents (public)
         </h2>
         <div className="space-y-3">
-          {incidents.map((incident) => (
-            <div key={incident.id} className="p-3 bg-gray-50 rounded-lg">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="font-semibold">
-                    {incident.monitor} — {incident.type}
+          {incidents.length === 0 ? (
+            <div className="text-sm text-gray-500">Aucun incident.</div>
+          ) : (
+            incidents.map((incident) => (
+              <div key={incident.id} className="p-3 bg-gray-50 rounded-lg">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="font-semibold">
+                      {incident.monitor} - {incident.type}
+                    </div>
+                    <div className="text-sm text-gray-500">
+                      Il y a {incident.time} - Duree: {incident.duration}
+                    </div>
                   </div>
-                  <div className="text-sm text-gray-500">
-                    Il y a {incident.time} • Durée: {incident.duration}
+                  <div className="text-sm">
+                    {incident.resolved ? "Resolu" : "En cours"}
                   </div>
                 </div>
-                <div className="text-sm">
-                  {incident.resolved ? "✅ Résolu" : "🔴 En cours"}
-                </div>
+                {incident.comments && incident.comments.length > 0 && (
+                  <div className="mt-3 text-sm text-gray-700">
+                    <div className="font-medium">Commentaires publics:</div>
+                    <ul className="mt-2 space-y-1">
+                      {incident.comments.map((c, i) => (
+                        <li key={i}>
+                          - {c.text}{" "}
+                          <span className="text-xs text-gray-400">
+                            ({c.by})
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </div>
-              {incident.comments && incident.comments.length > 0 && (
-                <div className="mt-3 text-sm text-gray-700">
-                  <div className="font-medium">Commentaires publics:</div>
-                  <ul className="mt-2 space-y-1">
-                    {incident.comments.map((c, i) => (
-                      <li key={i}>
-                        • {c.text}{" "}
-                        <span className="text-xs text-gray-400">({c.by})</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </div>
-          ))}
+            ))
+          )}
         </div>
       </div>
     </div>
@@ -845,6 +908,14 @@ const AppContent = () => {
       <Header />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {monitorError && (
+          <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {monitorError}
+          </div>
+        )}
+        {isLoadingMonitors && (
+          <div className="mb-4 text-sm text-gray-500">Chargement des moniteurs...</div>
+        )}
         <div className="flex space-x-1 mb-6 bg-white dark:bg-gray-800 rounded-lg p-1 shadow-sm border border-gray-200 dark:border-gray-700">
           <button
             onClick={() => setActiveTab("dashboard")}

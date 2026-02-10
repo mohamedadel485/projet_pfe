@@ -3,7 +3,7 @@ import React, { useState } from "react";
 const AddMonitorModal = ({ isOpen, onClose, onAdd }) => {
   const [formData, setFormData] = useState({
     name: "",
-    type: "HTTP(S)",
+    type: "HTTP",
     url: "",
     interval: "1",
     email: false,
@@ -15,7 +15,7 @@ const AddMonitorModal = ({ isOpen, onClose, onAdd }) => {
   const handleClose = () => {
     setFormData({
       name: "",
-      type: "HTTP(S)",
+      type: "HTTP",
       url: "",
       interval: "1",
       email: false,
@@ -26,11 +26,12 @@ const AddMonitorModal = ({ isOpen, onClose, onAdd }) => {
     onClose();
   };
 
-  const handleAdd = () => {
-    onAdd(formData);
+  const handleAdd = async () => {
+    const ok = await onAdd(formData);
+    if (!ok) return;
     setFormData({
       name: "",
-      type: "HTTP(S)",
+      type: "HTTP",
       url: "",
       interval: "1",
       email: false,
@@ -75,10 +76,10 @@ const AddMonitorModal = ({ isOpen, onClose, onAdd }) => {
                 setFormData({ ...formData, type: e.target.value })
               }
             >
-              <option>HTTP(S)</option>
-              <option>Ping</option>
-              <option>Port TCP</option>
-              <option>Mot-clé</option>
+              <option value="HTTP">HTTP(S)</option>
+              <option value="PING">Ping</option>
+              <option value="PORT">Port TCP</option>
+              <option value="KEYWORD">Mot-clé</option>
             </select>
           </div>
 

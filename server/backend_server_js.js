@@ -28,10 +28,59 @@ function startDiscordBot() {
     console.log(`Discord bot pret : ${discordBotClient.user.tag}`);
     console.log("🤖 Bot Discord prêt !");
   });
-  discordBotClient.on("messageCreate", (message) => {
+  discordBotClient.on("messageCreate", async (message) => {
     if (message.author.bot) return;
-    if (message.content === "ping") {
-      message.reply("pong ✅");
+    const raw = message.content.trim();
+    const lower = raw.toLowerCase();
+    const isStatus =
+      lower === "ping" ||
+      lower.startsWith("ping ") ||
+      lower === "!ping" ||
+      lower.startsWith("!ping ") ||
+      lower === "status" ||
+      lower.startsWith("status ") ||
+      lower === "!status" ||
+      lower.startsWith("!status ");
+    if (!isStatus) {
+      return;
+    }
+
+    const query = raw.replace(/^!?\s*(ping|status)\s*/i, "").trim();
+
+    try {
+      const filter = { "alertChannels.discord": true };
+      if (query) {
+        const safeQuery = query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        filter.name = new RegExp(safeQuery, "i");
+      }
+
+      const monitors = await Monitor.find(filter)
+        .sort({ lastCheck: -1 })
+        .limit(10)
+        .lean();
+
+      if (!monitors.length) {
+        const msg = query
+          ? `Aucun moniteur trouve pour "${query}".`
+          : "Aucun moniteur avec Discord active.";
+        await message.reply(msg);
+        return;
+      }
+
+      const lines = monitors.map((m) => {
+        const statusLabel =
+          m.status === "up" ? "OK" : m.status === "down" ? "PANNE" : "PAUSE";
+        const last = m.lastCheck
+          ? new Date(m.lastCheck).toLocaleString("fr-FR")
+          : "N/A";
+        return `- ${m.name}: ${statusLabel} (dernier check: ${last})`;
+      });
+
+      await message.reply(`Etat des moniteurs:
+${lines.join("\n")}`);
+    } catch (error) {
+      console.error("Erreur Discord ping:", error);
+      await message.reply("Erreur: impossible de lire les moniteurs.");
     }
   });
 
@@ -549,7 +598,7 @@ class NotificationService {
 
     // Discord (webhook global ou par utilisateur)
     const discordWebhook = user.discordWebhook || DISCORD_WEBHOOK_URL || "";
-    if (monitor.alertChannels.discord) {
+    if (monitor.alertChannels.discord && user.notifications.discord) {
       if (discordWebhook) {
         await this.sendDiscord(discordWebhook, message);
       } else if (DISCORD_ALERT_CHANNEL_ID) {
