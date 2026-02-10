@@ -31,6 +31,9 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import Header from "./components/Header";
 import AddMonitorModal from "./components/AddMonitorModal";
 import PerformanceDashboard from "./components/PerformanceDashboard";
+
+import LiquidEther from "./components/LiquidEther";
+
 import api from "./api";
 
 const AppContent = () => {
@@ -904,89 +907,116 @@ const AppContent = () => {
   );
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      <Header />
-
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {monitorError && (
-          <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            {monitorError}
-          </div>
-        )}
-        {isLoadingMonitors && (
-          <div className="mb-4 text-sm text-gray-500">Chargement des moniteurs...</div>
-        )}
-        <div className="flex space-x-1 mb-6 bg-white dark:bg-gray-800 rounded-lg p-1 shadow-sm border border-gray-200 dark:border-gray-700">
-          <button
-            onClick={() => setActiveTab("dashboard")}
-            className={`flex-1 px-4 py-2 rounded-lg transition-colors ${
-              activeTab === "dashboard"
-                ? "bg-blue-600 text-white"
-                : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
-            }`}
-          >
-            <div className="flex items-center justify-center">
-              <Activity className="w-4 h-4 mr-2" />
-              Tableau de Bord
-            </div>
-          </button>
-          <button
-            onClick={() => setActiveTab("monitors")}
-            className={`flex-1 px-4 py-2 rounded-lg transition-colors ${
-              activeTab === "monitors"
-                ? "bg-blue-600 text-white"
-                : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
-            }`}
-          >
-            <div className="flex items-center justify-center">
-              <Server className="w-4 h-4 mr-2" />
-              Moniteurs
-            </div>
-          </button>
-          <button
-            onClick={() => setActiveTab("incidents")}
-            className={`flex-1 px-4 py-2 rounded-lg transition-colors ${
-              activeTab === "incidents"
-                ? "bg-blue-600 text-white"
-                : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
-            }`}
-          >
-            <div className="flex items-center justify-center">
-              <AlertCircle className="w-4 h-4 mr-2" />
-              Incidents
-            </div>
-          </button>
-          <button
-            onClick={() => setActiveTab("status")}
-            className={`flex-1 px-4 py-2 rounded-lg transition-colors ${
-              activeTab === "status"
-                ? "bg-blue-600 text-white"
-                : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
-            }`}
-          >
-            <div className="flex items-center justify-center">
-              <Globe className="w-4 h-4 mr-2" />
-              Page de Statut
-            </div>
-          </button>
-        </div>
-
-        {activeTab === "dashboard" && <Dashboard />}
-        {activeTab === "monitors" && <MonitorsView />}
-        {activeTab === "incidents" && <IncidentsView />}
-        {activeTab === "status" && <StatusPage />}
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 relative overflow-hidden">
+      <div className="absolute inset-0 z-0">
+        <LiquidEther
+          colors={["#5227FF", "#FF9FFC", "#B19EEF"]}
+          mouseForce={20}
+          cursorSize={100}
+          isViscous
+          viscous={30}
+          iterationsViscous={32}
+          iterationsPoisson={32}
+          resolution={0.5}
+          isBounce={false}
+          autoDemo
+          autoSpeed={0.5}
+          autoIntensity={2.2}
+          takeoverDuration={0.25}
+          autoResumeDelay={3000}
+          autoRampDuration={0.6}
+          color0="#5227FF"
+          color1="#FF9FFC"
+          color2="#B19EEF"
+        />
       </div>
 
-      <AddMonitorModal
-        isOpen={showAddModal}
-        onClose={() => setShowAddModal(false)}
-        onAdd={handleAddMonitor}
-      />
-      <PerformanceDashboard
-        isOpen={showPerfDashboard}
-        onClose={() => setShowPerfDashboard(false)}
-        monitors={monitors}
-      />
+      <div className="relative z-10">
+        <Header />
+
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          {monitorError && (
+            <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {monitorError}
+            </div>
+          )}
+          {isLoadingMonitors && (
+            <div className="mb-4 text-sm text-gray-500">
+              Chargement des moniteurs...
+            </div>
+          )}
+          <div className="flex space-x-1 mb-6 bg-white dark:bg-gray-800 rounded-lg p-1 shadow-sm border border-gray-200 dark:border-gray-700">
+            <button
+              onClick={() => setActiveTab("dashboard")}
+              className={`flex-1 px-4 py-2 rounded-lg transition-colors ${
+                activeTab === "dashboard"
+                  ? "bg-blue-600 text-white"
+                  : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+              }`}
+            >
+              <div className="flex items-center justify-center">
+                <Activity className="w-4 h-4 mr-2" />
+                Tableau de Bord
+              </div>
+            </button>
+            <button
+              onClick={() => setActiveTab("monitors")}
+              className={`flex-1 px-4 py-2 rounded-lg transition-colors ${
+                activeTab === "monitors"
+                  ? "bg-blue-600 text-white"
+                  : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+              }`}
+            >
+              <div className="flex items-center justify-center">
+                <Server className="w-4 h-4 mr-2" />
+                Moniteurs
+              </div>
+            </button>
+            <button
+              onClick={() => setActiveTab("incidents")}
+              className={`flex-1 px-4 py-2 rounded-lg transition-colors ${
+                activeTab === "incidents"
+                  ? "bg-blue-600 text-white"
+                  : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+              }`}
+            >
+              <div className="flex items-center justify-center">
+                <AlertCircle className="w-4 h-4 mr-2" />
+                Incidents
+              </div>
+            </button>
+            <button
+              onClick={() => setActiveTab("status")}
+              className={`flex-1 px-4 py-2 rounded-lg transition-colors ${
+                activeTab === "status"
+                  ? "bg-blue-600 text-white"
+                  : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+              }`}
+            >
+              <div className="flex items-center justify-center">
+                <Globe className="w-4 h-4 mr-2" />
+                Page de Statut
+              </div>
+            </button>
+          </div>
+
+          {activeTab === "dashboard" && <Dashboard />}
+          {activeTab === "monitors" && <MonitorsView />}
+          {activeTab === "incidents" && <IncidentsView />}
+          {activeTab === "status" && <StatusPage />}
+        </div>
+
+        <AddMonitorModal
+          isOpen={showAddModal}
+          onClose={() => setShowAddModal(false)}
+          onAdd={handleAddMonitor}
+        />
+        <PerformanceDashboard
+          isOpen={showPerfDashboard}
+          onClose={() => setShowPerfDashboard(false)}
+          monitors={monitors}
+        />
+      </div>
     </div>
   );
 };
