@@ -7,6 +7,7 @@ const jwt = require("jsonwebtoken");
 const cron = require("node-cron");
 const axios = require("axios");
 const nodemailer = require("nodemailer");
+const crypto = require("crypto");
 const { WebSocketServer } = require("ws");
 const http = require("http");
 const https = require("https");
@@ -43,7 +44,12 @@ const UserSchema = new mongoose.Schema({
   email: { type: String, required: true, unique: true },
   password: { type: String, required: true },
   name: { type: String, required: true },
-  googleId: String, // ID Google pour la connexion OAuth  role: { type: String, enum: ["admin", "user"], default: "user" },
+  googleId: String, // ID Google pour la connexion OAuth
+  role: {
+    type: String,
+    enum: ["admin", "editor", "viewer"],
+    default: "viewer",
+  },
   notifications: {
     email: { type: Boolean, default: true },
     sms: { type: Boolean, default: false },
@@ -72,6 +78,8 @@ const MonitorSchema = new mongoose.Schema({
   lastResponseTime: Number,
   sslCheck: { type: Boolean, default: false },
   sslExpiryDate: Date,
+  region: { type: String, default: "global" },
+  tags: [{ type: String }],
   alertChannels: {
     email: { type: Boolean, default: true },
     sms: { type: Boolean, default: false },
@@ -87,11 +95,32 @@ const CheckHistorySchema = new mongoose.Schema({
     ref: "Monitor",
     required: true,
   },
-  status: { type: String, enum: ["up", "down"], required: true },
+  status: { type: String, enum: ["up", "down", "maintenance"], required: true },
   responseTime: Number,
   statusCode: Number,
   error: String,
   timestamp: { type: Date, default: Date.now },
+});
+
+// API Keys for integrations
+const ApiKeySchema = new mongoose.Schema({
+  key: { type: String, required: true, unique: true },
+  name: String,
+  userId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+  scopes: [String],
+  revoked: { type: Boolean, default: false },
+  createdAt: { type: Date, default: Date.now },
+});
+
+// Maintenance windows
+const MaintenanceSchema = new mongoose.Schema({
+  monitorId: { type: mongoose.Schema.Types.ObjectId, ref: "Monitor" },
+  title: String,
+  startTime: Date,
+  endTime: Date,
+  createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+  description: String,
+  createdAt: { type: Date, default: Date.now },
 });
 
 const IncidentSchema = new mongoose.Schema({
@@ -135,6 +164,8 @@ const Monitor = mongoose.model("Monitor", MonitorSchema);
 const CheckHistory = mongoose.model("CheckHistory", CheckHistorySchema);
 const Incident = mongoose.model("Incident", IncidentSchema);
 const StatusPage = mongoose.model("StatusPage", StatusPageSchema);
+const ApiKey = mongoose.model("ApiKey", ApiKeySchema);
+const Maintenance = mongoose.model("Maintenance", MaintenanceSchema);
 
 // ============= MIDDLEWARE D'AUTHENTIFICATION =============
 
@@ -151,6 +182,22 @@ const authenticateToken = (req, res, next) => {
     req.user = user;
     next();
   });
+};
+
+// API key middleware (for private integrations)
+const authenticateApiKey = async (req, res, next) => {
+  try {
+    const key = req.headers["x-api-key"] || req.query.api_key;
+    if (!key) return res.status(401).json({ error: "API key required" });
+
+    const apiKey = await ApiKey.findOne({ key, revoked: false });
+    if (!apiKey) return res.status(403).json({ error: "Invalid API key" });
+
+    req.apiKey = apiKey;
+    next();
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 };
 
 // ============= SERVICES DE MONITORING =============
@@ -468,6 +515,33 @@ class MonitorScheduler {
 
       const result = await MonitoringService.performCheck(monitor);
 
+      // Vérifier si une période de maintenance est active pour ce moniteur
+      const now = new Date();
+      const activeMaintenance = await Maintenance.findOne({
+        monitorId: monitor._id,
+        startTime: { $lte: now },
+        endTime: { $gte: now },
+      });
+
+      if (activeMaintenance) {
+        // Marquer le check comme période de maintenance et ne pas affecter l'uptime
+        await CheckHistory.create({
+          monitorId: monitor._id,
+          status: "maintenance",
+          responseTime: result.responseTime,
+          statusCode: result.statusCode,
+          error: "maintenance",
+        });
+
+        monitor.lastCheck = now;
+        monitor.lastResponseTime = result.responseTime;
+        await monitor.save();
+
+        // Envoyer mise à jour mais ne pas créer d'incident ni recalculer l'uptime
+        this.broadcastUpdate(monitor);
+        return;
+      }
+
       // Enregistrement de l'historique
       await CheckHistory.create({
         monitorId: monitor._id,
@@ -480,16 +554,22 @@ class MonitorScheduler {
       // Mise à jour du moniteur
       const previousStatus = monitor.status;
       monitor.status = result.status;
-      monitor.lastCheck = new Date();
+      monitor.lastCheck = now;
       monitor.lastResponseTime = result.responseTime;
 
-      // Calcul de l'uptime (basé sur les 100 derniers checks)
+      // Calcul de l'uptime (basé sur les 100 derniers checks, en excluant 'maintenance')
       const recentChecks = await CheckHistory.find({ monitorId: monitor._id })
         .sort({ timestamp: -1 })
-        .limit(100);
+        .limit(200);
 
-      const upChecks = recentChecks.filter((c) => c.status === "up").length;
-      monitor.uptime = (upChecks / recentChecks.length) * 100;
+      const validChecks = recentChecks.filter(
+        (c) => c.status === "up" || c.status === "down",
+      );
+      const upChecks = validChecks.filter((c) => c.status === "up").length;
+      monitor.uptime =
+        validChecks.length > 0
+          ? (upChecks / validChecks.length) * 100
+          : monitor.uptime;
 
       await monitor.save();
 
@@ -862,6 +942,155 @@ app.get("/api/stats", authenticateToken, async (req, res) => {
         totalChecks > 0 ? ((upChecks / totalChecks) * 100).toFixed(2) : 0,
       avgResponseTime: avgResponseTime[0]?.avg?.toFixed(0) || 0,
       activeIncidents,
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// API Keys (create/list/revoke)
+app.post("/api/apikeys", authenticateToken, async (req, res) => {
+  try {
+    const { name, scopes = [] } = req.body;
+    const key = crypto.randomBytes(32).toString("hex");
+
+    const apiKey = await ApiKey.create({
+      key,
+      name,
+      scopes,
+      userId: req.user.id,
+    });
+
+    // Return the raw key once
+    res.status(201).json({
+      id: apiKey._id,
+      key: apiKey.key,
+      name: apiKey.name,
+      scopes: apiKey.scopes,
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get("/api/apikeys", authenticateToken, async (req, res) => {
+  try {
+    const keys = await ApiKey.find({ userId: req.user.id }).select(
+      "_id name scopes revoked createdAt",
+    );
+    res.json(keys);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.delete("/api/apikeys/:id", authenticateToken, async (req, res) => {
+  try {
+    const key = await ApiKey.findOne({
+      _id: req.params.id,
+      userId: req.user.id,
+    });
+    if (!key) return res.status(404).json({ error: "API key non trouvée" });
+    key.revoked = true;
+    await key.save();
+    res.json({ message: "API key révoquée" });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Maintenance windows
+app.post("/api/maintenances", authenticateToken, async (req, res) => {
+  try {
+    const { monitorId, title, startTime, endTime, description } = req.body;
+    const m = await Maintenance.create({
+      monitorId,
+      title,
+      startTime,
+      endTime,
+      description,
+      createdBy: req.user.id,
+    });
+    res.status(201).json(m);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get("/api/maintenances", authenticateToken, async (req, res) => {
+  try {
+    // Return maintenances for monitors owned by the user
+    const monitors = await Monitor.find({ userId: req.user.id }).select("_id");
+    const monitorIds = monitors.map((m) => m._id);
+    const list = await Maintenance.find({
+      monitorId: { $in: monitorIds },
+    }).sort({ startTime: -1 });
+    res.json(list);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.delete("/api/maintenances/:id", authenticateToken, async (req, res) => {
+  try {
+    const m = await Maintenance.findById(req.params.id);
+    if (!m) return res.status(404).json({ error: "Maintenance non trouvée" });
+    // Allow delete if owner or admin
+    if (String(m.createdBy) !== String(req.user.id)) {
+      const user = await User.findById(req.user.id);
+      if (!user || user.role !== "admin")
+        return res.status(403).json({ error: "Non autorisé" });
+    }
+    await m.remove();
+    res.json({ message: "Maintenance supprimée" });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Public JSON status endpoint (optionally filtered by status page slug)
+app.get("/api/public/status", async (req, res) => {
+  try {
+    const { slug } = req.query;
+    let monitorsList = [];
+    if (slug) {
+      const page = await StatusPage.findOne({ slug }).populate("monitors");
+      if (!page)
+        return res.status(404).json({ error: "Status page non trouvée" });
+      monitorsList = page.monitors.map((m) => ({
+        id: m._id,
+        name: m.name,
+        status: m.status,
+        uptime: m.uptime,
+        responseTime: m.lastResponseTime,
+        region: m.region,
+      }));
+    } else {
+      const mons = await Monitor.find({}).select(
+        "name status uptime lastResponseTime region type url lastCheck",
+      );
+      monitorsList = mons.map((m) => ({
+        id: m._id,
+        name: m.name,
+        status: m.status,
+        uptime: m.uptime,
+        responseTime: m.lastResponseTime,
+        region: m.region,
+      }));
+    }
+
+    const openIncidents = await Incident.find({ resolved: false })
+      .populate("monitorId")
+      .limit(50);
+
+    const overall = monitorsList.some((m) => m.status === "down")
+      ? "degraded"
+      : "operational";
+
+    res.json({
+      status: overall,
+      monitors: monitorsList,
+      incidents: openIncidents,
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
