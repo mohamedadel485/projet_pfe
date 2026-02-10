@@ -2,7 +2,11 @@ require("dotenv").config();
 
 // Discord.js pour bot Discord
 const { Client, GatewayIntentBits } = require("discord.js");
-const { DISCORD_BOT_TOKEN } = require("./discord_config");
+const {
+  DISCORD_BOT_TOKEN,
+  DISCORD_WEBHOOK_URL,
+  DISCORD_ALERT_CHANNEL_ID,
+} = require("./discord_config");
 let discordBotClient = null;
 let discordBotReady = false;
 
@@ -94,6 +98,8 @@ const UserSchema = new mongoose.Schema({
     slack: { type: Boolean, default: false },
     discord: { type: Boolean, default: false },
   },
+  slackWebhook: String,
+  discordWebhook: String,
   createdAt: { type: Date, default: Date.now },
 });
 
@@ -494,6 +500,29 @@ class NotificationService {
     }
   }
 
+  static async sendDiscordBot(message) {
+    if (!discordBotClient || !discordBotReady) {
+      console.warn("Discord bot non prÃªt, message ignorÃ©.");
+      return { success: false, error: "Discord bot not ready" };
+    }
+    if (!DISCORD_ALERT_CHANNEL_ID) {
+      return { success: false, error: "Missing DISCORD_ALERT_CHANNEL_ID" };
+    }
+    try {
+      const channel = await discordBotClient.channels.fetch(
+        DISCORD_ALERT_CHANNEL_ID,
+      );
+      if (!channel || !channel.send) {
+        return { success: false, error: "Invalid Discord channel" };
+      }
+      await channel.send(message);
+      return { success: true };
+    } catch (error) {
+      console.error("Erreur Discord bot:", error);
+      return { success: false, error: error.message };
+    }
+  }
+
   static async sendAlert(monitor, incident) {
     const user = await User.findById(monitor.userId);
     if (!user) return;
@@ -518,9 +547,18 @@ class NotificationService {
       // await this.sendSlack(user.slackWebhook, message);
     }
 
-    // Discord
-    if (monitor.alertChannels.discord && user.notifications.discord) {
-      // await this.sendDiscord(user.discordWebhook, message);
+    // Discord (webhook global ou par utilisateur)
+    const discordWebhook = user.discordWebhook || DISCORD_WEBHOOK_URL || "";
+    if (monitor.alertChannels.discord) {
+      if (discordWebhook) {
+        await this.sendDiscord(discordWebhook, message);
+      } else if (DISCORD_ALERT_CHANNEL_ID) {
+        await this.sendDiscordBot(message);
+      } else {
+        console.warn(
+          "Discord activÃ© mais aucun webhook ni channel ID configurÃ©.",
+        );
+      }
     }
   }
 }
