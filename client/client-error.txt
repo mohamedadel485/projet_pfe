@@ -1,0 +1,15 @@
+﻿
+> client@0.1.0 start
+> react-scripts start
+
+node.exe : (node:51084) [DEP0176] DeprecationWarning: fs.F_OK is deprecated, 
+use fs.constants.F_OK instead
+Au caractère Ligne:1 : 1
++ & "C:\Program Files\nodejs/node.exe" "C:\Program Files\nodejs/node_mo ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: ((node:51084) [D...ts.F_OK instead 
+   :String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+(Use `node --trace-deprecation ...` to show where the warning was created)
+Something is already running on port 3000.

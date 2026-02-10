@@ -1,0 +1,30 @@
+{
+  "name": "uptimewarden",
+  "version": "1.0.0",
+  "description": "Application de surveillance de disponibilité web",
+  "private": true,
+  "scripts": {
+    "start": "concurrently \"npm run server\" \"npm run client\"",
+    "server": "cd server && npm start",
+    "server:dev": "cd server && npm run dev",
+    "client": "cd client && npm start",
+    "client:build": "cd client && npm run build",
+    "install-all": "npm install && cd server && npm install && cd ../client && npm install",
+    "build": "npm run client:build"
+  },
+  "keywords": [
+    "uptime",
+    "monitoring",
+    "surveillance",
+    "alerting"
+  ],
+  "author": "UptimeWarden Team",
+  "license": "MIT",
+  "devDependencies": {
+    "concurrently": "^8.2.0"
+  },
+  "engines": {
+    "node": ">=16.0.0",
+    "npm": ">=8.0.0"
+  }
+}
