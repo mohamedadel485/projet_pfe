@@ -33,56 +33,7 @@ import AddMonitorModal from "./components/AddMonitorModal";
 import PerformanceDashboard from "./components/PerformanceDashboard";
 
 const AppContent = () => {
-  const [monitors, setMonitors] = useState([
-    {
-      id: 1,
-      name: "API Principal",
-      url: "https://api.example.com",
-      type: "HTTP",
-      status: "up",
-      uptime: 99.8,
-      responseTime: 145,
-      tags: ["prod", "api"],
-      lastCheck: new Date(),
-      interval: 5,
-    },
-    {
-      id: 2,
-      name: "Site Web",
-      url: "https://www.example.com",
-      type: "HTTPS",
-      status: "up",
-      uptime: 99.95,
-      responseTime: 89,
-      tags: ["website", "prod"],
-      lastCheck: new Date(),
-      interval: 5,
-    },
-    {
-      id: 3,
-      name: "Base de données",
-      url: "db.example.com:5432",
-      type: "PORT",
-      status: "down",
-      uptime: 98.2,
-      responseTime: 0,
-      tags: ["db", "infra"],
-      lastCheck: new Date(),
-      interval: 5,
-    },
-    {
-      id: 4,
-      name: "Serveur Email",
-      url: "mail.example.com",
-      type: "PING",
-      status: "up",
-      uptime: 99.99,
-      responseTime: 12,
-      tags: ["mail", "infra"],
-      lastCheck: new Date(),
-      interval: 5,
-    },
-  ]);
+  const [monitors, setMonitors] = useState([]);
 
   const [activeTab, setActiveTab] = useState("dashboard");
   const [showAddModal, setShowAddModal] = useState(false);
@@ -122,28 +73,7 @@ const AppContent = () => {
     { time: "24:00", uptime: 100, responseTime: 125 },
   ];
 
-  const [incidents, setIncidents] = useState([
-    {
-      id: 1,
-      monitor: "Base de données",
-      type: "Panne",
-      duration: "15 min",
-      time: "2 heures",
-      resolved: false,
-      comments: [],
-    },
-    {
-      id: 2,
-      monitor: "API Principal",
-      type: "Ralentissement",
-      duration: "5 min",
-      time: "6 heures",
-      resolved: true,
-      comments: [
-        { by: "admin", text: "Cause identifiée: surcharge", time: "1h" },
-      ],
-    },
-  ]);
+  const [incidents, setIncidents] = useState([]);
 
   const updateIncident = (id, patch) => {
     setIncidents((prev) =>
@@ -176,13 +106,15 @@ const AppContent = () => {
   const stats = {
     totalMonitors: monitors.length,
     upMonitors: monitors.filter((m) => m.status === "up").length,
-    avgUptime: (
-      monitors.reduce((acc, m) => acc + m.uptime, 0) / monitors.length
-    ).toFixed(2),
-    avgResponseTime: Math.round(
-      monitors.reduce((acc, m) => acc + (m.responseTime || 0), 0) /
-        monitors.length,
-    ),
+    avgUptime: monitors.length
+      ? (monitors.reduce((acc, m) => acc + m.uptime, 0) / monitors.length).toFixed(2)
+      : "0.00",
+    avgResponseTime: monitors.length
+      ? Math.round(
+          monitors.reduce((acc, m) => acc + (m.responseTime || 0), 0) /
+            monitors.length,
+        )
+      : 0,
   };
 
   // Add YouTube quick stat for public status (example/static)

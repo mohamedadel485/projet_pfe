@@ -89,7 +89,7 @@ const AddMonitorModal = ({ isOpen, onClose, onAdd }) => {
             <input
               type="text"
               className="w-full border rounded-lg px-4 py-2"
-              placeholder="https://api.example.com"
+              placeholder="https://votre-site.tld"
               value={formData.url}
               onChange={(e) =>
                 setFormData({ ...formData, url: e.target.value })
