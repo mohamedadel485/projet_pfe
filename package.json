@@ -2,9 +2,11 @@
   "name": "uptimewarden",
   "private": true,
   "scripts": {
-    "start": "npm --prefix backend run start",
-    "dev": "npm --prefix backend run dev",
-    "build": "npm --prefix backend run build",
+    "start": "npm --prefix Backend run start",
+    "dev": "npm --prefix Backend run dev",
+    "build": "npm --prefix Backend run build",
+    "dev:backend": "npm --prefix Backend run dev",
+    "build:backend": "npm --prefix Backend run build",
     "dev:frontend": "npm --prefix frontend run dev",
     "build:frontend": "npm --prefix frontend run build",
     "preview:frontend": "npm --prefix frontend run preview"

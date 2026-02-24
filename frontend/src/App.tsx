@@ -3,9 +3,12 @@ import { CiSliderHorizontal } from 'react-icons/ci';
 import type { LucideIcon } from 'lucide-react';
 import ExclamationHexagonIcon from './ExclamationHexagonIcon';
 import EditMonitorPage from './pages/edit-monitor/EditMonitorPage';
+import IncidentsPage from './pages/incidents/IncidentsPage';
 import IntegrationsApiPage from './pages/integrations-api/IntegrationsApiPage';
 import MonitorDetailsPage from './pages/monitor-details/MonitorDetailsPage';
 import NewMonitorPage from './pages/new-monitor/NewMonitorPage';
+import StatusPageInfoPage from './pages/status/StatusPageInfoPage';
+import StatusPagesPage from './pages/status/StatusPagesPage';
 import {
   ArrowUpDown,
   ChevronDown,
@@ -133,6 +136,7 @@ function App() {
   const [downFirst, setDownFirst] = useState(false);
   const [selectedMonitorId, setSelectedMonitorId] = useState<string | null>(null);
   const [editingMonitorId, setEditingMonitorId] = useState<string | null>(null);
+  const [selectedStatusPageId, setSelectedStatusPageId] = useState<string | null>(null);
   const [isCreatingMonitor, setIsCreatingMonitor] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [activeMenuLabel, setActiveMenuLabel] = useState(menuItems[0].label);
@@ -171,6 +175,17 @@ function App() {
   const defaultTeamMonitor = useMemo(() => monitorRows.find((monitor) => monitor.id === 'metal') ?? null, []);
   const teamMonitor = editingMonitor ?? defaultTeamMonitor;
   const isIntegrationsPage = activeMenuLabel === 'Integrations & API';
+  const isIncidentsPage = activeMenuLabel === 'Incidents';
+  const isStatusPagesPage = activeMenuLabel === 'Status pages';
+  const appShellClasses = [
+    'app-shell',
+    isIncidentsPage ? 'incidents-view' : '',
+    isStatusPagesPage ? 'status-pages-view' : '',
+    mobileMenuOpen ? 'menu-open' : '',
+    sidebarCollapsed ? 'sidebar-collapsed' : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
 
   const applyRoute = useCallback((rawPathname: string) => {
     const pathname = normalizePathname(rawPathname);
@@ -181,6 +196,7 @@ function App() {
     let nextIntegrationsSubPage: IntegrationsSubPage = 'api';
     let nextSelectedMonitorId: string | null = null;
     let nextEditingMonitorId: string | null = null;
+    let nextSelectedStatusPageId: string | null = null;
     let nextIsCreatingMonitor = false;
 
     if (pathname === '/' || pathname === '/monitoring') {
@@ -206,6 +222,9 @@ function App() {
       nextIntegrationsSubPage = 'team';
     } else if (pathname === '/incidents') {
       nextMenuLabel = 'Incidents';
+    } else if (segments.length === 2 && segments[0] === 'status-pages') {
+      nextMenuLabel = 'Status pages';
+      nextSelectedStatusPageId = segments[1];
     } else if (pathname === '/status-pages') {
       nextMenuLabel = 'Status pages';
     } else if (pathname === '/maintenance') {
@@ -218,6 +237,7 @@ function App() {
     setIntegrationsSubPage(nextIntegrationsSubPage);
     setSelectedMonitorId(nextSelectedMonitorId);
     setEditingMonitorId(nextEditingMonitorId);
+    setSelectedStatusPageId(nextSelectedStatusPageId);
     setIsCreatingMonitor(nextIsCreatingMonitor);
   }, []);
 
@@ -275,7 +295,7 @@ function App() {
   };
 
   return (
-    <div className={`app-shell ${mobileMenuOpen ? 'menu-open' : ''} ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
+    <div className={appShellClasses}>
       <button className="mobile-toggle" onClick={() => setMobileMenuOpen(true)} aria-label="Open menu">
         <Menu size={18} />
       </button>
@@ -395,6 +415,28 @@ function App() {
             navigateTo('/integrations-team');
           }}
         />
+      ) : isIncidentsPage ? (
+        <div className="panel-main">
+          <IncidentsPage />
+        </div>
+      ) : isStatusPagesPage ? selectedStatusPageId ? (
+        <StatusPageInfoPage
+          statusPageId={selectedStatusPageId}
+          onBackToMonitoring={() => {
+            navigateTo('/monitoring');
+          }}
+          onBackToStatusPages={() => {
+            navigateTo('/status-pages');
+          }}
+        />
+      ) : (
+        <div className="panel-main">
+          <StatusPagesPage
+            onOpenStatusPage={(statusPageId) => {
+              navigateTo(`/status-pages/${statusPageId}`);
+            }}
+          />
+        </div>
       ) : (
         <>
           {/* --- Header (spans center + right columns) --- */}
