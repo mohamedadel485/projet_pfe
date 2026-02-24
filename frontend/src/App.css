@@ -71,6 +71,7 @@ input {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  overflow: hidden;
   transition: background-color 0.2s ease, color 0.2s ease;
 }
 
@@ -186,6 +187,7 @@ input {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  position: relative;
 }
 
 .menu-link {
@@ -193,6 +195,7 @@ input {
   background: transparent;
   color: #25365a;
   border-radius: 10px;
+  width: 100%;
   min-height: 44px;
   padding: 10px 12px;
   display: flex;
@@ -201,6 +204,15 @@ input {
   text-align: left;
   cursor: pointer;
   font-size: 0.8rem;
+  position: relative;
+  z-index: 1;
+  overflow: hidden;
+  user-select: none;
+  touch-action: manipulation;
+}
+
+.menu-link > * {
+  pointer-events: none;
 }
 
 .menu-link:hover {
@@ -398,6 +410,35 @@ input {
   flex-direction: column;
   gap: 10px;
   align-self: start;
+}
+
+.panel-main.status-page-info-main-panel {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  margin-left: 0;
+  margin-right: 0;
+}
+
+.section-placeholder {
+  border: 1px dashed #bfd2f4;
+  border-radius: 12px;
+  background: #f4f8ff;
+  min-height: 340px;
+  display: grid;
+  place-content: center;
+  text-align: center;
+  gap: 8px;
+}
+
+.section-placeholder h2 {
+  font-size: 1.25rem;
+  color: var(--blue);
+}
+
+.section-placeholder p {
+  color: #6f83a7;
+  font-size: 0.88rem;
 }
 
 /* ── Filter Bar ───────────────────────────────── */

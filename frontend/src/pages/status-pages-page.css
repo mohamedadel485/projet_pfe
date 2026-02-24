@@ -1,0 +1,315 @@
+.app-shell.status-pages-view {
+  grid-template-columns: 200px minmax(0, 1fr);
+}
+
+.app-shell.status-pages-view.sidebar-collapsed {
+  grid-template-columns: 72px minmax(0, 1fr);
+}
+
+.app-shell.status-pages-view .panel-main {
+  margin-top: 20px;
+}
+
+.status-pages-page {
+  width: 100%;
+  border: 0;
+  border-radius: 10px;
+  background: #ffffff;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.status-pages-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 1px 2px 5px;
+}
+
+.status-pages-header h1 {
+  margin: 0;
+  font-size: 1.3rem;
+  font-weight: 800;
+  color: var(--blue);
+}
+
+.status-pages-create-button {
+  border: 0;
+  border-radius: 8px;
+  min-height: 30px;
+  padding: 0 11px;
+  background: #1f5cbc;
+  color: #ffffff;
+  font-size: 0.74rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.status-pages-table {
+  border: 1px solid #e2e9f3;
+  border-radius: 9px;
+  background: #ffffff;
+  overflow: auto;
+}
+
+.status-pages-table-grid {
+  min-width: 700px;
+}
+
+.status-pages-table-head,
+.status-pages-row {
+  display: grid;
+  grid-template-columns: minmax(230px, 1.9fr) minmax(150px, 1.2fr) minmax(130px, 0.9fr) minmax(130px, 0.8fr);
+  align-items: center;
+  gap: 8px;
+}
+
+.status-pages-table-head {
+  background: #eef3fb;
+  padding: 8px 8px;
+  border-bottom: 1px solid #ffffff;
+}
+
+.status-pages-table-head span {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #334a73;
+}
+
+.status-pages-row {
+  background: #f2f6fc;
+  padding: 8px 8px;
+  border-bottom: 1px solid #ffffff;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.status-pages-row:last-child {
+  border-bottom: 0;
+}
+
+.status-pages-row:hover {
+  background: #ebf2fc;
+}
+
+.status-pages-row:focus-visible {
+  outline: 2px solid #a6c2ec;
+  outline-offset: -2px;
+}
+
+.status-pages-name-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.status-pages-name-icon {
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  background: #cfe1fb;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.status-pages-name-icon-core {
+  width: 13px;
+  height: 13px;
+  border-radius: 999px;
+  background: #91b3ea;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.status-pages-name-icon-core::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  border-left: 3px solid transparent;
+  border-right: 3px solid transparent;
+  border-bottom: 4px solid #ffffff;
+  transform: translate(-50%, -50%);
+}
+
+.status-pages-name-copy {
+  min-width: 0;
+}
+
+.status-pages-name-copy strong {
+  display: block;
+  font-size: 0.75rem;
+  line-height: 1.1;
+  color: #2f456a;
+  font-weight: 700;
+}
+
+.status-pages-name-copy span {
+  display: block;
+  margin-top: 3px;
+  font-size: 0.69rem;
+  color: #8ca0bf;
+}
+
+.status-pages-access-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.78rem;
+  color: #3a4f73;
+}
+
+.status-pages-status-cell {
+  margin: 0;
+  font-size: 0.78rem;
+  color: #3a4f73;
+}
+
+.status-pages-actions-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  justify-content: flex-start;
+}
+
+.status-pages-actions-cell > button,
+.status-pages-actions-cell > .status-pages-menu-wrap > .status-pages-more-button {
+  border: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #4d6387;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.status-pages-actions-cell > .status-pages-menu-wrap > .status-pages-more-button {
+  width: 14px;
+  background: transparent;
+}
+
+.status-pages-actions-cell > .status-pages-menu-wrap > .status-pages-more-button:hover {
+  background: #e9eff8;
+}
+
+.status-pages-menu-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.status-pages-options-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 50%;
+  right: auto;
+  transform: translateX(-50%);
+  width: 188px;
+  border-radius: 10px;
+  border: 1px solid #dfe7f3;
+  background: #ffffff;
+  box-shadow: 0 10px 18px rgba(22, 38, 66, 0.14);
+  overflow: hidden;
+  z-index: 25;
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+}
+
+.status-pages-menu-item {
+  width: 100% !important;
+  min-height: 40px !important;
+  height: auto !important;
+  border: 0;
+  border-top: 1px solid #edf2fa;
+  border-radius: 0 !important;
+  margin: 0;
+  background: #ffffff !important;
+  color: #3a4f73;
+  padding: 9px 10px;
+  font-family: inherit;
+  font-size: 0.76rem;
+  font-weight: 600;
+  line-height: 1.2;
+  text-align: left;
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr);
+  align-items: center;
+  justify-items: start;
+  column-gap: 7px;
+  cursor: pointer;
+  white-space: nowrap;
+  appearance: none;
+  box-sizing: border-box;
+}
+
+.status-pages-menu-item:first-child {
+  border-top: 0;
+}
+
+.status-pages-menu-item:hover {
+  background: #f4f8ff !important;
+}
+
+.status-pages-menu-item.delete {
+  color: #e34d63;
+  background: #ffffff !important;
+}
+
+.status-pages-menu-item.delete:hover {
+  background: #fff1f4 !important;
+}
+
+.status-pages-options-menu .status-pages-menu-item svg {
+  flex-shrink: 0;
+}
+
+.status-pages-menu-item-icon {
+  width: 14px;
+  height: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: currentColor;
+}
+
+.status-pages-menu-item-icon svg {
+  display: block;
+}
+
+.status-pages-options-menu .status-pages-menu-item > span:not(.status-pages-menu-item-icon) {
+  display: block;
+  line-height: 1.15;
+  justify-self: start;
+  text-align: left;
+}
+
+@media (max-width: 900px) {
+  .app-shell.status-pages-view {
+    grid-template-columns: 1fr;
+  }
+
+  .status-pages-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .status-pages-create-button {
+    width: 100%;
+    justify-content: center;
+  }
+}

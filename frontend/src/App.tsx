@@ -1,7 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { CiSliderHorizontal } from 'react-icons/ci';
 import type { LucideIcon } from 'lucide-react';
-import ExclamationHexagonIcon from './ExclamationHexagonIcon';
+import { useLocation, useNavigate } from 'react-router-dom';
+import ExclamationHexagonIcon from './components/icons/ExclamationHexagonIcon';
+import IncidentsPage from './pages/IncidentsPage';
+import StatusPagesPage from './pages/StatusPagesPage';
+import StatusPageInfoPage from './pages/StatusPageInfoPage';
 import {
   ArrowUpDown,
   ChevronDown,
@@ -23,8 +27,11 @@ import {
 } from 'lucide-react';
 
 type HistoryState = 'up' | 'warning' | 'down';
+type MenuSection = 'monitoring' | 'incidents' | 'status-pages' | 'maintenance' | 'team-members' | 'integrations-api';
 
 interface MenuItem {
+  id: MenuSection;
+  path: string;
   label: string;
   icon?: LucideIcon;
   materialIcon?: string;
@@ -43,12 +50,12 @@ interface MonitorRow {
 }
 
 const menuItems: MenuItem[] = [
-  { label: 'Monitoring', customIcon: 'monitoringRadar' },
-  { label: 'Incidents', customIcon: 'incidentHexagon' },
-  { label: 'Status pages', materialIcon: 'sensors' },
-  { label: 'Maintenance', icon: Wrench },
-  { label: 'Team members', icon: Users },
-  { label: 'Integrations & API', materialIcon: 'graph_1' },
+  { id: 'monitoring', path: '/monitoring', label: 'Monitoring', customIcon: 'monitoringRadar' },
+  { id: 'incidents', path: '/incidents', label: 'Incidents', customIcon: 'incidentHexagon' },
+  { id: 'status-pages', path: '/status-pages', label: 'Status pages', materialIcon: 'sensors' },
+  { id: 'maintenance', path: '/maintenance', label: 'Maintenance', icon: Wrench },
+  { id: 'team-members', path: '/team-members', label: 'Team members', icon: Users },
+  { id: 'integrations-api', path: '/integrations-api', label: 'Integrations & API', materialIcon: 'graph_1' },
 ];
 
 const buildHistory = (pattern: string): HistoryState[] =>
@@ -102,10 +109,11 @@ const monitorRows: MonitorRow[] = [
 ];
 
 function App() {
+  const location = useLocation();
+  const navigate = useNavigate();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [downFirst, setDownFirst] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [activeMenuLabel, setActiveMenuLabel] = useState(menuItems[0].label);
   const [sidebarTogglePending, setSidebarTogglePending] = useState(false);
   const sidebarToggleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -128,6 +136,21 @@ function App() {
       return a.state === 'down' ? -1 : 1;
     });
   }, [downFirst]);
+  const normalizedPath = location.pathname.replace(/\/+$/, '') || '/';
+  const activeMenuId = useMemo<MenuSection>(() => {
+    const matchedMenu = menuItems.find(
+      (item) => normalizedPath === item.path || normalizedPath.startsWith(`${item.path}/`)
+    );
+    return matchedMenu?.id ?? 'monitoring';
+  }, [normalizedPath]);
+  const activeMenu = useMemo(() => menuItems.find((item) => item.id === activeMenuId) ?? menuItems[0], [activeMenuId]);
+  const isMonitoringView = activeMenuId === 'monitoring';
+  const isIncidentsView = activeMenuId === 'incidents';
+  const isStatusPagesView = activeMenuId === 'status-pages';
+  const statusPageDetailsMatch = normalizedPath.match(/^\/status-pages\/([^/]+)$/);
+  const selectedStatusPageId = statusPageDetailsMatch ? decodeURIComponent(statusPageDetailsMatch[1]) : null;
+  const isStatusPageDetailsView = Boolean(selectedStatusPageId);
+  const isGenericSectionView = !isMonitoringView && !isIncidentsView && !isStatusPagesView;
 
   useEffect(() => {
     return () => {
@@ -136,6 +159,21 @@ function App() {
       }
     };
   }, []);
+
+  useEffect(() => {
+    if (normalizedPath === '/') {
+      navigate('/monitoring', { replace: true });
+      return;
+    }
+
+    const isKnownRoute = menuItems.some(
+      (item) => normalizedPath === item.path || normalizedPath.startsWith(`${item.path}/`)
+    );
+
+    if (!isKnownRoute) {
+      navigate('/monitoring', { replace: true });
+    }
+  }, [normalizedPath, navigate]);
 
   const handleSidebarToggleClick = () => {
     if (sidebarTogglePending) return;
@@ -147,8 +185,20 @@ function App() {
     }, 300);
   };
 
+  const handleMenuClick = (section: MenuSection) => {
+    const targetMenu = menuItems.find((item) => item.id === section);
+    if (targetMenu) {
+      navigate(targetMenu.path);
+    }
+    setMobileMenuOpen(false);
+  };
+
   return (
-    <div className={`app-shell ${mobileMenuOpen ? 'menu-open' : ''} ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
+    <div
+      className={`app-shell ${mobileMenuOpen ? 'menu-open' : ''} ${sidebarCollapsed ? 'sidebar-collapsed' : ''} ${
+        isIncidentsView ? 'incidents-view' : ''
+      } ${isStatusPagesView ? 'status-pages-view' : ''}`}
+    >
       <button className="mobile-toggle" onClick={() => setMobileMenuOpen(true)} aria-label="Open menu">
         <Menu size={18} />
       </button>
@@ -175,18 +225,26 @@ function App() {
 
         <nav className="sidebar-nav">
           {menuItems.map((item) => {
-            const isActive = item.label === activeMenuLabel;
+            const isActive = item.id === activeMenuId;
             return (
               <button
                 key={item.label}
+                type="button"
                 className={`menu-link ${isActive ? 'active' : ''}`}
-                onClick={() => {
-                  setActiveMenuLabel(item.label);
-                  if (item.label === 'Monitoring') {
-                    setSidebarCollapsed((prev) => !prev);
-                  }
-                  setMobileMenuOpen(false);
+                onMouseDown={(event) => {
+                  event.preventDefault();
+                  handleMenuClick(item.id);
                 }}
+                onClick={(event) => {
+                  event.preventDefault();
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    handleMenuClick(item.id);
+                  }
+                }}
+                aria-current={isActive ? 'page' : undefined}
               >
                 <span className="menu-icon-slot" aria-hidden="true">
                   {item.customIcon === 'monitoringRadar' ? (
@@ -222,170 +280,186 @@ function App() {
 
 
       {/* --- Main Panel (center column) --- */}
-      <div className="panel-main">
-        <header className="workspace-top">
-          <h1>Monitors</h1>
-          <button className="primary-button">
-            <Plus size={14} />
-            <span>New monitor</span>
-            <span className="primary-button-chevron" aria-hidden="true">
-              <ChevronDown size={14} />
-            </span>
-          </button>
-        </header>
-        <div className="filter-bar">
-          <div className="chip-row">
-            <span className="chip-button chip-counter">
-              <span className="counter-dot" aria-hidden="true" />
-              0/4
-            </span>
-            <button className="chip-button">
-              Bulk actions
-              <ChevronDown size={16} />
-            </button>
-            <button className="chip-button">
-              <Tag size={20} />
-              All tags
-              <ChevronDown size={16} />
-            </button>
-          </div>
+      <div className={`panel-main ${isStatusPageDetailsView ? 'status-page-info-main-panel' : ''}`}>
+        {isIncidentsView ? (
+          <IncidentsPage />
+        ) : isStatusPageDetailsView ? (
+          <StatusPageInfoPage statusPageId={selectedStatusPageId!} />
+        ) : isStatusPagesView ? (
+          <StatusPagesPage />
+        ) : isGenericSectionView ? (
+          <section className="section-placeholder">
+            <h2>{activeMenu.label}</h2>
+            <p>Page en cours de preparation.</p>
+          </section>
+        ) : (
+          <>
+            <header className="workspace-top">
+              <h1>Monitors</h1>
+              <button className="primary-button">
+                <Plus size={14} />
+                <span>New monitor</span>
+                <span className="primary-button-chevron" aria-hidden="true">
+                  <ChevronDown size={14} />
+                </span>
+              </button>
+            </header>
+            <div className="filter-bar">
+              <div className="chip-row">
+                <span className="chip-button chip-counter">
+                  <span className="counter-dot" aria-hidden="true" />
+                  0/4
+                </span>
+                <button className="chip-button">
+                  Bulk actions
+                  <ChevronDown size={16} />
+                </button>
+                <button className="chip-button">
+                  <Tag size={20} />
+                  All tags
+                  <ChevronDown size={16} />
+                </button>
+              </div>
 
-          <div className="search-row">
-            <label className="search-box">
-              <Search size={20} />
-              <input type="text" placeholder="Search by name or url" />
-            </label>
-            <button
-              className={`chip-button ${downFirst ? 'active' : ''}`}
-              type="button"
-              onClick={() => setDownFirst((prev) => !prev)}
-            >
-              <ArrowUpDown size={20} />
-              Down first
-              <ChevronDown size={16} />
-            </button>
-            <button className="chip-button">
-              <CiSliderHorizontal size={20} />
-              Filter
-            </button>
-          </div>
-        </div>
-
-        <div className="table-card">
-          <div className="table-head">
-            <span>Actions</span>
-            <div className="action-row">
-              <button className="action-button" type="button">
-                <span className="action-icon-circle" aria-hidden="true">
-                  <Play size={11} />
-                </span>
-                <span>Start</span>
-              </button>
-              <button className="action-button" type="button">
-                <span className="action-icon-circle" aria-hidden="true">
-                  <Pause size={11} />
-                </span>
-                <span>Pause</span>
-              </button>
-              <button className="action-button" type="button">
-                <span className="action-icon-circle" aria-hidden="true">
-                  <Trash2 size={11} />
-                </span>
-                <span>Delete</span>
-              </button>
-              <button className="action-button" type="button">
-                <span className="action-icon-circle" aria-hidden="true">
-                  <RotateCcw size={11} />
-                </span>
-                <span>Resume</span>
-              </button>
+              <div className="search-row">
+                <label className="search-box">
+                  <Search size={20} />
+                  <input type="text" placeholder="Search by name or url" />
+                </label>
+                <button
+                  className={`chip-button ${downFirst ? 'active' : ''}`}
+                  type="button"
+                  onClick={() => setDownFirst((prev) => !prev)}
+                >
+                  <ArrowUpDown size={20} />
+                  Down first
+                  <ChevronDown size={16} />
+                </button>
+                <button className="chip-button">
+                  <CiSliderHorizontal size={20} />
+                  Filter
+                </button>
+              </div>
             </div>
-          </div>
 
-          <div className="monitor-table">
-            {displayedMonitors.map((monitor) => (
-              <article className="monitor-row" key={monitor.id}>
-                <div className="monitor-main">
-                  <span className="monitor-checkbox" />
-                  <span className={`state-dot ${monitor.state}`} />
-                  <span className="monitor-node" aria-hidden="true" />
-                  <div className="monitor-copy">
-                    <strong>{monitor.name}</strong>
-                    <div className="monitor-meta">
-                      <span className="protocol">{monitor.protocol}</span>
-                      <span>{monitor.uptimeLabel}</span>
+            <div className="table-card">
+              <div className="table-head">
+                <span>Actions</span>
+                <div className="action-row">
+                  <button className="action-button" type="button">
+                    <span className="action-icon-circle" aria-hidden="true">
+                      <Play size={11} />
+                    </span>
+                    <span>Start</span>
+                  </button>
+                  <button className="action-button" type="button">
+                    <span className="action-icon-circle" aria-hidden="true">
+                      <Pause size={11} />
+                    </span>
+                    <span>Pause</span>
+                  </button>
+                  <button className="action-button" type="button">
+                    <span className="action-icon-circle" aria-hidden="true">
+                      <Trash2 size={11} />
+                    </span>
+                    <span>Delete</span>
+                  </button>
+                  <button className="action-button" type="button">
+                    <span className="action-icon-circle" aria-hidden="true">
+                      <RotateCcw size={11} />
+                    </span>
+                    <span>Resume</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="monitor-table">
+                {displayedMonitors.map((monitor) => (
+                  <article className="monitor-row" key={monitor.id}>
+                    <div className="monitor-main">
+                      <span className="monitor-checkbox" />
+                      <span className={`state-dot ${monitor.state}`} />
+                      <span className="monitor-node" aria-hidden="true" />
+                      <div className="monitor-copy">
+                        <strong>{monitor.name}</strong>
+                        <div className="monitor-meta">
+                          <span className="protocol">{monitor.protocol}</span>
+                          <span>{monitor.uptimeLabel}</span>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                </div>
 
-                <div className="monitor-interval">
-                  <Clock3 size={12} />
-                  {monitor.interval}
-                </div>
+                    <div className="monitor-interval">
+                      <Clock3 size={12} />
+                      {monitor.interval}
+                    </div>
 
-                <div className="history-bars">
-                  {monitor.history.map((barState, index) => (
-                    <span key={`${monitor.id}-${index}`} className={`history-bar ${barState}`} />
-                  ))}
-                </div>
+                    <div className="history-bars">
+                      {monitor.history.map((barState, index) => (
+                        <span key={`${monitor.id}-${index}`} className={`history-bar ${barState}`} />
+                      ))}
+                    </div>
 
-                <div className="monitor-uptime">{monitor.uptime}</div>
-              </article>
-            ))}
-          </div>
-        </div>
+                    <div className="monitor-uptime">{monitor.uptime}</div>
+                  </article>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
       </div>
 
-      {/* --- Status Panel (right column) --- */}
-      <aside className="status-panel">
-        <section className="status-card">
-          <h3>Current status</h3>
-          <div className="status-ring-wrap">
-            <div className="status-ring">
-              <span className="status-ring-icon status-ring-triangle" aria-hidden="true" />
+      {isMonitoringView && (
+        <aside className="status-panel">
+          <section className="status-card">
+            <h3>Current status</h3>
+            <div className="status-ring-wrap">
+              <div className="status-ring">
+                <span className="status-ring-icon status-ring-triangle" aria-hidden="true" />
+              </div>
             </div>
-          </div>
-          <div className="status-grid">
-            <article>
-              <strong>{currentStatus.down}</strong>
-              <span>Down</span>
-            </article>
-            <article>
-              <strong>{currentStatus.up}</strong>
-              <span>Up</span>
-            </article>
-            <article>
-              <strong>{currentStatus.paused}</strong>
-              <span>Paused</span>
-            </article>
-          </div>
-          <p className="status-hint">Using 4 of 50 monitors</p>
-        </section>
+            <div className="status-grid">
+              <article>
+                <strong>{currentStatus.down}</strong>
+                <span>Down</span>
+              </article>
+              <article>
+                <strong>{currentStatus.up}</strong>
+                <span>Up</span>
+              </article>
+              <article>
+                <strong>{currentStatus.paused}</strong>
+                <span>Paused</span>
+              </article>
+            </div>
+            <p className="status-hint">Using 4 of 50 monitors</p>
+          </section>
 
-        <section className="status-card">
-          <h3>Last 24 hours</h3>
-          <div className="hours-row">
-            <div className="hours-col">
-              <p className="hours-uptime">99.824%</p>
-              <span className="hours-label">Overall uptime</span>
+          <section className="status-card">
+            <h3>Last 24 hours</h3>
+            <div className="hours-row">
+              <div className="hours-col">
+                <p className="hours-uptime">99.824%</p>
+                <span className="hours-label">Overall uptime</span>
+              </div>
+              <div className="hours-col">
+                <p className="hours-value">2</p>
+                <span className="hours-label">Incidents</span>
+              </div>
             </div>
-            <div className="hours-col">
-              <p className="hours-value">2</p>
-              <span className="hours-label">Incidents</span>
+            <div className="hours-row">
+              <div className="hours-col">
+                <p className="hours-meta">23h, 49m</p>
+                <span className="hours-label">Without incid.</span>
+              </div>
+              <div className="hours-col">
+                <p className="hours-value">1</p>
+                <span className="hours-label">Affected mon.</span>
+              </div>
             </div>
-          </div>
-          <div className="hours-row">
-            <div className="hours-col">
-              <p className="hours-meta">23h, 49m</p>
-              <span className="hours-label">Without incid.</span>
-            </div>
-            <div className="hours-col">
-              <p className="hours-value">1</p>
-              <span className="hours-label">Affected mon.</span>
-            </div>
-          </div>
-        </section>
-      </aside>
+          </section>
+        </aside>
+      )}
     </div>
   );
 }
