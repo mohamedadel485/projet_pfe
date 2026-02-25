@@ -10,6 +10,8 @@ import MonitorDetailsPage from './pages/monitor-details/MonitorDetailsPage';
 import NewMonitorPage from './pages/new-monitor/NewMonitorPage';
 import StatusPageInfoPage from './pages/status/StatusPageInfoPage';
 import StatusPagesPage from './pages/status/StatusPagesPage';
+import InviteTeamMemberPage from './pages/team-members/InviteTeamMemberPage';
+import TeamMembersPage from './pages/team-members/TeamMembersPage';
 import {
   ArrowUpDown,
   ChevronDown,
@@ -54,6 +56,7 @@ interface MonitorRow {
 }
 
 type IntegrationsSubPage = 'api' | 'team';
+type TeamMembersSubPage = 'overview' | 'invite';
 
 const menuItems: MenuItem[] = [
   { label: 'Monitoring', customIcon: 'monitoringRadar' },
@@ -142,6 +145,7 @@ function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [activeMenuLabel, setActiveMenuLabel] = useState(menuItems[0].label);
   const [integrationsSubPage, setIntegrationsSubPage] = useState<IntegrationsSubPage>('api');
+  const [teamMembersSubPage, setTeamMembersSubPage] = useState<TeamMembersSubPage>('overview');
   const [sidebarTogglePending, setSidebarTogglePending] = useState(false);
   const sidebarToggleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -178,6 +182,7 @@ function App() {
   const isIntegrationsPage = activeMenuLabel === 'Integrations & API';
   const isIncidentsPage = activeMenuLabel === 'Incidents';
   const isStatusPagesPage = activeMenuLabel === 'Status pages';
+  const isTeamMembersPage = activeMenuLabel === 'Team members';
   const appShellClasses = [
     'app-shell',
     isIncidentsPage ? 'incidents-view' : '',
@@ -195,6 +200,7 @@ function App() {
 
     let nextMenuLabel: MenuLabel = 'Monitoring';
     let nextIntegrationsSubPage: IntegrationsSubPage = 'api';
+    let nextTeamMembersSubPage: TeamMembersSubPage = 'overview';
     let nextSelectedMonitorId: string | null = null;
     let nextEditingMonitorId: string | null = null;
     let nextSelectedStatusPageId: string | null = null;
@@ -230,12 +236,16 @@ function App() {
       nextMenuLabel = 'Status pages';
     } else if (pathname === '/maintenance') {
       nextMenuLabel = 'Maintenance';
+    } else if (pathname === '/team-members/invite') {
+      nextMenuLabel = 'Team members';
+      nextTeamMembersSubPage = 'invite';
     } else if (pathname === '/team-members') {
       nextMenuLabel = 'Team members';
     }
 
     setActiveMenuLabel(nextMenuLabel);
     setIntegrationsSubPage(nextIntegrationsSubPage);
+    setTeamMembersSubPage(nextTeamMembersSubPage);
     setSelectedMonitorId(nextSelectedMonitorId);
     setEditingMonitorId(nextEditingMonitorId);
     setSelectedStatusPageId(nextSelectedStatusPageId);
@@ -444,6 +454,16 @@ function App() {
             }}
           />
         </div>
+      ) : isTeamMembersPage ? (
+        teamMembersSubPage === 'invite' ? (
+          <InviteTeamMemberPage />
+        ) : (
+          <TeamMembersPage
+            onInviteTeam={() => {
+              navigateTo('/team-members/invite');
+            }}
+          />
+        )
       ) : (
         <>
           {/* --- Header (spans center + right columns) --- */}
