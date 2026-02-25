@@ -1,6 +1,9 @@
 import { type ChangeEvent, useEffect, useRef, useState } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import './status-page-info-page.css';
+import arabicFlag from '../../images/arabic.jpg';
+import englishFlag from '../../images/English.jpg';
+import franceFlag from '../../images/france.svg';
 
 interface StatusPageInfoPageProps {
   statusPageId: string;
@@ -39,6 +42,7 @@ interface LanguageOption {
   value: LanguageValue;
   label: string;
   flag: string;
+  flagImage?: string;
 }
 
 const languageOptions: LanguageOption[] = [
@@ -46,6 +50,24 @@ const languageOptions: LanguageOption[] = [
   { value: 'french', label: 'French', flag: '🇫🇷' },
   { value: 'arabic', label: 'Arabic', flag: '🇲🇦' },
 ];
+
+const languageOptionsWithAssets: LanguageOption[] = languageOptions.map((languageOption) =>
+  languageOption.value === 'english'
+    ? { ...languageOption, flagImage: englishFlag }
+    : languageOption.value === 'french'
+      ? { ...languageOption, flagImage: franceFlag }
+      : languageOption.value === 'arabic'
+        ? { ...languageOption, flagImage: arabicFlag }
+        : languageOption,
+);
+
+const renderLanguageFlag = (languageOption: LanguageOption) => {
+  if (languageOption.flagImage) {
+    return <img src={languageOption.flagImage} alt="" className="status-page-language-flag-image" />;
+  }
+
+  return languageOption.flag;
+};
 
 const whiteLabelOptions: ToggleOption[] = [
   {
@@ -162,7 +184,8 @@ function StatusPageInfoPage({
     };
 
   const selectedLanguage =
-    languageOptions.find((languageOption) => languageOption.value === formValues.language) ?? languageOptions[0];
+    languageOptionsWithAssets.find((languageOption) => languageOption.value === formValues.language) ??
+    languageOptionsWithAssets[0];
 
   const handleLanguageSelect = (language: LanguageValue) => {
     setFormValues((currentValues) => ({
@@ -303,7 +326,7 @@ function StatusPageInfoPage({
                   >
                     <span className="status-page-language-current">
                       <span className="status-page-language-flag" aria-hidden="true">
-                        {selectedLanguage.flag}
+                        {renderLanguageFlag(selectedLanguage)}
                       </span>
                       <span>{selectedLanguage.label}</span>
                     </span>
@@ -312,7 +335,7 @@ function StatusPageInfoPage({
 
                   {isLanguageMenuOpen && (
                     <div className="status-page-language-menu" role="listbox" aria-label="Language">
-                      {languageOptions.map((languageOption) => (
+                      {languageOptionsWithAssets.map((languageOption) => (
                         <button
                           key={languageOption.value}
                           type="button"
@@ -324,7 +347,7 @@ function StatusPageInfoPage({
                           onClick={() => handleLanguageSelect(languageOption.value)}
                         >
                           <span className="status-page-language-flag" aria-hidden="true">
-                            {languageOption.flag}
+                            {renderLanguageFlag(languageOption)}
                           </span>
                           <span>{languageOption.label}</span>
                         </button>

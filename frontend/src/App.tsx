@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CiSliderHorizontal } from 'react-icons/ci';
 import type { LucideIcon } from 'lucide-react';
 import ExclamationHexagonIcon from './ExclamationHexagonIcon';
+import monitoringMenuIcon from './images/m1.png';
 import EditMonitorPage from './pages/edit-monitor/EditMonitorPage';
 import IncidentsPage from './pages/incidents/IncidentsPage';
 import IntegrationsApiPage from './pages/integrations-api/IntegrationsApiPage';
@@ -326,7 +327,13 @@ function App() {
             return (
               <button
                 key={item.label}
-                className={`menu-link ${isActive ? 'active' : ''}`}
+                className={[
+                  'menu-link',
+                  item.customIcon === 'monitoringRadar' ? 'menu-link-monitoring' : '',
+                  isActive ? 'active' : '',
+                ]
+                  .filter(Boolean)
+                  .join(' ')}
                 onClick={() => {
                   navigateTo(routeByMenuLabel[item.label]);
                   setMobileMenuOpen(false);
@@ -334,7 +341,7 @@ function App() {
               >
                 <span className="menu-icon-slot" aria-hidden="true">
                   {item.customIcon === 'monitoringRadar' ? (
-                    <span className="material-symbols-outlined menu-monitoring-radar">radar</span>
+                    <img src={monitoringMenuIcon} alt="" className="menu-monitoring-image" />
                   ) : item.customIcon === 'incidentHexagon' ? (
                     <ExclamationHexagonIcon size={16} className="menu-custom-icon" />
                   ) : item.materialIcon ? (

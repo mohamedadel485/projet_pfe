@@ -186,6 +186,17 @@
 .status-page-language-flag {
   font-size: 0.82rem;
   line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.status-page-language-flag-image {
+  width: 14px;
+  height: 10px;
+  object-fit: cover;
+  border-radius: 2px;
+  display: block;
 }
 
 .status-page-language-menu {
