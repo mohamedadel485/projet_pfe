@@ -14,7 +14,7 @@ type ExclamationHexagonIconProps = {
 
 function ExclamationHexagonIcon({
   size,
-  color = 'currentColor',
+  color,
   strokeWidth = 2,
   background = 'transparent',
   opacity = 1,
@@ -47,7 +47,7 @@ function ExclamationHexagonIcon({
       strokeLinejoin="round"
       className={className}
       style={{
-        color,
+        color: color ?? undefined,
         opacity,
         transform: transforms.join(' ') || undefined,
         filter: shadow > 0 ? `drop-shadow(0 ${shadow}px ${shadow * 2}px rgba(0,0,0,0.3))` : undefined,

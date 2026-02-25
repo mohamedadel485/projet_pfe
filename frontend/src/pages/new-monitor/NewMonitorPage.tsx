@@ -280,7 +280,7 @@ function NewMonitorPage({ onBack, onOpenIntegrationsTeam }: NewMonitorPageProps)
             <h3>Monitor interval</h3>
             <p className="monitor-interval-description">
               Your monitor will be checked every <strong>{selectedIntervalLabel}</strong>. We recommend to use at least
-              1-minute checks <a href="#">available in paid plans.</a>
+              1-minute checks 
             </p>
 
             <div className="monitor-interval-slider-wrap">

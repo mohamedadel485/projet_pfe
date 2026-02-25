@@ -6,6 +6,9 @@ import monitoringMenuIcon from './images/m1.png';
 import EditMonitorPage from './pages/edit-monitor/EditMonitorPage';
 import IncidentsPage from './pages/incidents/IncidentsPage';
 import IntegrationsApiPage from './pages/integrations-api/IntegrationsApiPage';
+import ConfirmationCodePage from './pages/login/ConfirmationCodePage';
+import ForgotPasswordPage from './pages/login/ForgotPasswordPage';
+import LoginPage from './pages/login/LoginPage';
 import MonitorDetailsPage from './pages/monitor-details/MonitorDetailsPage';
 import NewMonitorPage from './pages/new-monitor/NewMonitorPage';
 import StatusPageInfoPage from './pages/status/StatusPageInfoPage';
@@ -14,6 +17,7 @@ import InviteTeamMemberPage from './pages/team-members/InviteTeamMemberPage';
 import TeamMembersPage from './pages/team-members/TeamMembersPage';
 import {
   ArrowUpDown,
+  Check,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -47,6 +51,7 @@ interface MonitorRow {
   name: string;
   protocol: string;
   url?: string;
+  tags: string[];
   uptimeLabel: string;
   interval: string;
   uptime: string;
@@ -57,6 +62,29 @@ interface MonitorRow {
 
 type IntegrationsSubPage = 'api' | 'team';
 type TeamMembersSubPage = 'overview' | 'invite';
+type AuthRoute = 'login' | 'confirmation-code' | 'forgot-password' | null;
+type NewMonitorOption = 'single' | 'wizard' | 'bulk';
+type MonitorFilterStatus = 'none' | 'up' | 'down';
+type MonitorSortOption = 'down-first' | 'up-first' | 'paused-first' | 'a-z' | 'newest-first';
+type BulkActionOption = 'start' | 'pause' | 'resume' | 'delete';
+
+const monitorSortOptionLabels: Record<MonitorSortOption, string> = {
+  'down-first': 'Down first',
+  'up-first': 'Up first',
+  'paused-first': 'Paused first',
+  'a-z': 'A -> Z',
+  'newest-first': 'Newest first',
+};
+
+const monitorSortOptions: MonitorSortOption[] = ['down-first', 'up-first', 'paused-first', 'a-z', 'newest-first'];
+const monitorTagOptions = ['All tags', 'Website', 'API', 'Core', 'Interface'];
+const bulkActionOptions: BulkActionOption[] = ['start', 'pause', 'resume', 'delete'];
+const bulkActionOptionLabels: Record<BulkActionOption, string> = {
+  start: 'Start',
+  pause: 'Pause',
+  resume: 'Resume',
+  delete: 'Delete',
+};
 
 const menuItems: MenuItem[] = [
   { label: 'Monitoring', customIcon: 'monitoringRadar' },
@@ -94,6 +122,7 @@ const monitorRows: MonitorRow[] = [
     name: 'HBHS',
     protocol: 'HTTP',
     url: 'https://www.metal2000.fr/',
+    tags: ['Website', 'Core'],
     uptimeLabel: 'Up 2 hr, 26 min',
     interval: '5 min',
     uptime: '100%',
@@ -106,6 +135,7 @@ const monitorRows: MonitorRow[] = [
     name: 'Metal 2000 Website',
     protocol: 'HTTP',
     url: 'https://www.metal2000.fr/',
+    tags: ['Website'],
     uptimeLabel: 'Up 2 hr, 26 min',
     interval: '5 min',
     uptime: '99.205%',
@@ -117,6 +147,7 @@ const monitorRows: MonitorRow[] = [
     id: 'odf-api',
     name: 'ODF API',
     protocol: 'HTTP',
+    tags: ['API'],
     uptimeLabel: 'Up 2 hr, 26 min',
     interval: '5 min',
     uptime: '100%',
@@ -127,6 +158,7 @@ const monitorRows: MonitorRow[] = [
     id: 'odf-interface',
     name: 'ODF Interface',
     protocol: 'HTTP',
+    tags: ['Interface', 'Core'],
     uptimeLabel: 'Up 2 hr, 26 min',
     interval: '5 min',
     uptime: '100%',
@@ -137,7 +169,12 @@ const monitorRows: MonitorRow[] = [
 
 function App() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [downFirst, setDownFirst] = useState(false);
+  const [monitorSortOption, setMonitorSortOption] = useState<MonitorSortOption>('down-first');
+  const [isMonitorSortMenuOpen, setIsMonitorSortMenuOpen] = useState(false);
+  const [selectedMonitorTag, setSelectedMonitorTag] = useState('All tags');
+  const [isMonitorTagMenuOpen, setIsMonitorTagMenuOpen] = useState(false);
+  const [isBulkActionsMenuOpen, setIsBulkActionsMenuOpen] = useState(false);
+  const [selectedMonitorIds, setSelectedMonitorIds] = useState<string[]>([]);
   const [selectedMonitorId, setSelectedMonitorId] = useState<string | null>(null);
   const [editingMonitorId, setEditingMonitorId] = useState<string | null>(null);
   const [selectedStatusPageId, setSelectedStatusPageId] = useState<string | null>(null);
@@ -146,8 +183,19 @@ function App() {
   const [activeMenuLabel, setActiveMenuLabel] = useState(menuItems[0].label);
   const [integrationsSubPage, setIntegrationsSubPage] = useState<IntegrationsSubPage>('api');
   const [teamMembersSubPage, setTeamMembersSubPage] = useState<TeamMembersSubPage>('overview');
+  const [authRoute, setAuthRoute] = useState<AuthRoute>(null);
+  const [newMonitorMenuOpen, setNewMonitorMenuOpen] = useState(false);
+  const [isMonitorFilterOpen, setIsMonitorFilterOpen] = useState(false);
+  const [appliedMonitorFilterStatus, setAppliedMonitorFilterStatus] = useState<MonitorFilterStatus>('none');
+  const [appliedMonitorTagQuery, setAppliedMonitorTagQuery] = useState('');
+  const [draftMonitorFilterStatus, setDraftMonitorFilterStatus] = useState<MonitorFilterStatus>('none');
+  const [draftMonitorTagQuery, setDraftMonitorTagQuery] = useState('');
   const [sidebarTogglePending, setSidebarTogglePending] = useState(false);
   const sidebarToggleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const newMonitorMenuRef = useRef<HTMLDivElement | null>(null);
+  const monitorSortMenuRef = useRef<HTMLDivElement | null>(null);
+  const monitorTagMenuRef = useRef<HTMLDivElement | null>(null);
+  const bulkActionsMenuRef = useRef<HTMLDivElement | null>(null);
 
   const currentStatus = useMemo(() => {
     const down = monitorRows.filter((monitor) => monitor.state === 'down').length;
@@ -162,12 +210,55 @@ function App() {
   }, []);
 
   const displayedMonitors = useMemo(() => {
-    if (!downFirst) return monitorRows;
-    return [...monitorRows].sort((a, b) => {
-      if (a.state === b.state) return 0;
-      return a.state === 'down' ? -1 : 1;
-    });
-  }, [downFirst]);
+    const statusFilteredRows =
+      appliedMonitorFilterStatus === 'none'
+        ? monitorRows
+        : monitorRows.filter((monitor) => monitor.state === appliedMonitorFilterStatus);
+
+    const tagFilteredRows = appliedMonitorTagQuery.trim()
+      ? statusFilteredRows.filter((monitor) =>
+          monitor.name.toLowerCase().includes(appliedMonitorTagQuery.trim().toLowerCase()),
+        )
+      : statusFilteredRows;
+
+    const tagMenuFilteredRows =
+      selectedMonitorTag === 'All tags'
+        ? tagFilteredRows
+        : tagFilteredRows.filter((monitor) => monitor.tags.includes(selectedMonitorTag));
+
+    if (monitorSortOption === 'down-first') {
+      return [...tagMenuFilteredRows].sort((a, b) => {
+        if (a.state === b.state) return 0;
+        return a.state === 'down' ? -1 : 1;
+      });
+    }
+
+    if (monitorSortOption === 'up-first') {
+      return [...tagMenuFilteredRows].sort((a, b) => {
+        if (a.state === b.state) return 0;
+        return a.state === 'up' ? -1 : 1;
+      });
+    }
+
+    if (monitorSortOption === 'a-z') {
+      return [...tagMenuFilteredRows].sort((a, b) => a.name.localeCompare(b.name));
+    }
+
+    if (monitorSortOption === 'newest-first') {
+      return [...tagMenuFilteredRows].reverse();
+    }
+
+    // Placeholder behavior until a paused monitor state is introduced.
+    return tagMenuFilteredRows;
+  }, [monitorSortOption, selectedMonitorTag, appliedMonitorFilterStatus, appliedMonitorTagQuery]);
+
+  const hasPendingMonitorFilterChanges =
+    draftMonitorFilterStatus !== appliedMonitorFilterStatus || draftMonitorTagQuery.trim() !== appliedMonitorTagQuery.trim();
+
+  const hasActiveMonitorFilters =
+    appliedMonitorFilterStatus !== 'none' || appliedMonitorTagQuery.trim().length > 0 || selectedMonitorTag !== 'All tags';
+  const selectedMonitorsCount = selectedMonitorIds.length;
+  const areAllMonitorsSelected = selectedMonitorIds.length === monitorRows.length && monitorRows.length > 0;
 
   const selectedMonitor = useMemo(
     () => monitorRows.find((monitor) => monitor.id === selectedMonitorId) ?? null,
@@ -201,12 +292,19 @@ function App() {
     let nextMenuLabel: MenuLabel = 'Monitoring';
     let nextIntegrationsSubPage: IntegrationsSubPage = 'api';
     let nextTeamMembersSubPage: TeamMembersSubPage = 'overview';
+    let nextAuthRoute: AuthRoute = null;
     let nextSelectedMonitorId: string | null = null;
     let nextEditingMonitorId: string | null = null;
     let nextSelectedStatusPageId: string | null = null;
     let nextIsCreatingMonitor = false;
 
-    if (pathname === '/' || pathname === '/monitoring') {
+    if (pathname === '/login') {
+      nextAuthRoute = 'login';
+    } else if (pathname === '/confirmation-code') {
+      nextAuthRoute = 'confirmation-code';
+    } else if (pathname === '/forgot-password') {
+      nextAuthRoute = 'forgot-password';
+    } else if (pathname === '/' || pathname === '/monitoring') {
       nextMenuLabel = 'Monitoring';
     } else if (pathname === '/monitoring/new') {
       nextMenuLabel = 'Monitoring';
@@ -246,6 +344,12 @@ function App() {
     setActiveMenuLabel(nextMenuLabel);
     setIntegrationsSubPage(nextIntegrationsSubPage);
     setTeamMembersSubPage(nextTeamMembersSubPage);
+    setAuthRoute(nextAuthRoute);
+    setNewMonitorMenuOpen(false);
+    setIsMonitorSortMenuOpen(false);
+    setIsMonitorTagMenuOpen(false);
+    setIsBulkActionsMenuOpen(false);
+    setIsMonitorFilterOpen(false);
     setSelectedMonitorId(nextSelectedMonitorId);
     setEditingMonitorId(nextEditingMonitorId);
     setSelectedStatusPageId(nextSelectedStatusPageId);
@@ -295,6 +399,45 @@ function App() {
     return () => window.removeEventListener('popstate', handlePopState);
   }, [applyRoute, navigateTo]);
 
+  useEffect(() => {
+    const handleDocumentMouseDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+
+      if (newMonitorMenuRef.current && !newMonitorMenuRef.current.contains(target)) {
+        setNewMonitorMenuOpen(false);
+      }
+
+      if (monitorSortMenuRef.current && !monitorSortMenuRef.current.contains(target)) {
+        setIsMonitorSortMenuOpen(false);
+      }
+
+      if (monitorTagMenuRef.current && !monitorTagMenuRef.current.contains(target)) {
+        setIsMonitorTagMenuOpen(false);
+      }
+
+      if (bulkActionsMenuRef.current && !bulkActionsMenuRef.current.contains(target)) {
+        setIsBulkActionsMenuOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleDocumentMouseDown);
+    return () => document.removeEventListener('mousedown', handleDocumentMouseDown);
+  }, []);
+
+  useEffect(() => {
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      setNewMonitorMenuOpen(false);
+      setIsMonitorSortMenuOpen(false);
+      setIsMonitorTagMenuOpen(false);
+      setIsBulkActionsMenuOpen(false);
+      setIsMonitorFilterOpen(false);
+    };
+
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, []);
+
   const handleSidebarToggleClick = () => {
     if (sidebarTogglePending) return;
     setSidebarTogglePending(true);
@@ -304,6 +447,90 @@ function App() {
       sidebarToggleTimerRef.current = null;
     }, 300);
   };
+
+  const handleNewMonitorOptionSelect = (option: NewMonitorOption) => {
+    setNewMonitorMenuOpen(false);
+
+    if (option === 'single') {
+      navigateTo('/monitoring/new');
+      return;
+    }
+
+    // Wizard and bulk upload currently share the same creation entry page.
+    navigateTo('/monitoring/new');
+  };
+
+  const openMonitorFilterPanel = () => {
+    setDraftMonitorFilterStatus(appliedMonitorFilterStatus);
+    setDraftMonitorTagQuery(appliedMonitorTagQuery);
+    setIsMonitorFilterOpen(true);
+  };
+
+  const closeMonitorFilterPanel = () => {
+    setIsMonitorFilterOpen(false);
+  };
+
+  const handleApplyMonitorFilter = () => {
+    setAppliedMonitorFilterStatus(draftMonitorFilterStatus);
+    setAppliedMonitorTagQuery(draftMonitorTagQuery.trim());
+    setIsMonitorFilterOpen(false);
+  };
+
+  const handleResetMonitorFilter = () => {
+    setDraftMonitorFilterStatus('none');
+    setDraftMonitorTagQuery('');
+  };
+
+  const handleBulkActionOptionSelect = (option: BulkActionOption) => {
+    if (!bulkActionOptions.includes(option)) return;
+    setIsBulkActionsMenuOpen(false);
+  };
+
+  const toggleMonitorSelection = (monitorId: string) => {
+    setSelectedMonitorIds((prev) =>
+      prev.includes(monitorId) ? prev.filter((id) => id !== monitorId) : [...prev, monitorId],
+    );
+  };
+
+  const toggleAllMonitorSelections = () => {
+    setSelectedMonitorIds(areAllMonitorsSelected ? [] : monitorRows.map((monitor) => monitor.id));
+  };
+
+  if (authRoute === 'login') {
+    return (
+      <LoginPage
+        onSignIn={() => {
+          navigateTo('/monitoring');
+        }}
+        onForgotPassword={() => {
+          navigateTo('/forgot-password');
+        }}
+      />
+    );
+  }
+
+  if (authRoute === 'confirmation-code') {
+    return (
+      <ConfirmationCodePage
+        onBack={() => {
+          navigateTo('/forgot-password');
+        }}
+        onContinue={() => {
+          navigateTo('/login');
+        }}
+      />
+    );
+  }
+
+  if (authRoute === 'forgot-password') {
+    return (
+      <ForgotPasswordPage
+        onResetPassword={() => {
+          navigateTo('/confirmation-code');
+        }}
+      />
+    );
+  }
 
   return (
     <div className={appShellClasses}>
@@ -371,7 +598,14 @@ function App() {
           <div className="profile-copy">
             <strong>admin</strong>
           </div>
-          <button className="logout-button" aria-label="Settings">
+          <button
+            className="logout-button"
+            aria-label="Go to login"
+            onClick={() => {
+              navigateTo('/login');
+              setMobileMenuOpen(false);
+            }}
+          >
             <LogOut size={14} />
           </button>
         </div>
@@ -472,35 +706,136 @@ function App() {
           <div className="panel-main">
             <header className="workspace-top">
               <h1>Monitors</h1>
-              <button
-                className="primary-button"
-                type="button"
-                onClick={() => {
-                  navigateTo('/monitoring/new');
-                }}
-              >
-                <Plus size={14} />
-                <span>New monitor</span>
-                <span className="primary-button-chevron" aria-hidden="true">
+              <div className="primary-button-wrap" ref={newMonitorMenuRef}>
+                <button
+                  className="primary-button primary-button-main"
+                  type="button"
+                  onClick={() => {
+                    setNewMonitorMenuOpen(false);
+                    navigateTo('/monitoring/new');
+                  }}
+                >
+                  <Plus size={14} />
+                  <span>New monitor</span>
+                </button>
+                <button
+                  className="primary-button-menu-toggle"
+                  type="button"
+                  aria-label="Open new monitor options"
+                  aria-haspopup="menu"
+                  aria-expanded={newMonitorMenuOpen}
+                  onClick={() => setNewMonitorMenuOpen((prev) => !prev)}
+                >
                   <ChevronDown size={14} />
-                </span>
-              </button>
+                </button>
+
+                {newMonitorMenuOpen && (
+                  <div className="primary-button-menu" role="menu">
+                    <button type="button" role="menuitem" onClick={() => handleNewMonitorOptionSelect('single')}>
+                      <span className="primary-button-menu-item-icon" aria-hidden="true">
+                        <Plus size={14} />
+                      </span>
+                      <span>Single monitor</span>
+                    </button>
+                    <button type="button" role="menuitem" onClick={() => handleNewMonitorOptionSelect('wizard')}>
+                      <span className="primary-button-menu-item-icon" aria-hidden="true">
+                        <Wrench size={14} />
+                      </span>
+                      <span>Monitor Wizard</span>
+                    </button>
+                    <button type="button" role="menuitem" onClick={() => handleNewMonitorOptionSelect('bulk')}>
+                      <span className="primary-button-menu-item-icon" aria-hidden="true">
+                        <ArrowUpDown size={14} />
+                      </span>
+                      <span>Bulk upload</span>
+                    </button>
+                  </div>
+                )}
+              </div>
             </header>
             <div className="filter-bar">
               <div className="chip-row">
-                <span className="chip-button chip-counter">
+                <button
+                  type="button"
+                  className={`chip-button chip-counter ${areAllMonitorsSelected ? 'active' : ''}`}
+                  onClick={toggleAllMonitorSelections}
+                >
                   <span className="counter-dot" aria-hidden="true" />
-                  0/4
-                </span>
-                <button className="chip-button">
-                  Bulk actions
-                  <ChevronDown size={16} />
+                  {selectedMonitorsCount}/{monitorRows.length}
                 </button>
-                <button className="chip-button">
-                  <Tag size={20} />
-                  All tags
-                  <ChevronDown size={16} />
-                </button>
+                <div className="bulk-actions-wrap" ref={bulkActionsMenuRef}>
+                  <button
+                    className={`chip-button bulk-actions-trigger ${isBulkActionsMenuOpen ? 'active' : ''}`}
+                    type="button"
+                    onClick={() => setIsBulkActionsMenuOpen((prev) => !prev)}
+                    aria-haspopup="menu"
+                    aria-expanded={isBulkActionsMenuOpen}
+                  >
+                    Bulk actions
+                    <ChevronDown size={16} />
+                  </button>
+
+                  {isBulkActionsMenuOpen && (
+                    <div className="bulk-actions-menu" role="menu">
+                      {bulkActionOptions.map((bulkOption) => (
+                        <button
+                          key={bulkOption}
+                          type="button"
+                          role="menuitem"
+                          onClick={() => handleBulkActionOptionSelect(bulkOption)}
+                          className={bulkOption === 'delete' ? 'delete' : ''}
+                        >
+                          <span className="bulk-actions-menu-icon" aria-hidden="true">
+                            {bulkOption === 'start' ? (
+                              <Play size={14} />
+                            ) : bulkOption === 'pause' ? (
+                              <Pause size={14} />
+                            ) : bulkOption === 'resume' ? (
+                              <RotateCcw size={14} />
+                            ) : (
+                              <Trash2 size={14} />
+                            )}
+                          </span>
+                          <span>{bulkActionOptionLabels[bulkOption]}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div className="monitor-tag-wrap" ref={monitorTagMenuRef}>
+                  <button
+                    className={`chip-button monitor-tag-trigger ${isMonitorTagMenuOpen || selectedMonitorTag !== 'All tags' ? 'active' : ''}`}
+                    type="button"
+                    onClick={() => setIsMonitorTagMenuOpen((prev) => !prev)}
+                    aria-haspopup="menu"
+                    aria-expanded={isMonitorTagMenuOpen}
+                  >
+                    <Tag size={20} />
+                    <span className="monitor-tag-label">{selectedMonitorTag}</span>
+                    <ChevronDown size={16} />
+                  </button>
+
+                  {isMonitorTagMenuOpen && (
+                    <div className="monitor-tag-menu" role="menu">
+                      {monitorTagOptions.map((tagOption) => (
+                        <button
+                          key={tagOption}
+                          type="button"
+                          role="menuitemradio"
+                          aria-checked={selectedMonitorTag === tagOption}
+                          className={selectedMonitorTag === tagOption ? 'selected' : ''}
+                          onClick={() => {
+                            setSelectedMonitorTag(tagOption);
+                            setIsMonitorTagMenuOpen(false);
+                          }}
+                        >
+                          <span>{tagOption}</span>
+                          {selectedMonitorTag === tagOption ? <Check size={16} aria-hidden="true" /> : null}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div className="search-row">
@@ -508,16 +843,51 @@ function App() {
                   <Search size={20} />
                   <input type="text" placeholder="Search by name or url" />
                 </label>
+                <div className="monitor-sort-wrap" ref={monitorSortMenuRef}>
+                  <button
+                    className={`chip-button monitor-sort-trigger ${isMonitorSortMenuOpen ? 'active' : ''}`}
+                    type="button"
+                    onClick={() => setIsMonitorSortMenuOpen((prev) => !prev)}
+                    aria-haspopup="menu"
+                    aria-expanded={isMonitorSortMenuOpen}
+                  >
+                    <ArrowUpDown size={20} />
+                    <span className="monitor-sort-label">{monitorSortOptionLabels[monitorSortOption]}</span>
+                    <ChevronDown size={16} />
+                  </button>
+
+                  {isMonitorSortMenuOpen && (
+                    <div className="monitor-sort-menu" role="menu">
+                      {monitorSortOptions.map((option) => (
+                        <button
+                          key={option}
+                          type="button"
+                          role="menuitemradio"
+                          aria-checked={monitorSortOption === option}
+                          className={monitorSortOption === option ? 'selected' : ''}
+                          onClick={() => {
+                            setMonitorSortOption(option);
+                            setIsMonitorSortMenuOpen(false);
+                          }}
+                        >
+                          <span>{monitorSortOptionLabels[option]}</span>
+                          {monitorSortOption === option ? <Check size={16} aria-hidden="true" /> : null}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
                 <button
-                  className={`chip-button ${downFirst ? 'active' : ''}`}
+                  className={`chip-button monitor-filter-trigger ${isMonitorFilterOpen || hasActiveMonitorFilters ? 'active' : ''}`}
                   type="button"
-                  onClick={() => setDownFirst((prev) => !prev)}
+                  onClick={() => {
+                    if (isMonitorFilterOpen) {
+                      closeMonitorFilterPanel();
+                    } else {
+                      openMonitorFilterPanel();
+                    }
+                  }}
                 >
-                  <ArrowUpDown size={20} />
-                  Down first
-                  <ChevronDown size={16} />
-                </button>
-                <button className="chip-button">
                   <CiSliderHorizontal size={20} />
                   Filter
                 </button>
@@ -557,9 +927,14 @@ function App() {
 
               <div className="monitor-table">
                 {displayedMonitors.map((monitor) => (
-                  <article className="monitor-row" key={monitor.id}>
+                  <article className={`monitor-row ${selectedMonitorIds.includes(monitor.id) ? 'selected' : ''}`} key={monitor.id}>
                     <div className="monitor-main">
-                      <span className="monitor-checkbox" />
+                      <button
+                        type="button"
+                        className={`monitor-checkbox ${selectedMonitorIds.includes(monitor.id) ? 'selected' : ''}`}
+                        aria-label={selectedMonitorIds.includes(monitor.id) ? `Unselect ${monitor.name}` : `Select ${monitor.name}`}
+                        onClick={() => toggleMonitorSelection(monitor.id)}
+                      />
                       <span className={`state-dot ${monitor.state}`} />
                       <span className="monitor-node" aria-hidden="true" />
                       <div className="monitor-copy">
@@ -650,6 +1025,66 @@ function App() {
                 </div>
               </div>
             </section>
+          </aside>
+
+          <div className={`monitor-filter-overlay ${isMonitorFilterOpen ? 'show' : ''}`} onClick={closeMonitorFilterPanel} />
+
+          <aside className={`monitor-filter-panel ${isMonitorFilterOpen ? 'show' : ''}`} aria-hidden={!isMonitorFilterOpen}>
+            <header className="monitor-filter-header">
+              <h3>Filter</h3>
+              <button type="button" onClick={closeMonitorFilterPanel} aria-label="Close filter">
+                <X size={16} />
+              </button>
+            </header>
+
+            <div className="monitor-filter-body">
+              <div className="monitor-filter-group">
+                <label htmlFor="monitor-filter-status">Status</label>
+                <div className="monitor-filter-select-shell">
+                  <select
+                    id="monitor-filter-status"
+                    value={draftMonitorFilterStatus}
+                    onChange={(event) => setDraftMonitorFilterStatus(event.target.value as MonitorFilterStatus)}
+                  >
+                    <option value="none">None</option>
+                    <option value="up">Up</option>
+                    <option value="down">Down</option>
+                  </select>
+                  <ChevronDown size={14} aria-hidden="true" />
+                </div>
+              </div>
+
+              <div className="monitor-filter-group">
+                <label htmlFor="monitor-filter-tags">Tags</label>
+                <input
+                  id="monitor-filter-tags"
+                  type="text"
+                  placeholder="Search for a tag..."
+                  value={draftMonitorTagQuery}
+                  onChange={(event) => setDraftMonitorTagQuery(event.target.value)}
+                />
+                <div className="monitor-filter-empty">
+                  <p className="monitor-filter-empty-title">You don&apos;t have any tags yet.</p>
+                  <p className="monitor-filter-empty-copy">
+                    To filter monitors based on tags create and attach tag to some monitor.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <footer className="monitor-filter-footer">
+              <button type="button" className="monitor-filter-reset" onClick={handleResetMonitorFilter}>
+                Reset
+              </button>
+              <button
+                type="button"
+                className="monitor-filter-apply"
+                onClick={handleApplyMonitorFilter}
+                disabled={!hasPendingMonitorFilterChanges}
+              >
+                Apply
+              </button>
+            </footer>
           </aside>
         </>
       )}
