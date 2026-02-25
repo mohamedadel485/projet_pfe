@@ -196,6 +196,7 @@ input {
   color: #000;
   border-radius: 10px;
   min-height: 44px;
+  height: 44px;
   width: 100%;
   padding: 10px;
   display: flex;
@@ -219,8 +220,8 @@ input {
 
 .menu-link.active {
   background: var(--blue-soft);
-  color: var(--blue);
-  font-weight: 500;
+  color: #2d3853;
+  font-weight: 600;
 }
 
 .menu-link.active .menu-icon-slot {
@@ -257,6 +258,8 @@ input {
   font-size: 0.8rem;
   line-height: 1.2;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .sidebar-footer {
