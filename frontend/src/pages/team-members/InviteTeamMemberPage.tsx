@@ -33,10 +33,9 @@ function InviteTeamMemberPage() {
 
             <label htmlFor="invite-team-role">Permission level</label>
             <div className="invite-team-select-shell">
-              <select id="invite-team-role" defaultValue="Admin">
-                <option>Admin</option>
-                <option>Member</option>
-                <option>Viewer</option>
+              <select id="invite-team-role" defaultValue="admin">
+                <option value="admin">Admin</option>
+                <option value="member">Member</option>
               </select>
               <ChevronDown size={14} aria-hidden="true" />
             </div>
