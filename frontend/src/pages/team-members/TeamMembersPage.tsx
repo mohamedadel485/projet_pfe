@@ -37,7 +37,7 @@ function TeamMembersPage({ onInviteTeam }: TeamMembersPageProps) {
           </ul>
 
           <button type="button" className="team-members-invite-button" onClick={() => onInviteTeam?.()}>
-            <Plus size={15} />
+            <Plus size={13} />
             Invite Team
           </button>
         </div>

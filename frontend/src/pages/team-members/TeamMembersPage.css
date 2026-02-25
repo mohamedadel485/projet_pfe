@@ -118,19 +118,19 @@
 }
 
 .team-members-invite-button {
-  margin-top: 28px;
+  margin-top: 22px;
   border: 0;
-  border-radius: 8px;
+  border-radius: 7px;
   background: #1f5bc3;
   color: #fff;
-  min-width: 150px;
-  height: 44px;
-  padding: 0 18px;
+  min-width: 148px;
+  height: 36px;
+  padding: 0 14px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  font-size: 0.86rem;
+  gap: 7px;
+  font-size: 0.68rem;
   font-weight: 700;
   line-height: 1;
   cursor: pointer;
