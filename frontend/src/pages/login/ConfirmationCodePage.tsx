@@ -12,8 +12,8 @@ import "./ConfirmationCodePage.css";
 interface ConfirmationCodePageProps {
   email?: string;
   onBack: () => void;
-  onContinue: () => void;
-  onResend?: () => void;
+  onContinue: (code: string) => Promise<string | null>;
+  onResend?: () => Promise<string | null>;
 }
 
 function ConfirmationCodePage({
@@ -22,8 +22,12 @@ function ConfirmationCodePage({
   onContinue,
   onResend,
 }: ConfirmationCodePageProps) {
-  const [digits, setDigits] = useState(["", "", "", ""]);
+  const [digits, setDigits] = useState(["", "", "", "", "", ""]);
   const inputRefs = useRef<Array<HTMLInputElement | null>>([]);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [resendFeedback, setResendFeedback] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isResending, setIsResending] = useState(false);
 
   const handleDigitChange = (index: number, value: string) => {
     const cleaned = value.replace(/\D/g, "").slice(-1);
@@ -52,24 +56,43 @@ function ConfirmationCodePage({
     const pastedDigits = event.clipboardData
       .getData("text")
       .replace(/\D/g, "")
-      .slice(0, 4)
+      .slice(0, 6)
       .split("");
 
     if (pastedDigits.length === 0) return;
 
-    const next = ["", "", "", ""];
+    const next = ["", "", "", "", "", ""];
     pastedDigits.forEach((digit, index) => {
       next[index] = digit;
     });
 
     setDigits(next);
-    const targetIndex = Math.min(pastedDigits.length, 4) - 1;
+    const targetIndex = Math.min(pastedDigits.length, 6) - 1;
     inputRefs.current[targetIndex]?.focus();
   };
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    onContinue();
+    if (isSubmitting) return;
+
+    const code = digits.join("");
+    if (code.length !== 6) {
+      setSubmitError("Entrez le code complet");
+      return;
+    }
+
+    setSubmitError(null);
+    setResendFeedback(null);
+    setIsSubmitting(true);
+
+    const error = await onContinue(code);
+    if (error) {
+      setSubmitError(error);
+      setIsSubmitting(false);
+      return;
+    }
+
+    setIsSubmitting(false);
   };
 
   return (
@@ -124,6 +147,7 @@ function ConfirmationCodePage({
                   onKeyDown={(event) => handleDigitKeyDown(index, event)}
                   onPaste={handlePaste}
                   aria-label={`Code digit ${index + 1}`}
+                  disabled={isSubmitting || isResending}
                 />
               ))}
             </div>
@@ -132,17 +156,32 @@ function ConfirmationCodePage({
               Didn&apos;t receive the email?{" "}
               <a
                 href="#"
-                onClick={(event) => {
+                onClick={async (event) => {
                   event.preventDefault();
-                  onResend?.();
+                  if (!onResend || isResending) return;
+
+                  setSubmitError(null);
+                  setResendFeedback(null);
+                  setIsResending(true);
+                  const error = await onResend();
+
+                  if (error) {
+                    setSubmitError(error);
+                  } else {
+                    setResendFeedback("Code resent successfully.");
+                  }
+                  setIsResending(false);
                 }}
               >
                 Click to resend
               </a>
             </p>
 
-            <button type="submit" style={{ margin: "50px 0" }}>
-              Continue
+            {submitError ? <p className="login-form-error">{submitError}</p> : null}
+            {resendFeedback ? <p>{resendFeedback}</p> : null}
+
+            <button type="submit" style={{ margin: "50px 0" }} disabled={isSubmitting || isResending}>
+              {isSubmitting ? 'Verifying...' : 'Continue'}
             </button>
           </form>
 

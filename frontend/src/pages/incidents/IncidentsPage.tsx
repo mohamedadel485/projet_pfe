@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowUpDown,
   Bell,
@@ -9,6 +9,7 @@ import {
   EllipsisVertical,
   Copy,
   Radio,
+  RotateCcw,
   Search,
   SlidersHorizontal,
   Tag,
@@ -18,6 +19,7 @@ import './incidents-page.css';
 
 interface IncidentRow {
   id: string;
+  status: 'Resolved' | 'Ongoing';
   monitor: string;
   rootCause: string;
   comments: number;
@@ -29,9 +31,30 @@ interface IncidentRow {
 
 type RequestTab = 'url' | 'headers';
 type ResponseTab = 'body' | 'headers';
+type IncidentFilterId =
+  | 'resolved'
+  | 'ongoing'
+  | 'root-timeout'
+  | 'root-2xx'
+  | 'root-3xx'
+  | 'root-4xx'
+  | 'root-5xx'
+  | 'root-dns'
+  | 'root-assertion'
+  | 'root-invalid-json'
+  | 'slow-response';
+type IncidentSortOption = 'down-first' | 'up-first' | 'paused-first' | 'a-z' | 'newest-first';
+type IncidentTagOption = 'All tags' | 'Website' | 'API' | 'Core' | 'Interface';
+
+interface IncidentFilterOption {
+  id: IncidentFilterId;
+  label: string;
+  matches: (incident: IncidentRow) => boolean;
+}
 
 const incidentRows: IncidentRow[] = Array.from({ length: 13 }, (_, index) => ({
   id: `incident-${index + 1}`,
+  status: 'Resolved',
   monitor: 'Metal 2000 website',
   rootCause: 'Internal server error',
   comments: 0,
@@ -40,6 +63,69 @@ const incidentRows: IncidentRow[] = Array.from({ length: 13 }, (_, index) => ({
   duration: '0h 23m 12s',
   visibility: 'Included',
 }));
+
+const rootCauseIncludes = (incident: IncidentRow, terms: string[]): boolean => {
+  const normalizedRootCause = incident.rootCause.toLowerCase();
+  return terms.some((term) => normalizedRootCause.includes(term));
+};
+
+const incidentFilterOptions: IncidentFilterOption[] = [
+  { id: 'resolved', label: 'Resolved', matches: (incident) => incident.status === 'Resolved' },
+  { id: 'ongoing', label: 'Ongoing', matches: (incident) => incident.status === 'Ongoing' },
+  {
+    id: 'root-timeout',
+    label: 'Root cause: Time/Out',
+    matches: (incident) => rootCauseIncludes(incident, ['timeout', 'time out']),
+  },
+  { id: 'root-2xx', label: 'Root cause: 2xx', matches: (incident) => rootCauseIncludes(incident, ['2xx']) },
+  { id: 'root-3xx', label: 'Root cause: 3xx', matches: (incident) => rootCauseIncludes(incident, ['3xx']) },
+  { id: 'root-4xx', label: 'Root cause: 4xx', matches: (incident) => rootCauseIncludes(incident, ['4xx']) },
+  {
+    id: 'root-5xx',
+    label: 'Root cause: 5xx',
+    matches: (incident) => rootCauseIncludes(incident, ['5xx', 'server error', 'internal server error']),
+  },
+  {
+    id: 'root-dns',
+    label: 'Root cause: DNS resolving issue',
+    matches: (incident) => rootCauseIncludes(incident, ['dns']),
+  },
+  {
+    id: 'root-assertion',
+    label: 'Root cause: Assertion failed',
+    matches: (incident) => rootCauseIncludes(incident, ['assertion']),
+  },
+  {
+    id: 'root-invalid-json',
+    label: 'Root cause: Invalid JSON response',
+    matches: (incident) => rootCauseIncludes(incident, ['invalid json']),
+  },
+  { id: 'slow-response', label: 'Slow response', matches: (incident) => rootCauseIncludes(incident, ['slow']) },
+];
+const incidentSortOptionLabels: Record<IncidentSortOption, string> = {
+  'down-first': 'Down first',
+  'up-first': 'Up first',
+  'paused-first': 'Paused first',
+  'a-z': 'A -> Z',
+  'newest-first': 'Newest first',
+};
+const incidentSortOptions: IncidentSortOption[] = ['down-first', 'up-first', 'paused-first', 'a-z', 'newest-first'];
+const incidentTagOptions: IncidentTagOption[] = ['All tags', 'Website', 'API', 'Core', 'Interface'];
+const incidentStatusRank: Record<IncidentRow['status'], number> = {
+  Ongoing: 0,
+  Resolved: 1,
+};
+
+const parseIncidentDate = (dateText: string): number => {
+  const normalizedDateText = dateText.replace(/(\d)(AM|PM)$/i, '$1 $2');
+  const timestamp = Date.parse(normalizedDateText);
+  return Number.isNaN(timestamp) ? 0 : timestamp;
+};
+
+const getIncidentNumericId = (incidentId: string): number => {
+  const numericPart = Number(incidentId.replace(/\D+/g, ''));
+  return Number.isNaN(numericPart) ? 0 : numericPart;
+};
 
 const requestUrl = 'HEAD http://www.metal2000.fr/';
 const requestHeaders = {
@@ -62,13 +148,66 @@ const responseHeaders = {
 
 function IncidentsPage() {
   const [selectedIncidentId, setSelectedIncidentId] = useState<string | null>(null);
+  const [isFilterMenuOpen, setIsFilterMenuOpen] = useState(false);
+  const [isSortMenuOpen, setIsSortMenuOpen] = useState(false);
+  const [isTagMenuOpen, setIsTagMenuOpen] = useState(false);
+  const [activeFilterIds, setActiveFilterIds] = useState<IncidentFilterId[]>([]);
+  const [incidentSortOption, setIncidentSortOption] = useState<IncidentSortOption>('down-first');
+  const [selectedTag, setSelectedTag] = useState<IncidentTagOption>('All tags');
   const [requestTab, setRequestTab] = useState<RequestTab>('url');
   const [responseTab, setResponseTab] = useState<ResponseTab>('body');
+  const filterMenuRef = useRef<HTMLDivElement | null>(null);
+  const sortMenuRef = useRef<HTMLDivElement | null>(null);
+  const tagMenuRef = useRef<HTMLDivElement | null>(null);
 
   const selectedIncident = useMemo(
     () => incidentRows.find((incident) => incident.id === selectedIncidentId) ?? null,
     [selectedIncidentId]
   );
+  const filteredIncidentRows = useMemo(() => {
+    if (activeFilterIds.length === 0) return incidentRows;
+    return incidentRows.filter((incident) =>
+      incidentFilterOptions.some((option) => activeFilterIds.includes(option.id) && option.matches(incident))
+    );
+  }, [activeFilterIds]);
+  const sortedIncidentRows = useMemo(() => {
+    const rows = [...filteredIncidentRows];
+
+    if (incidentSortOption === 'a-z') {
+      rows.sort((a, b) => a.monitor.localeCompare(b.monitor));
+      return rows;
+    }
+
+    if (incidentSortOption === 'newest-first') {
+      rows.sort((a, b) => {
+        const dateDelta = parseIncidentDate(b.started) - parseIncidentDate(a.started);
+        if (dateDelta !== 0) return dateDelta;
+        return getIncidentNumericId(b.id) - getIncidentNumericId(a.id);
+      });
+      return rows;
+    }
+
+    if (incidentSortOption === 'up-first') {
+      rows.sort((a, b) => {
+        const statusDelta = incidentStatusRank[b.status] - incidentStatusRank[a.status];
+        if (statusDelta !== 0) return statusDelta;
+        return a.monitor.localeCompare(b.monitor);
+      });
+      return rows;
+    }
+
+    if (incidentSortOption === 'paused-first') {
+      rows.sort((a, b) => a.monitor.localeCompare(b.monitor));
+      return rows;
+    }
+
+    rows.sort((a, b) => {
+      const statusDelta = incidentStatusRank[a.status] - incidentStatusRank[b.status];
+      if (statusDelta !== 0) return statusDelta;
+      return a.monitor.localeCompare(b.monitor);
+    });
+    return rows;
+  }, [filteredIncidentRows, incidentSortOption]);
   const requestHeadersText = useMemo(() => JSON.stringify(requestHeaders, null, 2), []);
   const responseHeadersText = useMemo(() => JSON.stringify(responseHeaders, null, 2), []);
   const requestCopyContent = requestTab === 'url' ? requestUrl : requestHeadersText;
@@ -78,6 +217,40 @@ function IncidentsPage() {
     setResponseTab('body');
   }, [selectedIncidentId]);
 
+  useEffect(() => {
+    const handleDocumentMouseDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      const insideFilterMenu = filterMenuRef.current?.contains(target) ?? false;
+      const insideSortMenu = sortMenuRef.current?.contains(target) ?? false;
+      const insideTagMenu = tagMenuRef.current?.contains(target) ?? false;
+
+      if (!insideFilterMenu) {
+        setIsFilterMenuOpen(false);
+      }
+      if (!insideSortMenu) {
+        setIsSortMenuOpen(false);
+      }
+      if (!insideTagMenu) {
+        setIsTagMenuOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleDocumentMouseDown);
+    return () => document.removeEventListener('mousedown', handleDocumentMouseDown);
+  }, []);
+
+  useEffect(() => {
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      setIsFilterMenuOpen(false);
+      setIsSortMenuOpen(false);
+      setIsTagMenuOpen(false);
+    };
+
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, []);
+
   const handleCopyRequest = async () => {
     if (typeof navigator === 'undefined' || !navigator.clipboard?.writeText) return;
 
@@ -86,6 +259,16 @@ function IncidentsPage() {
     } catch {
       // Clipboard can fail in restricted browser contexts; fail silently by design.
     }
+  };
+
+  const toggleFilterOption = (filterId: IncidentFilterId) => {
+    setActiveFilterIds((prev) =>
+      prev.includes(filterId) ? prev.filter((id) => id !== filterId) : [...prev, filterId]
+    );
+  };
+
+  const resetFilters = () => {
+    setActiveFilterIds([]);
   };
 
   if (selectedIncident) {
@@ -289,26 +472,114 @@ function IncidentsPage() {
             <input type="text" placeholder="Search by name or url" />
           </label>
 
-          <button className="incidents-filter-button incidents-filter-tags" type="button">
-            <span className="incidents-filter-content">
-              <Tag size={14} />
-              All tags
-            </span>
-            <ChevronDown size={14} />
-          </button>
+          <div className="incidents-filter-tags-wrap" ref={tagMenuRef}>
+            <button
+              className={`incidents-filter-button incidents-filter-tags ${isTagMenuOpen || selectedTag !== 'All tags' ? 'active' : ''}`}
+              type="button"
+              onClick={() => setIsTagMenuOpen((prev) => !prev)}
+              aria-haspopup="menu"
+              aria-expanded={isTagMenuOpen}
+            >
+              <span className="incidents-filter-content">
+                <Tag size={14} />
+                {selectedTag}
+              </span>
+              <ChevronDown size={14} />
+            </button>
 
-          <button className="incidents-filter-button incidents-filter-order" type="button">
-            <span className="incidents-filter-content">
-              <ArrowUpDown size={14} />
-              Down first
-            </span>
-            <ChevronDown size={14} />
-          </button>
+            {isTagMenuOpen && (
+              <div className="incidents-tag-menu" role="menu">
+                {incidentTagOptions.map((tagOption) => (
+                  <button
+                    key={tagOption}
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked={selectedTag === tagOption}
+                    className={selectedTag === tagOption ? 'selected' : ''}
+                    onClick={() => {
+                      setSelectedTag(tagOption);
+                      setIsTagMenuOpen(false);
+                    }}
+                  >
+                    <span>{tagOption}</span>
+                    {selectedTag === tagOption ? <Check size={15} aria-hidden="true" /> : null}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
 
-          <button className="incidents-filter-button incidents-filter-panel" type="button">
-            <SlidersHorizontal size={14} />
-            Filter
-          </button>
+          <div className="incidents-filter-order-wrap" ref={sortMenuRef}>
+            <button
+              className={`incidents-filter-button incidents-filter-order ${isSortMenuOpen ? 'active' : ''}`}
+              type="button"
+              onClick={() => setIsSortMenuOpen((prev) => !prev)}
+              aria-haspopup="menu"
+              aria-expanded={isSortMenuOpen}
+            >
+              <span className="incidents-filter-content">
+                <ArrowUpDown size={14} />
+                {incidentSortOptionLabels[incidentSortOption]}
+              </span>
+              <ChevronDown size={14} />
+            </button>
+
+            {isSortMenuOpen && (
+              <div className="incidents-sort-menu" role="menu">
+                {incidentSortOptions.map((option) => (
+                  <button
+                    key={option}
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked={incidentSortOption === option}
+                    className={incidentSortOption === option ? 'selected' : ''}
+                    onClick={() => {
+                      setIncidentSortOption(option);
+                      setIsSortMenuOpen(false);
+                    }}
+                  >
+                    <span>{incidentSortOptionLabels[option]}</span>
+                    {incidentSortOption === option ? <Check size={15} aria-hidden="true" /> : null}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="incidents-filter-panel-wrap" ref={filterMenuRef}>
+            <button
+              className={`incidents-filter-button incidents-filter-panel ${isFilterMenuOpen || activeFilterIds.length > 0 ? 'active' : ''}`}
+              type="button"
+              onClick={() => setIsFilterMenuOpen((prev) => !prev)}
+              aria-haspopup="menu"
+              aria-expanded={isFilterMenuOpen}
+            >
+              <SlidersHorizontal size={14} />
+              Filter
+            </button>
+
+            {isFilterMenuOpen && (
+              <div className="incidents-filter-menu" role="menu">
+                <div className="incidents-filter-options">
+                  {incidentFilterOptions.map((option) => (
+                    <label key={option.id} className="incidents-filter-option">
+                      <input
+                        type="checkbox"
+                        checked={activeFilterIds.includes(option.id)}
+                        onChange={() => toggleFilterOption(option.id)}
+                      />
+                      <span>{option.label}</span>
+                    </label>
+                  ))}
+                </div>
+
+                <button type="button" className="incidents-filter-reset-button" onClick={resetFilters}>
+                  <RotateCcw size={14} />
+                  Reset
+                </button>
+              </div>
+            )}
+          </div>
 
           <button
             className="incidents-icon-button"
@@ -335,7 +606,7 @@ function IncidentsPage() {
             </tr>
           </thead>
           <tbody>
-            {incidentRows.map((incident) => (
+            {sortedIncidentRows.map((incident) => (
               <tr
                 key={incident.id}
                 className="incidents-row-clickable"
@@ -354,7 +625,7 @@ function IncidentsPage() {
                     <span className="incidents-status-icon" aria-hidden="true">
                       <Check size={9} />
                     </span>
-                    Resolved
+                    {incident.status}
                   </span>
                 </td>
                 <td>{incident.monitor}</td>

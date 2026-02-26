@@ -210,8 +210,15 @@
 }
 
 .login-form > button:disabled {
-  background: #1c57bb;
-  cursor: pointer;
+  background: #7e9fcf;
+  cursor: not-allowed;
+}
+
+.login-form-error {
+  margin: 4px 0 0;
+  color: #b33a3a;
+  font-size: 0.78rem;
+  font-weight: 600;
 }
 
 .login-footer {

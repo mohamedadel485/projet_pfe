@@ -11,8 +11,14 @@ import tileG from '../../images/login-tile-g.png';
 import tileH from '../../images/login-tile-h.png';
 import './LoginPage.css';
 
+interface LoginCredentials {
+  email: string;
+  password: string;
+  rememberMe: boolean;
+}
+
 interface LoginPageProps {
-  onSignIn: () => void;
+  onSignIn: (credentials: LoginCredentials) => Promise<string | null>;
   onForgotPassword: () => void;
 }
 
@@ -21,13 +27,31 @@ function LoginPage({ onSignIn, onForgotPassword }: LoginPageProps) {
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const isFormValid = useMemo(() => email.trim() !== '' && password.trim() !== '', [email, password]);
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!isFormValid) return;
-    onSignIn();
+    if (!isFormValid || isSubmitting) return;
+
+    setIsSubmitting(true);
+    setSubmitError(null);
+
+    const error = await onSignIn({
+      email: email.trim(),
+      password,
+      rememberMe,
+    });
+
+    if (error) {
+      setSubmitError(error);
+      setIsSubmitting(false);
+      return;
+    }
+
+    setIsSubmitting(false);
   };
 
   return (
@@ -49,6 +73,7 @@ function LoginPage({ onSignIn, onForgotPassword }: LoginPageProps) {
               placeholder="username@gmail.com"
               value={email}
               onChange={(event) => setEmail(event.target.value)}
+              disabled={isSubmitting}
             />
 
             <label htmlFor="login-password">Password</label>
@@ -60,12 +85,14 @@ function LoginPage({ onSignIn, onForgotPassword }: LoginPageProps) {
                 placeholder="XXXXXXXXXX"
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
+                disabled={isSubmitting}
               />
               <button
                 type="button"
                 className="login-password-toggle"
                 aria-label={showPassword ? 'Hide password' : 'Show password'}
                 onClick={() => setShowPassword((prev) => !prev)}
+                disabled={isSubmitting}
               >
                 {showPassword ? <Eye size={16} /> : <EyeOff size={16} />}
               </button>
@@ -78,6 +105,7 @@ function LoginPage({ onSignIn, onForgotPassword }: LoginPageProps) {
                   type="checkbox"
                   checked={rememberMe}
                   onChange={(event) => setRememberMe(event.target.checked)}
+                  disabled={isSubmitting}
                 />
                 <span>Remember me</span>
               </label>
@@ -85,6 +113,7 @@ function LoginPage({ onSignIn, onForgotPassword }: LoginPageProps) {
                 href="#"
                 onClick={(event) => {
                   event.preventDefault();
+                  if (isSubmitting) return;
                   onForgotPassword();
                 }}
               >
@@ -92,8 +121,10 @@ function LoginPage({ onSignIn, onForgotPassword }: LoginPageProps) {
               </a>
             </div>
 
-            <button type="submit">
-              Sign in
+            {submitError ? <p className="login-form-error">{submitError}</p> : null}
+
+            <button type="submit" disabled={!isFormValid || isSubmitting}>
+              {isSubmitting ? 'Signing in...' : 'Sign in'}
             </button>
           </form>
 

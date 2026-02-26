@@ -6,6 +6,14 @@ import './NewMonitorPage.css';
 interface NewMonitorPageProps {
   onBack: () => void;
   onOpenIntegrationsTeam?: () => void;
+  onCreateMonitor?: (payload: {
+    name: string;
+    url: string;
+    type: MonitorProtocol;
+    interval: number;
+    timeout: number;
+    httpMethod: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'HEAD';
+  }) => Promise<string | null>;
 }
 
 const intervalOptions = ['30s', '1m', '5m', '30m', '1h', '12h', '12h', '24h'];
@@ -55,10 +63,41 @@ const protocolOptions: ProtocolOption[] = [
   },
 ];
 
-function NewMonitorPage({ onBack, onOpenIntegrationsTeam }: NewMonitorPageProps) {
+const parseIntervalToMinutes = (label: string): number => {
+  const numericValue = Number.parseInt(label, 10);
+  if (!Number.isFinite(numericValue) || numericValue <= 0) return 5;
+
+  if (label.endsWith('s')) {
+    return Math.max(1, Math.ceil(numericValue / 60));
+  }
+
+  if (label.endsWith('h')) {
+    return numericValue * 60;
+  }
+
+  return numericValue;
+};
+
+const parseTimeoutToSeconds = (label: string): number => {
+  const numericValue = Number.parseInt(label, 10);
+  if (!Number.isFinite(numericValue) || numericValue <= 0) return 30;
+  return numericValue;
+};
+
+const mapHttpMethod = (method: string): 'GET' | 'POST' | 'PUT' | 'DELETE' | 'HEAD' => {
+  if (method === 'GET' || method === 'POST' || method === 'PUT' || method === 'DELETE' || method === 'HEAD') {
+    return method;
+  }
+
+  return 'HEAD';
+};
+
+function NewMonitorPage({ onBack, onOpenIntegrationsTeam, onCreateMonitor }: NewMonitorPageProps) {
   const [selectedIntervalIndex, setSelectedIntervalIndex] = useState(2);
   const [selectedTimeoutIndex, setSelectedTimeoutIndex] = useState(2);
   const [selectedProtocol, setSelectedProtocol] = useState<MonitorProtocol>('http');
+  const [monitorName, setMonitorName] = useState('');
+  const [monitorUrl, setMonitorUrl] = useState('');
   const [isProtocolMenuOpen, setIsProtocolMenuOpen] = useState(false);
   const [isSslDomainOpen, setIsSslDomainOpen] = useState(false);
   const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
@@ -77,6 +116,8 @@ function NewMonitorPage({ onBack, onOpenIntegrationsTeam }: NewMonitorPageProps)
   const [requestBody, setRequestBody] = useState('{ "key": "value" }');
   const [headerKey, setHeaderKey] = useState('');
   const [headerValue, setHeaderValue] = useState('');
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [isCreating, setIsCreating] = useState(false);
   const [activeSideSection, setActiveSideSection] = useState<NewMonitorSideSection>('details');
   const protocolMenuRef = useRef<HTMLDivElement | null>(null);
   const selectedIntervalLabel = useMemo(
@@ -107,6 +148,36 @@ function NewMonitorPage({ onBack, onOpenIntegrationsTeam }: NewMonitorPageProps)
     document.addEventListener('mousedown', handleDocumentClick);
     return () => document.removeEventListener('mousedown', handleDocumentClick);
   }, []);
+
+  const isCreateDisabled = monitorName.trim() === '' || monitorUrl.trim() === '' || isCreating;
+
+  const handleCreateMonitor = async () => {
+    if (isCreateDisabled || !onCreateMonitor) return;
+
+    setCreateError(null);
+    setIsCreating(true);
+
+    const selectedInterval = intervalOptions[selectedIntervalIndex] ?? intervalOptions[2];
+    const selectedTimeout = timeoutOptions[selectedTimeoutIndex] ?? timeoutOptions[2];
+
+    const error = await onCreateMonitor({
+      name: monitorName.trim(),
+      url: monitorUrl.trim(),
+      type: selectedProtocol,
+      interval: parseIntervalToMinutes(selectedInterval),
+      timeout: parseTimeoutToSeconds(selectedTimeout),
+      httpMethod: mapHttpMethod(selectedHttpMethod),
+    });
+
+    if (error) {
+      setCreateError(error);
+      setIsCreating(false);
+      return;
+    }
+
+    setIsCreating(false);
+    setCreateError(null);
+  };
 
   return (
     <section className="new-monitor-page">
@@ -170,12 +241,30 @@ function NewMonitorPage({ onBack, onOpenIntegrationsTeam }: NewMonitorPageProps)
             <div className="new-monitor-separator" />
 
             <div className="new-monitor-field">
+              <label htmlFor="new-monitor-name">Monitor name</label>
+              <input
+                id="new-monitor-name"
+                className="new-monitor-input"
+                type="text"
+                placeholder="My service"
+                value={monitorName}
+                onChange={(event) => setMonitorName(event.target.value)}
+                disabled={isCreating}
+              />
+            </div>
+
+            <div className="new-monitor-separator" />
+
+            <div className="new-monitor-field">
               <label htmlFor="new-monitor-url">URL to monitor</label>
               <input
                 id="new-monitor-url"
                 className="new-monitor-input"
                 type="url"
                 placeholder={selectedProtocolOption.placeholder}
+                value={monitorUrl}
+                onChange={(event) => setMonitorUrl(event.target.value)}
+                disabled={isCreating}
               />
             </div>
 
@@ -280,7 +369,7 @@ function NewMonitorPage({ onBack, onOpenIntegrationsTeam }: NewMonitorPageProps)
             <h3>Monitor interval</h3>
             <p className="monitor-interval-description">
               Your monitor will be checked every <strong>{selectedIntervalLabel}</strong>. We recommend to use at least
-              1-minute checks <a href="#">available in paid plans.</a>
+              1-minute checks 
             </p>
 
             <div className="monitor-interval-slider-wrap">
@@ -632,7 +721,10 @@ function NewMonitorPage({ onBack, onOpenIntegrationsTeam }: NewMonitorPageProps)
           </section>
 
           <section className="new-monitor-submit-card">
-            <button type="button">Create monitor</button>
+            {createError ? <p className="new-monitor-submit-error">{createError}</p> : null}
+            <button type="button" onClick={handleCreateMonitor} disabled={isCreateDisabled}>
+              {isCreating ? 'Creating...' : 'Create monitor'}
+            </button>
           </section>
         </div>
 

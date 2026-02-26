@@ -1,0 +1,197 @@
+.team-members-page {
+  grid-column: 2 / 4;
+  margin-top: 0;
+  padding: 2px 8px 2px 2px;
+}
+
+.team-members-card {
+  position: relative;
+  border: 1px solid #dfe8f5;
+  border-radius: 16px;
+  background-color: #f5f7fc;
+  background-image: url('../../images/Background.png');
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+  min-height: calc(100vh - 38px);
+  overflow: hidden;
+  padding: 16px 18px 30px;
+}
+
+.team-members-card::before {
+  content: none;
+  position: absolute;
+  top: 24px;
+  right: 36px;
+  width: 300px;
+  height: 300px;
+  border-radius: 50%;
+  background: radial-gradient(circle at center, rgba(154, 149, 247, 0.42) 0%, rgba(154, 149, 247, 0.2) 34%, rgba(154, 149, 247, 0.04) 68%, rgba(154, 149, 247, 0) 76%);
+  filter: blur(6px);
+  pointer-events: none;
+}
+
+.team-members-card::after {
+  content: none;
+  position: absolute;
+  left: 140px;
+  bottom: -80px;
+  width: 520px;
+  height: 260px;
+  background: radial-gradient(circle at 20% 50%, rgba(245, 194, 218, 0.42) 0%, rgba(245, 194, 218, 0) 72%);
+  pointer-events: none;
+}
+
+.team-members-kicker {
+  margin: 0;
+  position: relative;
+  z-index: 1;
+  color: #2465c9;
+  font-size: 1rem;
+  font-weight: 800;
+}
+
+.team-members-content {
+  position: relative;
+  z-index: 1;
+  margin-top: 112px;
+  max-width: 670px;
+}
+
+.team-members-title {
+  margin: 0;
+  color: #2d3853;
+  font-size: 2.6rem;
+  line-height: 1.44;
+  font-weight: 800;
+  letter-spacing: -0.018em;
+}
+
+.team-members-title span {
+  display: block;
+  color: #3271e7;
+  letter-spacing: -0.010em;
+}
+
+.team-members-points {
+  list-style: none;
+  margin: 30px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.team-members-points li {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.team-members-point-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  background: #dce7fb;
+  color: #2d6de1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.team-members-point-image {
+  width: 15px;
+  height: 15px;
+  object-fit: contain;
+  display: block;
+}
+
+.team-members-points p {
+  margin: 0;
+  color: #4e5f7e;
+  font-size: 1.02rem;
+  line-height: 1.36;
+  font-weight: 500;
+  max-width: 560px;
+}
+
+.team-members-invite-button {
+  margin-top: 22px;
+  border: 0;
+  border-radius: 7px;
+  background: #1f5bc3;
+  color: #fff;
+  min-width: 148px;
+  height: 36px;
+  padding: 0 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.team-members-invite-button:hover {
+  background: #1b50ac;
+}
+
+@media (max-width: 1200px) {
+  .team-members-title {
+    font-size: 3.2rem;
+  }
+
+  .team-members-points p {
+    font-size: 1rem;
+  }
+}
+
+@media (max-width: 1000px) {
+  .team-members-page {
+    grid-column: 1;
+    margin-top: 0;
+    padding: 0;
+  }
+
+  .team-members-card {
+    min-height: auto;
+  }
+
+  .team-members-content {
+    margin-top: 52px;
+  }
+
+  .team-members-title {
+    font-size: 2.2rem;
+  }
+}
+
+@media (max-width: 680px) {
+  .team-members-card {
+    padding: 12px;
+  }
+
+  .team-members-title {
+    font-size: 1.8rem;
+  }
+
+  .team-members-points p {
+    font-size: 0.95rem;
+  }
+
+  .team-members-card::before {
+    width: 220px;
+    height: 220px;
+    right: -30px;
+  }
+
+  .team-members-card::after {
+    width: 320px;
+    left: -40px;
+    bottom: -100px;
+  }
+}

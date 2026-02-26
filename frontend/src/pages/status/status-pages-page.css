@@ -1,5 +1,5 @@
 .app-shell.status-pages-view {
-  grid-template-columns: 164px minmax(0, 1fr);
+  grid-template-columns: 230px minmax(0, 1fr);
 }
 
 .app-shell.status-pages-view.sidebar-collapsed {
@@ -182,17 +182,17 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  justify-content: flex-start;
+  justify-content: flex-end;
 }
 
 .status-pages-actions-cell > button,
 .status-pages-actions-cell > .status-pages-menu-wrap > .status-pages-more-button {
   border: 0;
-  width: 26px;
-  height: 26px;
-  border-radius: 8px;
-  background: #ffffff;
-  color: #4d6387;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  background: #f3f7fe;
+  color: #5c7296;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -200,7 +200,9 @@
 }
 
 .status-pages-actions-cell > .status-pages-menu-wrap > .status-pages-more-button {
-  width: 14px;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
   background: transparent;
 }
 
@@ -217,14 +219,14 @@
 .status-pages-options-menu {
   position: absolute;
   top: calc(100% + 8px);
-  left: 50%;
-  right: auto;
-  transform: translateX(-50%);
-  width: 188px;
+  right: 0;
+  left: auto;
+  transform: none;
+  width: 196px;
   border-radius: 10px;
   border: 1px solid #dfe7f3;
   background: #ffffff;
-  box-shadow: 0 10px 18px rgba(22, 38, 66, 0.14);
+  box-shadow: 0 8px 16px rgba(22, 38, 66, 0.14);
   overflow: hidden;
   z-index: 25;
   display: flex;
@@ -232,9 +234,14 @@
   text-align: left;
 }
 
+.status-pages-options-menu.open-up {
+  top: auto;
+  bottom: calc(100% + 8px);
+}
+
 .status-pages-menu-item {
   width: 100% !important;
-  min-height: 40px !important;
+  min-height: 42px !important;
   height: auto !important;
   border: 0;
   border-top: 1px solid #edf2fa;
@@ -242,17 +249,18 @@
   margin: 0;
   background: #ffffff !important;
   color: #3a4f73;
-  padding: 9px 10px;
+  padding: 0 12px;
   font-family: inherit;
-  font-size: 0.76rem;
-  font-weight: 600;
+  font-size: 0.86rem;
+  font-weight: 700;
   line-height: 1.2;
   text-align: left;
-  display: grid;
-  grid-template-columns: 14px minmax(0, 1fr);
+  display: inline-flex;
   align-items: center;
-  justify-items: start;
-  column-gap: 7px;
+  gap: 8px;
+  justify-content: flex-start;
+  grid-template-columns: none;
+  align-items: center;
   cursor: pointer;
   white-space: nowrap;
   appearance: none;
@@ -278,11 +286,14 @@
 
 .status-pages-options-menu .status-pages-menu-item svg {
   flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  stroke-width: 1.9;
 }
 
 .status-pages-menu-item-icon {
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -297,7 +308,6 @@
 .status-pages-options-menu .status-pages-menu-item > span:not(.status-pages-menu-item-icon) {
   display: block;
   line-height: 1.15;
-  justify-self: start;
   text-align: left;
 }
 

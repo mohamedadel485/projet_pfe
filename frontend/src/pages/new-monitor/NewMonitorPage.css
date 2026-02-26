@@ -964,6 +964,18 @@
   cursor: pointer;
 }
 
+.new-monitor-submit-card button:disabled {
+  background: #8caee2;
+  cursor: not-allowed;
+}
+
+.new-monitor-submit-error {
+  margin: 0 0 10px;
+  color: #b33a3a;
+  font-size: 0.74rem;
+  font-weight: 600;
+}
+
 .new-monitor-side-card {
   border: 1px solid #dfe7f3;
   border-radius: 8px;

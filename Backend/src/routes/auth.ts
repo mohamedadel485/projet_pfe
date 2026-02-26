@@ -1,14 +1,25 @@
 import { Router, Request, Response } from 'express';
 import { body, validationResult } from 'express-validator';
+import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import type { SignOptions } from 'jsonwebtoken';
 import User from '../models/User';
 import Invitation from '../models/Invitation';
+import emailService from '../services/emailService';
 import { authenticate, AuthRequest } from '../middleware/auth';
 
 const router = Router();
 const jwtSecret = process.env.JWT_SECRET as string;
 const jwtExpiresIn = (process.env.JWT_EXPIRE ?? '7d') as SignOptions['expiresIn'];
+const PASSWORD_RESET_CODE_LENGTH = 6;
+const passwordResetCodeExpireMinutes = Number(process.env.PASSWORD_RESET_CODE_EXPIRE_MINUTES ?? 10);
+const exposeDebugDetails = (process.env.NODE_ENV ?? 'development') !== 'production';
+
+const generatePasswordResetCode = (): string => {
+  const min = 10 ** (PASSWORD_RESET_CODE_LENGTH - 1);
+  const max = 10 ** PASSWORD_RESET_CODE_LENGTH;
+  return String(crypto.randomInt(min, max));
+};
 
 /**
  * POST /api/auth/register
@@ -17,15 +28,19 @@ const jwtExpiresIn = (process.env.JWT_EXPIRE ?? '7d') as SignOptions['expiresIn'
 router.post(
   '/register',
   [
-    body('email').isEmail().normalizeEmail(),
-    body('password').isLength({ min: 6 }),
-    body('name').notEmpty().trim(),
+    body('email').isEmail().withMessage('Email invalide').normalizeEmail(),
+    body('password').isLength({ min: 6 }).withMessage('Le mot de passe doit contenir au moins 6 caracteres'),
+    body('name').notEmpty().withMessage('Le nom est requis').trim(),
   ],
   async (req: Request, res: Response): Promise<void> => {
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
-        res.status(400).json({ errors: errors.array() });
+        const formattedErrors = errors.array();
+        res.status(400).json({
+          error: String(formattedErrors[0]?.msg ?? 'Donnees invalides'),
+          errors: formattedErrors,
+        });
         return;
       }
 
@@ -59,6 +74,11 @@ router.post(
 
       await user.save();
 
+      if (!jwtSecret) {
+        res.status(500).json({ error: 'Configuration serveur invalide: JWT_SECRET manquant' });
+        return;
+      }
+
       const token = jwt.sign(
         { userId: user._id },
         jwtSecret,
@@ -89,14 +109,18 @@ router.post(
 router.post(
   '/login',
   [
-    body('email').isEmail().normalizeEmail(),
-    body('password').notEmpty(),
+    body('email').isEmail().withMessage('Email invalide').normalizeEmail(),
+    body('password').notEmpty().withMessage('Mot de passe requis'),
   ],
   async (req: Request, res: Response): Promise<void> => {
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
-        res.status(400).json({ errors: errors.array() });
+        const formattedErrors = errors.array();
+        res.status(400).json({
+          error: String(formattedErrors[0]?.msg ?? 'Donnees invalides'),
+          errors: formattedErrors,
+        });
         return;
       }
 
@@ -116,6 +140,11 @@ router.post(
       const isMatch = await user.comparePassword(password);
       if (!isMatch) {
         res.status(401).json({ error: 'Email ou mot de passe incorrect' });
+        return;
+      }
+
+      if (!jwtSecret) {
+        res.status(500).json({ error: 'Configuration serveur invalide: JWT_SECRET manquant' });
         return;
       }
 
@@ -143,21 +172,164 @@ router.post(
 );
 
 /**
+ * POST /api/auth/forgot-password
+ * Envoie un code de reinitialisation de mot de passe
+ */
+router.post(
+  '/forgot-password',
+  [
+    body('email').isEmail().withMessage('Email invalide').normalizeEmail(),
+  ],
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        const formattedErrors = errors.array();
+        res.status(400).json({
+          error: String(formattedErrors[0]?.msg ?? 'Donnees invalides'),
+          errors: formattedErrors,
+        });
+        return;
+      }
+
+      const { email } = req.body as { email: string };
+      const user = await User.findOne({ email });
+
+      // Reponse volontairement generique pour ne pas exposer les comptes existants.
+      if (!user || !user.isActive) {
+        res.json({
+          message: 'Si un compte existe pour cet email, un code de verification a ete envoye.',
+        });
+        return;
+      }
+
+      const resetCode = generatePasswordResetCode();
+      user.passwordResetCode = resetCode;
+      user.passwordResetExpires = new Date(Date.now() + passwordResetCodeExpireMinutes * 60 * 1000);
+      await user.save();
+
+      try {
+        await emailService.sendPasswordResetCode(user.email, resetCode, user.name);
+        res.json({
+          message: 'Code de verification envoye par email.',
+          delivery: 'smtp',
+        });
+        return;
+      } catch (mailError: any) {
+        user.passwordResetCode = undefined;
+        user.passwordResetExpires = undefined;
+        await user.save();
+
+        res.status(502).json({
+          error: "Le code de reinitialisation n'a pas pu etre envoye. Verifiez la configuration SMTP.",
+          details: exposeDebugDetails ? mailError?.message : undefined,
+        });
+        return;
+      }
+    } catch (error: any) {
+      console.error('Erreur forgot-password:', error);
+      res.status(500).json({
+        error: 'Erreur lors de la demande de reinitialisation',
+        details: process.env.NODE_ENV === 'development' ? error?.message : undefined,
+      });
+    }
+  }
+);
+
+/**
+ * POST /api/auth/reset-password
+ * Reinitialiser le mot de passe avec le code recu par email
+ */
+router.post(
+  '/reset-password',
+  [
+    body('email').isEmail().withMessage('Email invalide').normalizeEmail(),
+    body('code')
+      .isLength({ min: PASSWORD_RESET_CODE_LENGTH, max: PASSWORD_RESET_CODE_LENGTH })
+      .withMessage('Code invalide')
+      .trim(),
+    body('newPassword')
+      .isLength({ min: 6 })
+      .withMessage('Le mot de passe doit contenir au moins 6 caracteres'),
+  ],
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        const formattedErrors = errors.array();
+        res.status(400).json({
+          error: String(formattedErrors[0]?.msg ?? 'Donnees invalides'),
+          errors: formattedErrors,
+        });
+        return;
+      }
+
+      const { email, code, newPassword } = req.body as {
+        email: string;
+        code: string;
+        newPassword: string;
+      };
+
+      const user = await User.findOne({ email });
+      if (!user || !user.isActive) {
+        res.status(400).json({ error: 'Code invalide ou expire' });
+        return;
+      }
+
+      if (!user.passwordResetCode || !user.passwordResetExpires) {
+        res.status(400).json({ error: 'Code invalide ou expire' });
+        return;
+      }
+
+      if (user.passwordResetExpires < new Date()) {
+        user.passwordResetCode = undefined;
+        user.passwordResetExpires = undefined;
+        await user.save();
+        res.status(400).json({ error: 'Code invalide ou expire' });
+        return;
+      }
+
+      if (user.passwordResetCode !== code.trim()) {
+        res.status(400).json({ error: 'Code invalide ou expire' });
+        return;
+      }
+
+      user.password = newPassword;
+      user.passwordResetCode = undefined;
+      user.passwordResetExpires = undefined;
+      await user.save();
+
+      res.json({ message: 'Mot de passe reinitialise avec succes' });
+    } catch (error: any) {
+      console.error('Erreur reset-password:', error);
+      res.status(500).json({
+        error: 'Erreur lors de la reinitialisation du mot de passe',
+        details: process.env.NODE_ENV === 'development' ? error?.message : undefined,
+      });
+    }
+  }
+);
+
+/**
  * POST /api/auth/accept-invitation
  * Accepter une invitation et créer un compte
  */
 router.post(
   '/accept-invitation',
   [
-    body('token').notEmpty(),
-    body('password').isLength({ min: 6 }),
-    body('name').notEmpty().trim(),
+    body('token').notEmpty().withMessage('Token d invitation requis'),
+    body('password').isLength({ min: 6 }).withMessage('Le mot de passe doit contenir au moins 6 caracteres'),
+    body('name').notEmpty().withMessage('Le nom est requis').trim(),
   ],
   async (req: Request, res: Response): Promise<void> => {
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
-        res.status(400).json({ errors: errors.array() });
+        const formattedErrors = errors.array();
+        res.status(400).json({
+          error: String(formattedErrors[0]?.msg ?? 'Donnees invalides'),
+          errors: formattedErrors,
+        });
         return;
       }
 
@@ -201,6 +373,11 @@ router.post(
       // Marquer l'invitation comme acceptée
       invitation.status = 'accepted';
       await invitation.save();
+
+      if (!jwtSecret) {
+        res.status(500).json({ error: 'Configuration serveur invalide: JWT_SECRET manquant' });
+        return;
+      }
 
       const authToken = jwt.sign(
         { userId: user._id },

@@ -115,15 +115,240 @@
   justify-content: space-between;
 }
 
+.incidents-filter-tags-wrap {
+  position: relative;
+}
+
+.incidents-filter-tags.active {
+  border-color: #bfd3f8;
+  background: var(--blue-soft);
+  color: var(--blue);
+  font-weight: 700;
+}
+
+.incidents-tag-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 188px;
+  border: 1px solid #dfe7f3;
+  border-radius: 10px;
+  background: #ffffff;
+  box-shadow: 0 10px 18px rgba(22, 38, 66, 0.14);
+  overflow: hidden;
+  z-index: 36;
+}
+
+.incidents-tag-menu button {
+  width: 100%;
+  min-height: 48px;
+  border: 0;
+  border-top: 1px solid #e5ecf6;
+  background: #ffffff;
+  color: #3a4f73;
+  padding: 0 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+
+.incidents-tag-menu button:first-child {
+  border-top: 0;
+}
+
+.incidents-tag-menu button:hover {
+  background: #f4f8ff;
+}
+
+.incidents-tag-menu button.selected {
+  background: #e9f0fc;
+  color: #1f4fa2;
+}
+
+.incidents-tag-menu button.selected svg {
+  color: #2f79ff;
+}
+
 .incidents-filter-order {
   width: 154px;
   font-size: 0.76rem;
   justify-content: space-between;
 }
 
+.incidents-filter-order-wrap {
+  position: relative;
+}
+
+.incidents-filter-order.active {
+  border-color: #bfd3f8;
+  background: var(--blue-soft);
+  color: var(--blue);
+  font-weight: 700;
+}
+
+.incidents-sort-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 210px;
+  border: 1px solid #dfe7f3;
+  border-radius: 10px;
+  background: #ffffff;
+  box-shadow: 0 10px 18px rgba(22, 38, 66, 0.14);
+  overflow: hidden;
+  z-index: 36;
+}
+
+.incidents-sort-menu button {
+  width: 100%;
+  min-height: 48px;
+  border: 0;
+  border-top: 1px solid #e5ecf6;
+  background: #ffffff;
+  color: #3a4f73;
+  padding: 0 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+
+.incidents-sort-menu button:first-child {
+  border-top: 0;
+}
+
+.incidents-sort-menu button:hover {
+  background: #f4f8ff;
+}
+
+.incidents-sort-menu button.selected {
+  background: #e9f0fc;
+  color: #1f4fa2;
+}
+
+.incidents-sort-menu button.selected svg {
+  color: #2f79ff;
+}
+
 .incidents-filter-panel {
   width: 92px;
   justify-content: center;
+}
+
+.incidents-filter-panel-wrap {
+  position: relative;
+}
+
+.incidents-filter-panel.active {
+  border-color: #b8caea;
+  background: #edf3fd;
+  color: #1f4fa2;
+}
+
+.incidents-filter-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 336px;
+  max-width: min(336px, calc(100vw - 22px));
+  border: 1px solid #dfe7f3;
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: 0 10px 18px rgba(22, 38, 66, 0.14);
+  overflow: hidden;
+  z-index: 36;
+}
+
+.incidents-filter-options {
+  max-height: 486px;
+  overflow: auto;
+}
+
+.incidents-filter-option {
+  min-height: 52px;
+  padding: 0 16px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  border-bottom: 1px solid #e5ecf6;
+  color: #334a73;
+  font-size: 0.91rem;
+  font-weight: 700;
+  cursor: pointer;
+  user-select: none;
+}
+
+.incidents-filter-option:hover {
+  background: #f4f8ff;
+}
+
+.incidents-filter-option input {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  border-radius: 3px;
+  border: 1px solid #c8d6ea;
+  background: #ffffff;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.incidents-filter-option input:checked {
+  border-color: #2f79ff;
+  background: #2f79ff;
+}
+
+.incidents-filter-option input:checked::after {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 1px;
+  width: 4px;
+  height: 8px;
+  border: solid #ffffff;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+.incidents-filter-option span {
+  line-height: 1.24;
+}
+
+.incidents-filter-reset-button {
+  width: calc(100% - 16px);
+  min-height: 42px;
+  margin: 8px;
+  border: 1px solid #d8e3f2;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #3c547d;
+  font-size: 0.9rem;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.incidents-filter-reset-button:hover {
+  background: #f4f8ff;
+}
+
+.incidents-filter-reset-button svg {
+  width: 16px;
+  height: 16px;
+  stroke-width: 2;
 }
 
 .incidents-table-card,

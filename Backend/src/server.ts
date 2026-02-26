@@ -2,11 +2,14 @@ import express, { Application, NextFunction, Request, Response } from 'express';
 import dotenv from 'dotenv';
 import cors from 'cors';
 import { Server } from 'http';
+import path from 'path';
 import { connectDB } from './config/database';
 import { startCleanupScheduler, startMonitorScheduler } from './config/scheduler';
 
 // Load environment variables before importing routes/services that may read them.
-dotenv.config();
+const envPath = path.resolve(__dirname, '..', '.env');
+// Force .env values to win over inherited shell environment values.
+dotenv.config({ path: envPath, override: true });
 
 import authRoutes from './routes/auth';
 import userRoutes from './routes/users';
@@ -16,6 +19,8 @@ import invitationRoutes from './routes/invitations';
 const app: Application = express();
 const DEFAULT_PORT = 3001;
 const MAX_PORT_RETRIES = 10;
+const DEFAULT_ALLOWED_ORIGINS = ['http://localhost:5173', 'http://127.0.0.1:5173'];
+const LOCALHOST_ORIGIN_PATTERN = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i;
 
 const parsePort = (rawPort: string): number => {
   const parsed = Number(rawPort);
@@ -23,6 +28,31 @@ const parsePort = (rawPort: string): number => {
     throw new Error(`PORT invalide: ${rawPort}`);
   }
   return parsed;
+};
+
+const parseAllowedOrigins = (rawValue?: string): string[] => {
+  if (!rawValue || rawValue.trim() === '') {
+    return DEFAULT_ALLOWED_ORIGINS;
+  }
+
+  if (rawValue.trim() === '*') {
+    return ['*'];
+  }
+
+  return rawValue
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+};
+
+const isSmtpConfigured = (): boolean => {
+  const required = ['EMAIL_HOST', 'EMAIL_PORT', 'EMAIL_USER', 'EMAIL_PASSWORD', 'EMAIL_FROM'];
+  return required.every((key) => {
+    const value = String(process.env[key] ?? '').trim();
+    if (value === '') return false;
+    if (key === 'EMAIL_PASSWORD' && value === 'REPLACE_WITH_GOOGLE_APP_PASSWORD') return false;
+    return true;
+  });
 };
 
 const listenWithRetry = async (
@@ -58,7 +88,27 @@ const listenWithRetry = async (
 };
 
 // Middlewares
-app.use(cors());
+const allowedOrigins = parseAllowedOrigins(process.env.CORS_ORIGIN);
+const allowAnyLocalhostOrigin = !process.env.CORS_ORIGIN || process.env.CORS_ORIGIN.trim() === '';
+const isDevelopmentLike = (process.env.NODE_ENV ?? 'development') !== 'production';
+
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      if (
+        !origin ||
+        allowedOrigins.includes('*') ||
+        allowedOrigins.includes(origin) ||
+        ((allowAnyLocalhostOrigin || isDevelopmentLike) && LOCALHOST_ORIGIN_PATTERN.test(origin))
+      ) {
+        callback(null, true);
+        return;
+      }
+
+      callback(new Error(`CORS refuse pour l'origine: ${origin}`));
+    },
+  })
+);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -104,14 +154,27 @@ app.use((req: Request, res: Response) => {
 
 app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
   console.error('Erreur non geree:', err);
+
+  if (err.message.startsWith('CORS refuse pour l\'origine:')) {
+    res.status(403).json({
+      error: err.message,
+    });
+    return;
+  }
+
+  const exposedError = isDevelopmentLike ? err.message : 'Erreur interne du serveur';
   res.status(500).json({
-    error: 'Erreur interne du serveur',
-    message: process.env.NODE_ENV === 'development' ? err.message : undefined,
+    error: exposedError,
+    message: isDevelopmentLike ? err.message : undefined,
   });
 });
 
 const startServer = async (): Promise<void> => {
   try {
+    if (!process.env.JWT_SECRET || process.env.JWT_SECRET.trim() === '') {
+      throw new Error(`JWT_SECRET manquant. Verifiez le fichier ${envPath}`);
+    }
+
     await connectDB();
     startMonitorScheduler();
     startCleanupScheduler();
@@ -136,6 +199,13 @@ const startServer = async (): Promise<void> => {
     console.log(`Serveur demarre sur le port ${port}`);
     console.log(`Environnement: ${process.env.NODE_ENV || 'development'}`);
     console.log(`URL: http://localhost:${port}`);
+    console.log(`SMTP configure: ${isSmtpConfigured() ? 'oui' : 'non'}`);
+    console.log(
+      `Fallback invitation sans email: ${String(process.env.INVITATION_ALLOW_WITHOUT_EMAIL ?? 'auto (true hors production)')}`
+    );
+    console.log(
+      `Fallback reset password dev: ${String(process.env.ALLOW_DEV_PASSWORD_RESET_FALLBACK ?? 'false')}`
+    );
     console.log('====================================');
     console.log('');
   } catch (error) {

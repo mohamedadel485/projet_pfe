@@ -80,7 +80,7 @@ function StatusPagesPage({ onOpenStatusPage }: StatusPagesPageProps) {
             <span>Actions</span>
           </div>
 
-          {statusPageRows.map((statusPage) => (
+          {statusPageRows.map((statusPage, rowIndex) => (
             <article
               className="status-pages-row"
               key={statusPage.id}
@@ -150,7 +150,9 @@ function StatusPagesPage({ onOpenStatusPage }: StatusPagesPageProps) {
 
                   {openMenuId === statusPage.id && (
                     <div
-                      className="status-pages-options-menu"
+                      className={`status-pages-options-menu ${
+                        rowIndex >= Math.max(statusPageRows.length - 4, 0) ? 'open-up' : ''
+                      }`}
                       id={`status-page-menu-${statusPage.id}`}
                       role="menu"
                     >

@@ -15,6 +15,20 @@ export class EmailService {
     });
   }
 
+  private ensureSmtpConfigured(): void {
+    const required = ['EMAIL_HOST', 'EMAIL_PORT', 'EMAIL_USER', 'EMAIL_PASSWORD', 'EMAIL_FROM'];
+    const missing = required.filter((key) => {
+      const value = String(process.env[key] ?? '').trim();
+      if (value === '') return true;
+      if (key === 'EMAIL_PASSWORD' && value === 'REPLACE_WITH_GOOGLE_APP_PASSWORD') return true;
+      return false;
+    });
+
+    if (missing.length > 0) {
+      throw new Error(`Configuration SMTP incomplète: ${missing.join(', ')}`);
+    }
+  }
+
   /**
    * Envoie un email d'invitation
    */
@@ -23,6 +37,8 @@ export class EmailService {
     token: string,
     inviterName: string
   ): Promise<void> {
+    this.ensureSmtpConfigured();
+
     const invitationLink = `${process.env.FRONTEND_URL}/accept-invitation?token=${token}`;
 
     const mailOptions = {
@@ -63,6 +79,43 @@ export class EmailService {
     } catch (error) {
       console.error('Erreur lors de l\'envoi de l\'email:', error);
       throw new Error('Erreur lors de l\'envoi de l\'email d\'invitation');
+    }
+  }
+
+  /**
+   * Envoie le code de reinitialisation du mot de passe
+   */
+  async sendPasswordResetCode(email: string, resetCode: string, userName?: string): Promise<void> {
+    this.ensureSmtpConfigured();
+
+    const mailOptions = {
+      from: process.env.EMAIL_FROM,
+      to: email,
+      subject: 'Code de reinitialisation de mot de passe',
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #333;">Reinitialisation du mot de passe</h2>
+          <p>Bonjour${userName ? ` ${userName}` : ''},</p>
+          <p>Voici votre code de verification :</p>
+          <div style="text-align: center; margin: 24px 0;">
+            <span style="font-size: 30px; font-weight: 700; letter-spacing: 8px; color: #1f4aa8;">
+              ${resetCode}
+            </span>
+          </div>
+          <p>Ce code expire dans 10 minutes.</p>
+          <p style="color: #666; font-size: 12px;">
+            Si vous n'etes pas a l'origine de cette demande, ignorez simplement cet email.
+          </p>
+        </div>
+      `,
+    };
+
+    try {
+      await this.transporter.sendMail(mailOptions);
+      console.log(`Code de reinitialisation envoye a ${email}`);
+    } catch (error) {
+      console.error('Erreur lors de l\'envoi du code de reinitialisation:', error);
+      throw new Error('Erreur lors de l\'envoi du code de reinitialisation');
     }
   }
 

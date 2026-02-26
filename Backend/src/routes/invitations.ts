@@ -64,35 +64,21 @@ router.post(
       createdInvitationId = String(invitation._id);
 
       // Envoyer l'email d'invitation.
-      // Si l'envoi échoue, on supprime l'invitation créée pour éviter un état "pending" incohérent.
+      // En cas d'echec SMTP, l'invitation reste creee et on renvoie un succes avec avertissement.
       try {
         await emailService.sendInvitation(email, token, req.user!.name);
       } catch (mailError) {
-        const allowWithoutEmail = process.env.INVITATION_ALLOW_WITHOUT_EMAIL === 'true';
-        if (allowWithoutEmail) {
-          console.error('Envoi email invitation échoué (mode secours actif):', mailError);
-          res.status(201).json({
-            message: 'Invitation créée avec succès.',
-            invitation: {
-              id: invitation._id,
-              email: invitation.email,
-              status: invitation.status,
-              expiresAt: invitation.expiresAt,
-              createdAt: invitation.createdAt,
-            },
-          });
-          return;
-        }
-
-        try {
-          await Invitation.findByIdAndDelete(createdInvitationId);
-        } catch (cleanupError) {
-          console.error('Erreur suppression invitation après échec email:', cleanupError);
-        }
-        console.error('Erreur envoi email invitation (rollback appliqué):', mailError);
-        res.status(502).json({
-          error: "L'invitation n'a pas pu être envoyée par email. Vérifiez la configuration SMTP.",
-          details: process.env.NODE_ENV === 'development' ? (mailError as any)?.message : undefined,
+        console.error('Envoi email invitation échoué:', mailError);
+        res.status(201).json({
+          message: 'Invitation créée avec succès (email non envoye).',
+          warning: "SMTP indisponible: l'invitation a ete creee sans envoi d'email.",
+          invitation: {
+            id: invitation._id,
+            email: invitation.email,
+            status: invitation.status,
+            expiresAt: invitation.expiresAt,
+            createdAt: invitation.createdAt,
+          },
         });
         return;
       }
@@ -248,17 +234,14 @@ router.post(
         return;
       }
 
-      const previousToken = invitation.token;
-      const previousExpiresAt = invitation.expiresAt;
-      const previousStatus = invitation.status;
-
       // Générer un nouveau token et prolonger l'expiration
       invitation.token = crypto.randomBytes(32).toString('hex');
       invitation.expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
       invitation.status = 'pending';
       await invitation.save();
 
-      // Renvoyer l'email
+      // Renvoyer l'email.
+      // En cas d'echec SMTP, on conserve l'invitation mise a jour et on renvoie un succes avec avertissement.
       try {
         await emailService.sendInvitation(
           invitation.email,
@@ -266,34 +249,16 @@ router.post(
           req.user!.name
         );
       } catch (mailError) {
-        const allowWithoutEmail = process.env.INVITATION_ALLOW_WITHOUT_EMAIL === 'true';
-        if (allowWithoutEmail) {
-          console.error('Renvoi email invitation échoué (mode secours actif):', mailError);
-          res.status(200).json({
-            message: 'Invitation renvoyée avec succès.',
-            invitation: {
-              id: invitation._id,
-              email: invitation.email,
-              status: invitation.status,
-              expiresAt: invitation.expiresAt,
-            },
-          });
-          return;
-        }
-
-        try {
-          invitation.token = previousToken;
-          invitation.expiresAt = previousExpiresAt;
-          invitation.status = previousStatus;
-          await invitation.save();
-        } catch (rollbackError) {
-          console.error('Erreur rollback invitation après échec renvoi email:', rollbackError);
-        }
-
-        console.error('Erreur renvoi email invitation (rollback appliqué):', mailError);
-        res.status(502).json({
-          error: "Le renvoi de l'invitation a échoué. Vérifiez la configuration SMTP.",
-          details: process.env.NODE_ENV === 'development' ? (mailError as any)?.message : undefined,
+        console.error('Renvoi email invitation échoué:', mailError);
+        res.status(200).json({
+          message: 'Invitation renvoyée avec succès (email non envoye).',
+          warning: "SMTP indisponible: l'invitation a ete renvoyee sans envoi d'email.",
+          invitation: {
+            id: invitation._id,
+            email: invitation.email,
+            status: invitation.status,
+            expiresAt: invitation.expiresAt,
+          },
         });
         return;
       }

@@ -10,6 +10,8 @@ export interface IUser extends Document {
   invitedBy?: mongoose.Types.ObjectId;
   invitationToken?: string;
   invitationExpires?: Date;
+  passwordResetCode?: string;
+  passwordResetExpires?: Date;
   createdAt: Date;
   updatedAt: Date;
   comparePassword(candidatePassword: string): Promise<boolean>;
@@ -51,6 +53,12 @@ const userSchema = new Schema<IUser>(
       type: String,
     },
     invitationExpires: {
+      type: Date,
+    },
+    passwordResetCode: {
+      type: String,
+    },
+    passwordResetExpires: {
       type: Date,
     },
   },
