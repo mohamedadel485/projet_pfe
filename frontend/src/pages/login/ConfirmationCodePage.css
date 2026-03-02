@@ -1,0 +1,244 @@
+.confirmation-code-page {
+  height: 100dvh;
+  min-height: 100dvh;
+  background: #e4e9f0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  position: relative;
+}
+
+.confirmation-code-page::before,
+.confirmation-code-page::after {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+}
+
+.confirmation-code-page::before {
+  width: 72vw;
+  height: 72vw;
+  max-width: 860px;
+  max-height: 860px;
+  left: -22vw;
+  top: -24vh;
+  background: radial-gradient(
+    circle,
+    rgba(142, 148, 255, 0.18) 0%,
+    rgba(142, 148, 255, 0) 70%
+  );
+}
+
+.confirmation-code-page::after {
+  width: 64vw;
+  height: 64vw;
+  max-width: 760px;
+  max-height: 760px;
+  right: -14vw;
+  bottom: -31vh;
+  background: radial-gradient(
+    circle,
+    rgba(236, 182, 246, 0.16) 0%,
+    rgba(236, 182, 246, 0) 72%
+  );
+}
+
+.confirmation-code-shell {
+  width: 100%;
+  height: 100%;
+  min-height: 100%;
+  padding: 40px 24px 24px;
+  box-sizing: border-box;
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.confirmation-code-back {
+  position: absolute;
+  left: 44px;
+  top: 50px;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 999px;
+  background: #f5f8fe;
+  color: #2a69d7;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.confirmation-code-content {
+  width: min(100%, 520px);
+  height: 100%;
+  margin-left: auto;
+  margin-right: auto;
+  min-height: 100%;
+  display: flex;
+  padding: 40px 0;
+  flex-direction: column;
+  align-items: center;
+}
+
+.confirmation-code-brand {
+  margin: 0;
+  color: #1c57bb;
+  font-size: clamp(1.05rem, 1.45vw, 1.65rem);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  text-align: center;
+}
+
+.confirmation-code-badge {
+  margin-top: clamp(16px, 3.2vh, 30px);
+  width: 58px;
+  height: 58px;
+  border-radius: 9px;
+  background: #273e6d;
+  color: #3070dd;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.confirmation-code-badge-image {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+  display: block;
+}
+
+.confirmation-code-title {
+  margin: 12px 0 0;
+  color: #2c3a57;
+  font-size: clamp(2rem, 2.45vw, 2.45rem);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.08;
+  text-align: center;
+  margin: 30px 0;
+}
+
+.confirmation-code-subtitle {
+  margin: 8px 0 0;
+  width: 100%;
+  color: #6b7b95;
+  font-size: 0.81rem;
+  line-height: 1.45;
+  text-align: center;
+  margin: 20px 0;
+}
+
+.confirmation-code-subtitle strong {
+  color: #4a5f80;
+  font-weight: 700;
+}
+
+.confirmation-code-form {
+  width: 100%;
+  margin-top: 26px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.confirmation-code-inputs {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+}
+
+.confirmation-code-inputs input {
+  width: 65px;
+  height: 65px;
+  border: 1px solid #d5e0f3;
+  border-radius: 10px;
+  background: #f8f9fb;
+  color: #1f2f4f;
+  text-align: center;
+  font-size: 1.8rem;
+  font-weight: 700;
+  outline: none;
+}
+
+.confirmation-code-inputs input:focus {
+  border-color: #2a69d7;
+  box-shadow: 0 0 0 2px rgba(96, 138, 215, 0.14);
+}
+
+.confirmation-code-resend {
+  margin: 10px 0 0;
+  color: #2f4d7e;
+  font-size: 0.8rem;
+  text-align: center;
+}
+
+.confirmation-code-resend a {
+  color: #1d57bb;
+  font-weight: 700;
+  text-decoration: underline;
+}
+
+.confirmation-code-form > button {
+  margin-top: 16px;
+  width: min(100%, 266px);
+  border: 0;
+  border-radius: 8px;
+  height: 44px;
+  background: #1c57bb;
+  color: #fff;
+  font-size: 0.94rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.confirmation-code-form > button:hover {
+  background: #1a52b0;
+}
+
+.confirmation-code-footer {
+  margin-top: auto;
+  padding-top: 22px;
+  color: #6e7f99;
+  font-size: 0.72rem;
+  line-height: 1.35;
+  text-align: center;
+}
+
+.confirmation-code-footer strong {
+  color: #1d57bb;
+}
+
+@media (max-width: 800px) {
+  .confirmation-code-shell {
+    width: min(100%, calc(100vw - 14px));
+    height: 100%;
+    min-height: 100%;
+    padding: 30px 14px 18px;
+  }
+
+  .confirmation-code-back {
+    left: 14px;
+    top: 34px;
+    width: 24px;
+    height: 24px;
+  }
+
+  .confirmation-code-content {
+    width: min(100%, 520px);
+  }
+
+  .confirmation-code-title {
+    font-size: clamp(1.5rem, 8vw, 2rem);
+  }
+
+  .confirmation-code-subtitle {
+    font-size: 0.8rem;
+  }
+}
