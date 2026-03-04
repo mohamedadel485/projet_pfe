@@ -25,6 +25,7 @@ import {
   checkMonitor,
   createInvitation,
   createMonitor,
+  updateMonitor,
   deleteInvitation,
   deleteMonitor,
   deleteUser,
@@ -447,8 +448,7 @@ function App() {
     () => monitorRows.find((monitor) => monitor.id === editingMonitorId) ?? null,
     [monitorRows, editingMonitorId],
   );
-  const defaultTeamMonitor = useMemo(() => monitorRows[0] ?? null, [monitorRows]);
-  const teamMonitor = editingMonitor ?? defaultTeamMonitor;
+  const teamMonitor = editingMonitor;
   const isIntegrationsPage = activeMenuLabel === 'Integrations & API';
   const isIncidentsPage = activeMenuLabel === 'Incidents';
   const isMaintenancePage = activeMenuLabel === 'Maintenance';
@@ -516,8 +516,8 @@ function App() {
       nextMenuLabel = 'Integrations & API';
       nextIntegrationsSubPage = 'api';
     } else if (pathname === '/integrations-team') {
-      nextMenuLabel = 'Monitoring';
-      nextIntegrationsSubPage = 'team';
+      nextMenuLabel = 'Integrations & API';
+      nextIntegrationsSubPage = 'api';
     } else if (pathname === '/incidents') {
       nextMenuLabel = 'Incidents';
     } else if (segments.length === 3 && segments[0] === 'status-pages' && segments[2] === 'public') {
@@ -833,6 +833,28 @@ function App() {
           return 'Session expiree. Reconnectez-vous.';
         }
         return formatAppError(error, 'Impossible de creer le monitor.');
+      }
+    },
+    [authToken, clearSessionAndRedirectToLogin, navigateTo, refreshMonitors],
+  );
+
+  const handleUpdateMonitor = useCallback(
+    async (monitorId: string, payload: { name: string; url: string }) => {
+      if (!authToken) {
+        return 'Authentification requise.';
+      }
+
+      try {
+        await updateMonitor(monitorId, payload, authToken);
+        await refreshMonitors(authToken);
+        navigateTo(`/monitoring/${monitorId}`);
+        return null;
+      } catch (error) {
+        if (isApiError(error) && error.status === 401) {
+          clearSessionAndRedirectToLogin();
+          return 'Session expiree. Reconnectez-vous.';
+        }
+        return formatAppError(error, 'Impossible de modifier le monitor.');
       }
     },
     [authToken, clearSessionAndRedirectToLogin, navigateTo, refreshMonitors],
@@ -1387,13 +1409,14 @@ function App() {
 
       {integrationsSubPage === 'team' && teamMonitor ? (
         <EditMonitorPage
+          key={`edit-${teamMonitor.id}-integrations`}
           monitor={teamMonitor}
           initialSection="integrations"
           onBack={() => {
             navigateTo('/monitoring');
           }}
           onOpenMonitorDetails={() => {
-            navigateTo('/monitoring/new');
+            navigateTo(`/monitoring/${teamMonitor.id}/edit`);
           }}
           onOpenIntegrationsTeam={() => {
             navigateTo(`/monitoring/${teamMonitor.id}/integrations-team`);
@@ -1401,28 +1424,23 @@ function App() {
           onManageTeam={() => {
             navigateTo('/team-members');
           }}
-          onSaveChanges={() => {
-            navigateTo('/monitoring');
-          }}
+          onSaveChanges={(payload) => handleUpdateMonitor(teamMonitor.id, payload)}
           onOpenMaintenanceInfo={() => {
             navigateTo('/maintenance');
           }}
         />
       ) : isIntegrationsPage ? (
-        <IntegrationsApiPage
-          onOpenIntegrationsTeam={() => {
-            navigateTo('/integrations-team');
-          }}
-        />
+        <IntegrationsApiPage />
       ) : editingMonitor ? (
         <EditMonitorPage
+          key={`edit-${editingMonitor.id}-details`}
           monitor={editingMonitor}
           initialSection="details"
           onBack={() => {
             navigateTo(`/monitoring/${editingMonitor.id}`);
           }}
           onOpenMonitorDetails={() => {
-            navigateTo(`/monitoring/${editingMonitor.id}`);
+            navigateTo(`/monitoring/${editingMonitor.id}/edit`);
           }}
           onOpenIntegrationsTeam={() => {
             navigateTo(`/monitoring/${editingMonitor.id}/integrations-team`);
@@ -1430,9 +1448,7 @@ function App() {
           onManageTeam={() => {
             navigateTo('/team-members');
           }}
-          onSaveChanges={() => {
-            navigateTo(`/monitoring/${editingMonitor.id}`);
-          }}
+          onSaveChanges={(payload) => handleUpdateMonitor(editingMonitor.id, payload)}
           onOpenMaintenanceInfo={() => {
             navigateTo('/maintenance');
           }}
@@ -1465,6 +1481,9 @@ function App() {
           onExportLogs={() => {
             navigateTo('/incidents');
           }}
+          onOpenNotificationSettings={() => {
+            navigateTo(`/monitoring/${selectedMonitor.id}/integrations-team`);
+          }}
           onOpenMaintenanceInfo={() => {
             navigateTo('/maintenance');
           }}
@@ -1473,9 +1492,6 @@ function App() {
         <NewMonitorPage
           onBack={() => {
             navigateTo('/monitoring');
-          }}
-          onOpenIntegrationsTeam={() => {
-            navigateTo('/integrations-team');
           }}
           onCreateMonitor={handleCreateMonitor}
         />

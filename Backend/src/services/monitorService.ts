@@ -4,6 +4,7 @@ import tls from 'tls';
 import Monitor, { IMonitor } from '../models/Monitor';
 import MonitorLog from '../models/MonitorLog';
 import maintenanceService from './maintenanceService';
+import integrationService from './integrationService';
 
 interface CheckResult {
   status: 'up' | 'down';
@@ -161,6 +162,8 @@ export class MonitorService {
    * Enregistre le résultat d'une vérification et met à jour le monitor
    */
   async logCheckResult(monitor: IMonitor, result: CheckResult): Promise<void> {
+    const previousStatus = monitor.status;
+
     // Enregistrer le log
     await MonitorLog.create({
       monitor: monitor._id,
@@ -191,6 +194,18 @@ export class MonitorService {
     }
 
     await monitor.save();
+
+    const shouldNotifyIntegration =
+      (previousStatus === 'up' || previousStatus === 'down') &&
+      previousStatus !== result.status;
+
+    if (shouldNotifyIntegration) {
+      await integrationService.notifyMonitorStatusChange({
+        monitor,
+        previousStatus,
+        result,
+      });
+    }
   }
 
   /**

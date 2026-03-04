@@ -17,6 +17,7 @@ import monitorRoutes from './routes/monitors';
 import invitationRoutes from './routes/invitations';
 import incidentRoutes from './routes/incidents';
 import maintenanceRoutes from './routes/maintenances';
+import integrationRoutes from './routes/integrations';
 
 const app: Application = express();
 const DEFAULT_PORT = 3001;
@@ -126,6 +127,7 @@ app.use('/api/monitors', monitorRoutes);
 app.use('/api/invitations', invitationRoutes);
 app.use('/api/incidents', incidentRoutes);
 app.use('/api/maintenances', maintenanceRoutes);
+app.use('/api/integrations', integrationRoutes);
 
 app.get('/', (_req: Request, res: Response) => {
   res.json({
@@ -139,6 +141,7 @@ app.get('/', (_req: Request, res: Response) => {
       invitations: '/api/invitations',
       incidents: '/api/incidents',
       maintenances: '/api/maintenances',
+      integrations: '/api/integrations',
     },
   });
 });

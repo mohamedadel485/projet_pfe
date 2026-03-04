@@ -46,8 +46,27 @@ export interface BackendMonitor {
   updatedAt: string;
 }
 
+export type IntegrationProvider = 'webhook' | 'slack' | 'telegram';
+export type IntegrationEvent = 'up' | 'down';
+
+export interface BackendIntegration {
+  _id: string;
+  type: IntegrationProvider;
+  endpointUrl: string;
+  customValue?: string;
+  events: IntegrationEvent[];
+  isActive: boolean;
+  lastTriggeredAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface MonitorListResponse {
   monitors: BackendMonitor[];
+}
+
+export interface IntegrationsListResponse {
+  integrations: BackendIntegration[];
 }
 
 export type BackendMaintenanceStatus = 'scheduled' | 'ongoing' | 'paused' | 'completed' | 'cancelled';
@@ -134,6 +153,22 @@ export interface CreateMonitorInput {
   interval?: number;
   timeout?: number;
   httpMethod?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'HEAD';
+}
+
+export interface UpdateMonitorInput {
+  name?: string;
+  url?: string;
+  type?: 'http' | 'https' | 'ws' | 'wss';
+  interval?: number;
+  timeout?: number;
+  httpMethod?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'HEAD';
+}
+
+export interface CreateIntegrationInput {
+  type?: IntegrationProvider;
+  endpointUrl: string;
+  customValue?: string;
+  events?: IntegrationEvent[];
 }
 
 export interface CreateMaintenanceInput {
@@ -463,6 +498,9 @@ export const acceptInvitation = (
 export const fetchMonitors = (token?: string): Promise<MonitorListResponse> =>
   request<MonitorListResponse>('/monitors', { token });
 
+export const fetchIntegrations = (token?: string): Promise<IntegrationsListResponse> =>
+  request<IntegrationsListResponse>('/integrations', { token });
+
 export const fetchMaintenances = (
   token?: string,
   options?: { status?: BackendMaintenanceStatus; monitorId?: string; search?: string }
@@ -532,6 +570,36 @@ export const createMonitor = (
     method: 'POST',
     token,
     body: monitor,
+  });
+
+export const updateMonitor = (
+  monitorId: string,
+  payload: UpdateMonitorInput,
+  token?: string
+): Promise<{ message: string; monitor: BackendMonitor }> =>
+  request<{ message: string; monitor: BackendMonitor }>(`/monitors/${monitorId}`, {
+    method: 'PUT',
+    token,
+    body: payload,
+  });
+
+export const createIntegration = (
+  input: CreateIntegrationInput,
+  token?: string
+): Promise<{ message: string; integration: BackendIntegration }> =>
+  request<{ message: string; integration: BackendIntegration }>('/integrations', {
+    method: 'POST',
+    token,
+    body: input,
+  });
+
+export const deleteIntegration = (
+  integrationId: string,
+  token?: string
+): Promise<{ message: string }> =>
+  request<{ message: string }>(`/integrations/${integrationId}`, {
+    method: 'DELETE',
+    token,
   });
 
 export const pauseMonitor = (

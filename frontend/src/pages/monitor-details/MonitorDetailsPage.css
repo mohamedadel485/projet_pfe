@@ -174,18 +174,65 @@
 .monitor-details-actions button.monitor-details-more-button {
   border: 0;
   background: transparent;
-  border-radius: 0;
-  width: auto;
-  height: auto;
-  min-width: 0;
-  min-height: 0;
-  padding: 0 2px;
+  border-radius: 8px;
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  min-height: 28px;
+  padding: 0;
   justify-content: center;
   gap: 0;
+  cursor: pointer;
+}
+
+.monitor-details-actions button.monitor-details-more-button:hover {
+  background: #f1f6ff;
 }
 
 .monitor-details-actions button.monitor-details-more-button svg {
   color: #8ea2bf;
+}
+
+.monitor-details-more-menu {
+  position: relative;
+}
+
+.monitor-details-more-menu-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 168px;
+  border: 1px solid #d6e1f1;
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(31, 61, 110, 0.14);
+  padding: 6px;
+  z-index: 30;
+}
+
+.monitor-details-more-menu-popover button {
+  width: 100%;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #4b6289;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-align: left;
+  padding: 8px 10px;
+  cursor: pointer;
+}
+
+.monitor-details-more-menu-popover button:hover {
+  background: #f3f7ff;
+}
+
+.monitor-details-more-menu-popover button.danger {
+  color: #cb4040;
+}
+
+.monitor-details-more-menu-popover button.danger:hover {
+  background: #fff1f1;
 }
 
 .monitor-details-stats-grid,
@@ -361,6 +408,17 @@
   color: #a33f3f;
   padding: 9px 12px;
   font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.monitor-details-action-feedback {
+  margin: 0;
+  border: 1px solid #dce9ff;
+  border-radius: 10px;
+  background: #f5f9ff;
+  color: #3c5f97;
+  padding: 9px 12px;
+  font-size: 0.75rem;
   font-weight: 700;
 }
 
@@ -548,6 +606,28 @@
     'opsz' 24;
 }
 
+.side-card-settings-button {
+  border: 0;
+  background: transparent;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.side-card-settings-button:hover {
+  background: #f2f6ff;
+}
+
+.side-card-settings-button:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
 .monitor-side-card p {
   margin: 0;
   font-size: 0.68rem;
@@ -555,7 +635,7 @@
   line-height: 1.45;
 }
 
-.monitor-side-card button {
+.monitor-side-card > button {
   margin-top: 9px;
   border: 0;
   background: #2f7deb;
@@ -570,7 +650,7 @@
   transition: background-color 0.16s ease;
 }
 
-.monitor-side-card button:hover {
+.monitor-side-card > button:hover {
   background: #236fda;
 }
 

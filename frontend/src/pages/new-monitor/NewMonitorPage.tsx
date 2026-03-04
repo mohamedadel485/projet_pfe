@@ -5,7 +5,6 @@ import './NewMonitorPage.css';
 
 interface NewMonitorPageProps {
   onBack: () => void;
-  onOpenIntegrationsTeam?: () => void;
   onCreateMonitor?: (payload: {
     name: string;
     url: string;
@@ -92,7 +91,7 @@ const mapHttpMethod = (method: string): 'GET' | 'POST' | 'PUT' | 'DELETE' | 'HEA
   return 'HEAD';
 };
 
-function NewMonitorPage({ onBack, onOpenIntegrationsTeam, onCreateMonitor }: NewMonitorPageProps) {
+function NewMonitorPage({ onBack, onCreateMonitor }: NewMonitorPageProps) {
   const [selectedIntervalIndex, setSelectedIntervalIndex] = useState(2);
   const [selectedTimeoutIndex, setSelectedTimeoutIndex] = useState(2);
   const [selectedProtocol, setSelectedProtocol] = useState<MonitorProtocol>('http');
@@ -120,6 +119,9 @@ function NewMonitorPage({ onBack, onOpenIntegrationsTeam, onCreateMonitor }: New
   const [isCreating, setIsCreating] = useState(false);
   const [activeSideSection, setActiveSideSection] = useState<NewMonitorSideSection>('details');
   const protocolMenuRef = useRef<HTMLDivElement | null>(null);
+  const detailsSectionRef = useRef<HTMLElement | null>(null);
+  const integrationsSectionRef = useRef<HTMLElement | null>(null);
+  const maintenanceSectionRef = useRef<HTMLElement | null>(null);
   const selectedIntervalLabel = useMemo(
     () => intervalOptions[selectedIntervalIndex] ?? intervalOptions[2],
     [selectedIntervalIndex],
@@ -179,6 +181,17 @@ function NewMonitorPage({ onBack, onOpenIntegrationsTeam, onCreateMonitor }: New
     setCreateError(null);
   };
 
+  const scrollToSection = (section: NewMonitorSideSection) => {
+    setActiveSideSection(section);
+    const target =
+      section === 'details'
+        ? detailsSectionRef.current
+        : section === 'integrations'
+          ? integrationsSectionRef.current
+          : maintenanceSectionRef.current;
+    target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
   return (
     <section className="new-monitor-page">
       <div className="new-monitor-breadcrumb">
@@ -191,7 +204,7 @@ function NewMonitorPage({ onBack, onOpenIntegrationsTeam, onCreateMonitor }: New
 
       <div className="new-monitor-content-grid">
         <div className="new-monitor-main">
-          <section className="new-monitor-card">
+          <section className="new-monitor-card" ref={detailsSectionRef}>
             <div className="new-monitor-type-picker" ref={protocolMenuRef}>
               <div className="new-monitor-type-selector">
                 <div className="new-monitor-type-badge">{selectedProtocolOption.badge}</div>
@@ -270,7 +283,7 @@ function NewMonitorPage({ onBack, onOpenIntegrationsTeam, onCreateMonitor }: New
 
             <div className="new-monitor-separator" />
 
-            <section className="new-monitor-notify">
+            <section className="new-monitor-notify" ref={integrationsSectionRef}>
               <h3>How will we notify you ?</h3>
               <div className="new-monitor-notify-grid">
                 <article className="notify-option">
@@ -355,7 +368,7 @@ function NewMonitorPage({ onBack, onOpenIntegrationsTeam, onCreateMonitor }: New
                   type="button"
                   className="notify-inline-action"
                   onClick={() => {
-                    onOpenIntegrationsTeam?.();
+                    scrollToSection('integrations');
                   }}
                 >
                   Integrations & Team
@@ -365,7 +378,7 @@ function NewMonitorPage({ onBack, onOpenIntegrationsTeam, onCreateMonitor }: New
             </section>
           </section>
 
-          <section className="new-monitor-card">
+          <section className="new-monitor-card" ref={maintenanceSectionRef}>
             <h3>Monitor interval</h3>
             <p className="monitor-interval-description">
               Your monitor will be checked every <strong>{selectedIntervalLabel}</strong>. We recommend to use at least
@@ -733,7 +746,7 @@ function NewMonitorPage({ onBack, onOpenIntegrationsTeam, onCreateMonitor }: New
             type="button"
             className={`new-monitor-side-title-link ${activeSideSection === 'details' ? 'active' : ''}`}
             onClick={() => {
-              setActiveSideSection('details');
+              scrollToSection('details');
             }}
           >
             Monitor details
@@ -742,8 +755,7 @@ function NewMonitorPage({ onBack, onOpenIntegrationsTeam, onCreateMonitor }: New
             type="button"
             className={`new-monitor-side-link ${activeSideSection === 'integrations' ? 'active' : ''}`}
             onClick={() => {
-              setActiveSideSection('integrations');
-              onOpenIntegrationsTeam?.();
+              scrollToSection('integrations');
             }}
           >
             Integrations & Team
@@ -752,7 +764,7 @@ function NewMonitorPage({ onBack, onOpenIntegrationsTeam, onCreateMonitor }: New
             type="button"
             className={`new-monitor-side-link ${activeSideSection === 'maintenance' ? 'active' : ''}`}
             onClick={() => {
-              setActiveSideSection('maintenance');
+              scrollToSection('maintenance');
             }}
           >
             Maintenance info

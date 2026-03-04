@@ -1,8 +1,16 @@
-import { ChevronDown, Plus, Search, X } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { ChevronDown, Plus, Search, Trash2, X } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import slackLogo from '../../assets/slack-logo.svg';
 import telegramLogo from '../../assets/telegram-logo.svg';
 import webhookLogo from '../../images/webhook.png';
+import {
+  createIntegration,
+  deleteIntegration,
+  fetchIntegrations,
+  type BackendIntegration,
+  type IntegrationEvent,
+  type IntegrationProvider,
+} from '../../lib/api';
 import './IntegrationsApiPage.css';
 
 type IntegrationCategory = 'All' | 'Chat platforms' | 'Webhooks' | 'Connectors & Incident manag.' | 'Push notifications' | 'API';
@@ -25,6 +33,12 @@ interface IntegrationModalPreset {
   endpointHint: string;
   endpointPlaceholder: string;
   customHint: string;
+}
+
+type IntegrationEventSelection = 'up-and-down' | 'up-only' | 'down-only';
+interface IntegrationEventOption {
+  label: string;
+  value: IntegrationEventSelection;
 }
 
 const integrationCards: IntegrationCard[] = [
@@ -67,11 +81,10 @@ const integrationCategories: IntegrationCategory[] = [
   'API',
 ];
 
-const integrationEventOptions = [
-  'Up events, Down events, SSL & Domain expiry',
-  'Up events only',
-  'Down events only',
-  'SSL & Domain expiry only',
+const integrationEventOptions: IntegrationEventOption[] = [
+  { label: 'Up events, Down events', value: 'up-and-down' },
+  { label: 'Up events only', value: 'up-only' },
+  { label: 'Down events only', value: 'down-only' },
 ];
 
 const modalPresetByIcon: Record<IntegrationIcon, IntegrationModalPreset> = {
@@ -82,9 +95,9 @@ const modalPresetByIcon: Record<IntegrationIcon, IntegrationModalPreset> = {
     customHint: 'Optional. Additional text appended to each notification message.',
   },
   telegram: {
-    endpointLabel: 'Telegram bot token or endpoint URL',
-    endpointHint: 'Use your BotFather token and channel settings, or your relay endpoint.',
-    endpointPlaceholder: '123456789:AAExampleToken',
+    endpointLabel: 'Telegram webhook relay URL',
+    endpointHint: 'URL endpoint that forwards notifications to your Telegram bot/channel.',
+    endpointPlaceholder: 'https://example.com/telegram-alerts',
     customHint: 'Optional. Additional context sent with each Telegram notification.',
   },
   webhook: {
@@ -98,11 +111,19 @@ const modalPresetByIcon: Record<IntegrationIcon, IntegrationModalPreset> = {
 function IntegrationsApiPage({ onOpenIntegrationsTeam: _onOpenIntegrationsTeam }: IntegrationsApiPageProps) {
   const [query, setQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState<IntegrationCategory>('All');
+  const [savedIntegrations, setSavedIntegrations] = useState<BackendIntegration[]>([]);
+  const [isIntegrationsLoading, setIsIntegrationsLoading] = useState(false);
+  const [integrationsLoadError, setIntegrationsLoadError] = useState<string | null>(null);
+  const [createSuccessMessage, setCreateSuccessMessage] = useState<string | null>(null);
+  const [deletingIntegrationId, setDeletingIntegrationId] = useState<string | null>(null);
   const [activeCard, setActiveCard] = useState<IntegrationCard | null>(null);
   const [endpointValue, setEndpointValue] = useState('');
   const [customValue, setCustomValue] = useState('');
-  const [eventsValue, setEventsValue] = useState(integrationEventOptions[0]);
+  const [eventsValue, setEventsValue] = useState<IntegrationEventSelection>(integrationEventOptions[0].value);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const endpointInputRef = useRef<HTMLInputElement | null>(null);
+  const successTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const visibleCards = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -140,10 +161,36 @@ function IntegrationsApiPage({ onOpenIntegrationsTeam: _onOpenIntegrationsTeam }
     setActiveCard(card);
     setEndpointValue('');
     setCustomValue('');
-    setEventsValue(integrationEventOptions[0]);
+    setEventsValue(integrationEventOptions[0].value);
+    setSubmitError(null);
+    setIsSubmitting(false);
   };
 
-  const handleCreateIntegration = (event: FormEvent<HTMLFormElement>) => {
+  const toIntegrationEvents = (selection: IntegrationEventSelection): IntegrationEvent[] => {
+    if (selection === 'up-only') return ['up'];
+    if (selection === 'down-only') return ['down'];
+    return ['up', 'down'];
+  };
+
+  const loadIntegrations = useCallback(async () => {
+    try {
+      setIsIntegrationsLoading(true);
+      setIntegrationsLoadError(null);
+
+      const response = await fetchIntegrations();
+      setSavedIntegrations(response.integrations);
+    } catch (error) {
+      if (error instanceof Error && error.message.trim() !== '') {
+        setIntegrationsLoadError(error.message);
+      } else {
+        setIntegrationsLoadError('Impossible de charger les integrations.');
+      }
+    } finally {
+      setIsIntegrationsLoading(false);
+    }
+  }, []);
+
+  const handleCreateIntegration = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
     if (!endpointValue.trim()) {
@@ -151,7 +198,41 @@ function IntegrationsApiPage({ onOpenIntegrationsTeam: _onOpenIntegrationsTeam }
       return;
     }
 
-    closeIntegrationModal();
+    if (!activeCard || isSubmitting) {
+      return;
+    }
+
+    try {
+      setSubmitError(null);
+      setIsSubmitting(true);
+      setCreateSuccessMessage(null);
+
+      const response = await createIntegration({
+        type: activeCard.icon as IntegrationProvider,
+        endpointUrl: endpointValue.trim(),
+        customValue: customValue.trim() || undefined,
+        events: toIntegrationEvents(eventsValue),
+      });
+
+      await loadIntegrations();
+      setCreateSuccessMessage(response.message || `${activeCard.name} integration created.`);
+      if (successTimerRef.current) {
+        clearTimeout(successTimerRef.current);
+      }
+      successTimerRef.current = setTimeout(() => {
+        setCreateSuccessMessage(null);
+        successTimerRef.current = null;
+      }, 4500);
+      closeIntegrationModal();
+    } catch (error) {
+      if (error instanceof Error && error.message.trim() !== '') {
+        setSubmitError(error.message);
+      } else {
+        setSubmitError('Impossible de creer l integration.');
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   useEffect(() => {
@@ -174,6 +255,51 @@ function IntegrationsApiPage({ onOpenIntegrationsTeam: _onOpenIntegrationsTeam }
     };
   }, [activeCard]);
 
+  useEffect(() => {
+    void loadIntegrations();
+  }, [loadIntegrations]);
+
+  useEffect(() => {
+    return () => {
+      if (successTimerRef.current) {
+        clearTimeout(successTimerRef.current);
+      }
+    };
+  }, []);
+
+  const formatEventsLabel = (events: IntegrationEvent[]): string => {
+    if (events.includes('up') && events.includes('down')) return 'Up, Down';
+    if (events.includes('up')) return 'Up only';
+    if (events.includes('down')) return 'Down only';
+    return '-';
+  };
+
+  const formatProviderLabel = (provider: IntegrationProvider): string =>
+    provider.charAt(0).toUpperCase() + provider.slice(1);
+
+  const handleDeleteIntegration = async (integrationId: string) => {
+    if (deletingIntegrationId) return;
+
+    const shouldDelete = window.confirm('Delete this integration?');
+    if (!shouldDelete) return;
+
+    try {
+      setIntegrationsLoadError(null);
+      setDeletingIntegrationId(integrationId);
+
+      await deleteIntegration(integrationId);
+      setSavedIntegrations((current) => current.filter((integration) => integration._id !== integrationId));
+    } catch (error) {
+      if (error instanceof Error && error.message.trim() !== '') {
+        setIntegrationsLoadError(error.message);
+      } else {
+        setIntegrationsLoadError('Impossible de supprimer l integration.');
+      }
+    } finally {
+      setDeletingIntegrationId(null);
+    }
+  };
+
   return (
     <section className="integrations-api-page">
       <header className="integrations-api-header">
@@ -182,6 +308,10 @@ function IntegrationsApiPage({ onOpenIntegrationsTeam: _onOpenIntegrationsTeam }
 
       <div className="integrations-api-layout">
         <div className="integrations-api-main">
+          {createSuccessMessage ? (
+            <p className="integrations-api-notice success">{createSuccessMessage}</p>
+          ) : null}
+
           <label className="integrations-api-search">
             <Search size={14} />
             <input
@@ -224,6 +354,63 @@ function IntegrationsApiPage({ onOpenIntegrationsTeam: _onOpenIntegrationsTeam }
               </div>
             )}
           </div>
+
+          <section className="integrations-api-configured">
+            <header className="integrations-api-configured-head">
+              <h2>Configured integrations</h2>
+              <button type="button" onClick={() => void loadIntegrations()} disabled={isIntegrationsLoading}>
+                Refresh
+              </button>
+            </header>
+
+            {isIntegrationsLoading ? (
+              <p className="integrations-api-configured-feedback">Loading integrations...</p>
+            ) : integrationsLoadError ? (
+              <p className="integrations-api-configured-feedback error">{integrationsLoadError}</p>
+            ) : savedIntegrations.length === 0 ? (
+              <p className="integrations-api-configured-feedback">No integration configured yet.</p>
+            ) : (
+              <div className="integrations-api-configured-list">
+                {savedIntegrations.map((integration) => (
+                  <article className="integrations-api-configured-item" key={integration._id}>
+                    <div className="integrations-api-configured-row">
+                      <div className="integrations-api-configured-main">
+                        <span className={`integration-icon ${integration.type}`} aria-hidden="true">
+                          {renderCardIcon(integration.type)}
+                        </span>
+                        <div className="integrations-api-configured-copy">
+                          <h3>{formatProviderLabel(integration.type)}</h3>
+                          <p className="endpoint">{integration.endpointUrl}</p>
+                          <p>
+                            Events: <strong>{formatEventsLabel(integration.events)}</strong>
+                          </p>
+                          <p>
+                            Last sent:{' '}
+                            <strong>
+                              {integration.lastTriggeredAt ? new Date(integration.lastTriggeredAt).toLocaleString() : 'Never'}
+                            </strong>
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="integrations-api-configured-actions">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            void handleDeleteIntegration(integration._id);
+                          }}
+                          disabled={deletingIntegrationId !== null}
+                        >
+                          <Trash2 size={13} />
+                          {deletingIntegrationId === integration._id ? 'Deleting...' : 'Delete'}
+                        </button>
+                      </div>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
+          </section>
         </div>
 
         <aside className="integrations-api-filter-panel">
@@ -300,11 +487,11 @@ function IntegrationsApiPage({ onOpenIntegrationsTeam: _onOpenIntegrationsTeam }
                   <select
                     id="integration-events"
                     value={eventsValue}
-                    onChange={(event) => setEventsValue(event.target.value)}
+                    onChange={(event) => setEventsValue(event.target.value as IntegrationEventSelection)}
                   >
                     {integrationEventOptions.map((option) => (
-                      <option key={option} value={option}>
-                        {option}
+                      <option key={option.value} value={option.value}>
+                        {option.label}
                       </option>
                     ))}
                   </select>
@@ -312,12 +499,19 @@ function IntegrationsApiPage({ onOpenIntegrationsTeam: _onOpenIntegrationsTeam }
                 </div>
               </div>
 
+              {submitError ? <p className="integrations-modal-error">{submitError}</p> : null}
+
               <footer className="integrations-modal-actions">
-                <button type="button" className="integrations-modal-cancel" onClick={closeIntegrationModal}>
+                <button
+                  type="button"
+                  className="integrations-modal-cancel"
+                  onClick={closeIntegrationModal}
+                  disabled={isSubmitting}
+                >
                   Cancel
                 </button>
-                <button type="submit" className="integrations-modal-submit">
-                  Create integration
+                <button type="submit" className="integrations-modal-submit" disabled={isSubmitting}>
+                  {isSubmitting ? 'Creating...' : 'Create integration'}
                 </button>
               </footer>
             </form>

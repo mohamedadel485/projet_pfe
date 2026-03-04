@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowDownLeft,
   ArrowUpLeft,
@@ -45,6 +45,9 @@ interface MonitorDetailsPageProps {
   onDelete?: () => void;
   onExportLogs?: () => void;
   onOpenMaintenanceInfo?: () => void;
+  onOpenNotificationSettings?: () => void;
+  actionFeedback?: string | null;
+  refreshSignal?: number;
   isActionPending?: boolean;
 }
 
@@ -162,6 +165,9 @@ function MonitorDetailsPage({
   onDelete,
   onExportLogs,
   onOpenMaintenanceInfo,
+  onOpenNotificationSettings,
+  actionFeedback,
+  refreshSignal = 0,
   isActionPending = false,
 }: MonitorDetailsPageProps) {
   const [logs, setLogs] = useState<BackendMonitorLog[]>([]);
@@ -169,6 +175,33 @@ function MonitorDetailsPage({
   const [maintenances, setMaintenances] = useState<BackendMaintenance[]>([]);
   const [isDataLoading, setIsDataLoading] = useState(false);
   const [dataError, setDataError] = useState<string | null>(null);
+  const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
+  const moreMenuRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!isMoreMenuOpen) return;
+
+    const handleDocumentMouseDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (moreMenuRef.current && !moreMenuRef.current.contains(target)) {
+        setIsMoreMenuOpen(false);
+      }
+    };
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsMoreMenuOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleDocumentMouseDown);
+    window.addEventListener('keydown', handleEscape);
+
+    return () => {
+      document.removeEventListener('mousedown', handleDocumentMouseDown);
+      window.removeEventListener('keydown', handleEscape);
+    };
+  }, [isMoreMenuOpen]);
 
   useEffect(() => {
     let isDisposed = false;
@@ -221,12 +254,13 @@ function MonitorDetailsPage({
     return () => {
       isDisposed = true;
     };
-  }, [monitor.id]);
+  }, [monitor.id, refreshSignal]);
 
   const linkLabel = monitor.url ?? 'No website configured';
   const isPausedOrPending = monitor.state === 'paused' || monitor.state === 'pending';
   const statusLabel = monitor.state === 'up' ? 'Up' : monitor.state === 'down' ? 'Down' : monitor.state === 'paused' ? 'Paused' : 'Pending';
   const intervalMinutes = parseIntervalToMinutes(monitor.interval);
+  const onOpenNotificationConfig = onOpenNotificationSettings ?? onOpenMaintenanceInfo;
 
   const monitorLogs = useMemo(
     () => [...logs].sort((a, b) => toTimestamp(a.checkedAt) - toTimestamp(b.checkedAt)),
@@ -486,18 +520,39 @@ function MonitorDetailsPage({
             </span>
             Edit
           </button>
-          <button
-            type="button"
-            className="monitor-details-more-button"
-            aria-label="Delete monitor"
-            onClick={onDelete}
-            disabled={isActionPending}
-          >
-            <MoreVertical size={13} />
-          </button>
+          <div className="monitor-details-more-menu" ref={moreMenuRef}>
+            <button
+              type="button"
+              className="monitor-details-more-button"
+              aria-label="More actions"
+              aria-haspopup="menu"
+              aria-expanded={isMoreMenuOpen}
+              onClick={() => setIsMoreMenuOpen((previousOpen) => !previousOpen)}
+              disabled={isActionPending}
+            >
+              <MoreVertical size={13} />
+            </button>
+            {isMoreMenuOpen ? (
+              <div className="monitor-details-more-menu-popover" role="menu">
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setIsMoreMenuOpen(false);
+                    onDelete?.();
+                  }}
+                  disabled={isActionPending || !onDelete}
+                  className="danger"
+                >
+                  Delete monitor
+                </button>
+              </div>
+            ) : null}
+          </div>
         </div>
       </header>
 
+      {actionFeedback ? <p className="monitor-details-action-feedback">{actionFeedback}</p> : null}
       {dataError ? <p className="monitor-details-data-error">{dataError}</p> : null}
 
       <div className="monitor-details-content-grid">
@@ -559,7 +614,7 @@ function MonitorDetailsPage({
           <section className="monitor-details-response">
             <div className="response-header">
               <h3>Response time</h3>
-              <button type="button" onClick={onRunCheck}>
+              <button type="button" onClick={onRunCheck} disabled={isActionPending}>
                 Last 24 hours
                 <ChevronDown size={13} />
               </button>
@@ -662,9 +717,17 @@ function MonitorDetailsPage({
           <article className="monitor-side-card">
             <div className="monitor-side-card-head">
               <h3>Next maintenance</h3>
-              <span className="material-symbols-outlined side-card-settings-icon" aria-hidden="true">
-                settings
-              </span>
+              <button
+                type="button"
+                className="side-card-settings-button"
+                aria-label="Open maintenance settings"
+                onClick={onOpenMaintenanceInfo}
+                disabled={!onOpenMaintenanceInfo}
+              >
+                <span className="material-symbols-outlined side-card-settings-icon" aria-hidden="true">
+                  settings
+                </span>
+              </button>
             </div>
             {nextMaintenance ? (
               <>
@@ -683,9 +746,17 @@ function MonitorDetailsPage({
           <article className="monitor-side-card">
             <div className="monitor-side-card-head">
               <h3>To be notified</h3>
-              <span className="material-symbols-outlined side-card-settings-icon" aria-hidden="true">
-                settings
-              </span>
+              <button
+                type="button"
+                className="side-card-settings-button"
+                aria-label="Open notification settings"
+                onClick={onOpenNotificationConfig}
+                disabled={!onOpenNotificationConfig}
+              >
+                <span className="material-symbols-outlined side-card-settings-icon" aria-hidden="true">
+                  settings
+                </span>
+              </button>
             </div>
             <div className="notify-row">
               <span className="avatar">A</span>
