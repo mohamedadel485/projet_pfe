@@ -205,7 +205,8 @@ function StatusPagePublicPage({ statusPageId, onBackToStatusPages }: StatusPageP
         const monitorsResponse = await fetchMonitors();
         if (cancelled) return;
 
-        const monitor = pickMonitorFromStatusPageId(monitorsResponse.monitors, statusPageId);
+        const availableMonitors = monitorsResponse.monitors ?? [];
+        const monitor = pickMonitorFromStatusPageId(availableMonitors, statusPageId);
         setSelectedMonitor(monitor);
 
         if (!monitor) {
@@ -283,9 +284,14 @@ function StatusPagePublicPage({ statusPageId, onBackToStatusPages }: StatusPageP
     return selectedMonitor?.lastChecked ?? null;
   }, [monitorLogs, selectedMonitor]);
 
-  const serviceHealth = selectedMonitor?.status === 'down' ? 'degraded' : selectedMonitor?.status === 'paused' ? 'paused' : 'operational';
-  const serviceHealthLabel =
-    serviceHealth === 'operational' ? 'operational' : serviceHealth === 'degraded' ? 'degraded' : 'paused';
+  const selectedMonitorHealthLabel =
+    selectedMonitor?.status === 'up'
+      ? 'operational'
+      : selectedMonitor?.status === 'down'
+        ? 'degraded'
+        : selectedMonitor?.status === 'paused'
+          ? 'paused'
+          : 'pending';
 
   return (
     <section className="status-page-public-page">
@@ -315,7 +321,7 @@ function StatusPagePublicPage({ statusPageId, onBackToStatusPages }: StatusPageP
               <div className="status-public-hero-side status-public-hero-right">
                 <h1>Service status</h1>
                 <p>
-                  Last updated {formatDateTime(effectiveLastChecked)} | next update in {selectedMonitor.interval} sec
+                  Last updated {formatDateTime(effectiveLastChecked)} | next update in {selectedMonitor.interval} min
                 </p>
               </div>
             </div>
@@ -327,15 +333,16 @@ function StatusPagePublicPage({ statusPageId, onBackToStatusPages }: StatusPageP
             </div>
             <div>
               <h2>
-                {selectedMonitor.name} is <span className={`health-${serviceHealth}`}>{serviceHealthLabel}</span>
+                {selectedMonitor.name} is{' '}
+                <span className={`health-${selectedMonitorHealthLabel}`}>{selectedMonitorHealthLabel}</span>
               </h2>
-              <p>Checked every {selectedMonitor.interval} minutes</p>
+              <p>{selectedMonitor.url}</p>
             </div>
           </section>
 
           <section className="status-public-card status-public-card-uptime">
             <h3>
-              Uptime <span>Last 90 days</span>
+              Uptime <span>{selectedMonitor.name} - Last 90 days</span>
             </h3>
             <div className="status-public-card-inner status-public-uptime-inner">
               <p className="status-public-kpi">{uptimeLabel}</p>
@@ -348,7 +355,9 @@ function StatusPagePublicPage({ statusPageId, onBackToStatusPages }: StatusPageP
           </section>
 
           <section className="status-public-card status-public-card-overall">
-            <h3>Overall Uptime</h3>
+            <h3>
+              Overall Uptime <span>{selectedMonitor.name}</span>
+            </h3>
             <div className="status-public-card-inner status-public-overall-inner">
               <div className="status-public-metrics">
                 <article>
@@ -373,7 +382,7 @@ function StatusPagePublicPage({ statusPageId, onBackToStatusPages }: StatusPageP
 
           <section className="status-public-card status-public-card-response">
             <h3>
-              Response Time <span>Last 90 days</span>
+              Response Time <span>{selectedMonitor.name} - Last 90 days</span>
             </h3>
             <div className="status-public-card-inner status-public-response-inner">
               <div className="status-public-chart">
@@ -399,7 +408,9 @@ function StatusPagePublicPage({ statusPageId, onBackToStatusPages }: StatusPageP
           </section>
 
           <section className="status-public-card">
-            <h3>Recent events</h3>
+            <h3>
+              Recent events <span>{selectedMonitor.name}</span>
+            </h3>
             {recentEvents.length === 0 ? (
               <p>No recent events.</p>
             ) : (

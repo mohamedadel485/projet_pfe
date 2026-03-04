@@ -87,6 +87,17 @@
   text-align: left;
 }
 
+.status-pages-table-feedback {
+  margin: 0;
+  padding: 18px 12px;
+  font-size: 0.82rem;
+  color: #516992;
+}
+
+.status-pages-table-feedback.error {
+  color: #c64f61;
+}
+
 .status-pages-row {
   background: #f2f6fc;
   padding: 8px 8px;
