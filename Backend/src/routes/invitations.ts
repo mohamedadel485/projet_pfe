@@ -16,7 +16,6 @@ const router = Router();
 router.post(
   '/',
   authenticate,
-  isAdmin,
   [
     body('name').notEmpty().withMessage('Le nom est requis').trim(),
     body('email').isEmail().normalizeEmail(),

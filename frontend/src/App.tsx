@@ -13,6 +13,8 @@ import LoginPage from './pages/login/LoginPage';
 import MaintenancePage from './pages/maintenance/MaintenancePage';
 import MonitorDetailsPage from './pages/monitor-details/MonitorDetailsPage';
 import NewMonitorPage from './pages/new-monitor/NewMonitorPage';
+import MonitorWizardPage, { type MonitorWizardSubmission } from './pages/monitor-wizard/MonitorWizardPage';
+import BulkUploadPage, { type BulkUploadSubmission } from './pages/bulk-upload/BulkUploadPage';
 import StatusPageInfoPage from './pages/status/StatusPageInfoPage';
 import StatusPagePublicPage from './pages/status/StatusPagePublicPage';
 import StatusPagesPage from './pages/status/StatusPagesPage';
@@ -24,6 +26,7 @@ import {
   acceptInvitation,
   checkMonitor,
   createInvitation,
+  createIntegration,
   createMonitor,
   updateMonitor,
   deleteInvitation,
@@ -43,6 +46,8 @@ import {
   resetPasswordWithCode,
   resumeMonitor,
   saveAuthToken,
+  type CreateIntegrationInput,
+  type CreateMonitorInput,
   type BackendMonitor,
   type AuthUser,
   type UserRole,
@@ -117,6 +122,18 @@ type NewMonitorOption = 'single' | 'wizard' | 'bulk';
 type MonitorFilterStatus = 'none' | 'up' | 'down' | 'paused';
 type MonitorSortOption = 'down-first' | 'up-first' | 'paused-first' | 'a-z' | 'newest-first';
 type BulkActionOption = 'start' | 'pause' | 'resume' | 'delete';
+type MonitorBatchSubmission = {
+  monitors: Array<{
+    name: string;
+    url: string;
+    type: CreateMonitorInput['type'];
+    interval: number;
+    timeout: number;
+    httpMethod: NonNullable<CreateMonitorInput['httpMethod']>;
+  }>;
+  inviteEmails: string[];
+  integration: CreateIntegrationInput | null;
+};
 
 const monitorSortOptionLabels: Record<MonitorSortOption, string> = {
   'down-first': 'Down first',
@@ -275,6 +292,8 @@ function App() {
   const [selectedStatusPageId, setSelectedStatusPageId] = useState<string | null>(null);
   const [isStatusPagePublicView, setIsStatusPagePublicView] = useState(false);
   const [isCreatingMonitor, setIsCreatingMonitor] = useState(false);
+  const [isMonitorWizardOpen, setIsMonitorWizardOpen] = useState(false);
+  const [isBulkUploadOpen, setIsBulkUploadOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [activeMenuLabel, setActiveMenuLabel] = useState(menuItems[0].label);
   const [integrationsSubPage, setIntegrationsSubPage] = useState<IntegrationsSubPage>('api');
@@ -455,6 +474,7 @@ function App() {
   const isStatusPagesPage = activeMenuLabel === 'Status pages';
   const isTeamMembersPage = activeMenuLabel === 'Team members';
   const isCurrentUserAdmin = currentUser?.role === 'admin';
+  const canCurrentUserInviteTeam = Boolean(authToken);
   const userInitials = useMemo(() => {
     if (!currentUser?.name) return '??';
     return currentUser.name
@@ -488,6 +508,8 @@ function App() {
     let nextSelectedStatusPageId: string | null = null;
     let nextIsStatusPagePublicView = false;
     let nextIsCreatingMonitor = false;
+    let nextIsMonitorWizardOpen = false;
+    let nextIsBulkUploadOpen = false;
 
     if (pathname === '/login') {
       nextAuthRoute = 'login';
@@ -502,6 +524,12 @@ function App() {
     } else if (pathname === '/monitoring/new') {
       nextMenuLabel = 'Monitoring';
       nextIsCreatingMonitor = true;
+    } else if (pathname === '/monitoring/wizard') {
+      nextMenuLabel = 'Monitoring';
+      nextIsMonitorWizardOpen = true;
+    } else if (pathname === '/monitoring/bulk') {
+      nextMenuLabel = 'Monitoring';
+      nextIsBulkUploadOpen = true;
     } else if (segments.length === 3 && segments[0] === 'monitoring' && segments[2] === 'edit') {
       nextMenuLabel = 'Monitoring';
       nextEditingMonitorId = segments[1];
@@ -559,6 +587,8 @@ function App() {
     setSelectedStatusPageId(nextSelectedStatusPageId);
     setIsStatusPagePublicView(nextIsStatusPagePublicView);
     setIsCreatingMonitor(nextIsCreatingMonitor);
+    setIsMonitorWizardOpen(nextIsMonitorWizardOpen);
+    setIsBulkUploadOpen(nextIsBulkUploadOpen);
     setMonitorActionFeedback(null);
   }, []);
 
@@ -836,6 +866,76 @@ function App() {
       }
     },
     [authToken, clearSessionAndRedirectToLogin, navigateTo, refreshMonitors],
+  );
+
+  const submitMonitorBatch = useCallback(
+    async (payload: MonitorBatchSubmission, errorFallbackMessage: string) => {
+      if (!authToken) {
+        return 'Authentification requise.';
+      }
+      if (!payload.monitors || payload.monitors.length === 0) {
+        return 'Aucun monitor a creer.';
+      }
+
+      try {
+        const createdMonitorIds: string[] = [];
+
+        for (const monitorPayload of payload.monitors) {
+          const response = await createMonitor(monitorPayload, authToken);
+          createdMonitorIds.push(response.monitor._id);
+        }
+
+        if (payload.integration) {
+          await createIntegration(payload.integration, authToken);
+        }
+
+        if (payload.inviteEmails.length > 0) {
+          if (!currentUser) {
+            return 'Authentification requise.';
+          }
+
+          for (const inviteEmail of payload.inviteEmails) {
+            const nameFromEmail = inviteEmail.split('@')[0]?.trim();
+            const safeName = nameFromEmail && nameFromEmail !== '' ? nameFromEmail : 'Team member';
+            await createInvitation(safeName, inviteEmail, createdMonitorIds, authToken);
+          }
+        }
+
+        await refreshMonitors(authToken);
+        if (currentUser?.role === 'admin') {
+          await refreshTeamSummary(authToken, currentUser.role);
+        }
+        navigateTo('/monitoring');
+        return null;
+      } catch (error) {
+        if (isApiError(error) && error.status === 401) {
+          clearSessionAndRedirectToLogin();
+          return 'Session expiree. Reconnectez-vous.';
+        }
+        await refreshMonitors(authToken);
+        return formatAppError(error, errorFallbackMessage);
+      }
+    },
+    [
+      authToken,
+      clearSessionAndRedirectToLogin,
+      currentUser,
+      navigateTo,
+      refreshMonitors,
+      refreshTeamSummary,
+    ],
+  );
+
+  const handleSubmitMonitorWizard = useCallback(
+    async (payload: MonitorWizardSubmission) =>
+      submitMonitorBatch(payload, 'Impossible de terminer le monitor wizard.'),
+    [submitMonitorBatch],
+  );
+
+  const handleSubmitBulkUpload = useCallback(
+    async (payload: BulkUploadSubmission) =>
+      submitMonitorBatch(payload, "Impossible de terminer l'import en masse."),
+    [submitMonitorBatch],
   );
 
   const handleUpdateMonitor = useCallback(
@@ -1148,8 +1248,12 @@ function App() {
       return;
     }
 
-    // Wizard and bulk upload currently share the same creation entry page.
-    navigateTo('/monitoring/new');
+    if (option === 'wizard') {
+      navigateTo('/monitoring/wizard');
+      return;
+    }
+
+    navigateTo('/monitoring/bulk');
   };
 
   const openMonitorFilterPanel = () => {
@@ -1487,6 +1591,22 @@ function App() {
           onOpenMaintenanceInfo={() => {
             navigateTo('/maintenance');
           }}
+        />
+      ) : isMonitorWizardOpen ? (
+        <MonitorWizardPage
+          onBack={() => {
+            navigateTo('/monitoring');
+          }}
+          canInviteTeam={canCurrentUserInviteTeam}
+          onSubmitWizard={handleSubmitMonitorWizard}
+        />
+      ) : isBulkUploadOpen ? (
+        <BulkUploadPage
+          onBack={() => {
+            navigateTo('/monitoring');
+          }}
+          canInviteTeam={canCurrentUserInviteTeam}
+          onSubmitBulkUpload={handleSubmitBulkUpload}
         />
       ) : isCreatingMonitor ? (
         <NewMonitorPage
