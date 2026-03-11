@@ -64,6 +64,13 @@ const protocolOptions: ProtocolOption[] = [
   },
 ];
 
+const protocolPrefixes: Record<MonitorProtocol, string> = {
+  http: 'http://',
+  https: 'https://',
+  ws: 'ws://',
+  wss: 'wss://',
+};
+
 const parseIntervalToMinutes = (label: string): number => {
   const numericValue = Number.parseInt(label, 10);
   if (!Number.isFinite(numericValue) || numericValue <= 0) return 5;
@@ -96,9 +103,9 @@ const mapHttpMethod = (method: string): 'GET' | 'POST' | 'PUT' | 'DELETE' | 'HEA
 function NewMonitorPage({ onBack, onCreateMonitor }: NewMonitorPageProps) {
   const [selectedIntervalIndex, setSelectedIntervalIndex] = useState(2);
   const [selectedTimeoutIndex, setSelectedTimeoutIndex] = useState(2);
-  const [selectedProtocol, setSelectedProtocol] = useState<MonitorProtocol>('http');
+  const [selectedProtocol, setSelectedProtocol] = useState<MonitorProtocol>('https');
   const [monitorName, setMonitorName] = useState('');
-  const [monitorUrl, setMonitorUrl] = useState('');
+  const [monitorUrl, setMonitorUrl] = useState('https://');
   const [isProtocolMenuOpen, setIsProtocolMenuOpen] = useState(false);
   const [isSslDomainOpen, setIsSslDomainOpen] = useState(false);
   const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
@@ -140,6 +147,30 @@ function NewMonitorPage({ onBack, onCreateMonitor }: NewMonitorPageProps) {
     if (timeoutOptions.length <= 1) return 0;
     return (selectedTimeoutIndex / (timeoutOptions.length - 1)) * 100;
   }, [selectedTimeoutIndex]);
+
+  const toggleProtocolMenu = () => {
+    setIsProtocolMenuOpen((prev) => !prev);
+  };
+
+  const updateUrlForProtocol = (nextProtocol: MonitorProtocol) => {
+    const nextPrefix = protocolPrefixes[nextProtocol];
+    setMonitorUrl((previous) => {
+      const trimmed = previous.trim();
+      if (trimmed === '') {
+        return nextPrefix;
+      }
+      const allPrefixes = Object.values(protocolPrefixes);
+      if (allPrefixes.includes(trimmed)) {
+        return nextPrefix;
+      }
+      for (const prefix of allPrefixes) {
+        if (trimmed.startsWith(prefix)) {
+          return `${nextPrefix}${trimmed.slice(prefix.length)}`;
+        }
+      }
+      return previous;
+    });
+  };
 
   useEffect(() => {
     const handleDocumentClick = (event: MouseEvent) => {
@@ -210,7 +241,20 @@ function NewMonitorPage({ onBack, onCreateMonitor }: NewMonitorPageProps) {
         <div className="new-monitor-main">
           <section className="new-monitor-card" ref={detailsSectionRef}>
             <div className="new-monitor-type-picker" ref={protocolMenuRef}>
-              <div className="new-monitor-type-selector">
+              <div
+                className="new-monitor-type-selector"
+                role="button"
+                tabIndex={0}
+                aria-haspopup="listbox"
+                aria-expanded={isProtocolMenuOpen}
+                onClick={toggleProtocolMenu}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    toggleProtocolMenu();
+                  }
+                }}
+              >
                 <div className="new-monitor-type-badge">{selectedProtocolOption.badge}</div>
                 <div className="new-monitor-type-copy">
                   <h2>{selectedProtocolOption.title}</h2>
@@ -224,7 +268,10 @@ function NewMonitorPage({ onBack, onCreateMonitor }: NewMonitorPageProps) {
                     aria-haspopup="listbox"
                     aria-expanded={isProtocolMenuOpen}
                     aria-label="Select monitor protocol"
-                    onClick={() => setIsProtocolMenuOpen((prev) => !prev)}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      toggleProtocolMenu();
+                    }}
                   >
                     <ChevronDown size={16} className={isProtocolMenuOpen ? 'open' : ''} />
                   </button>
@@ -241,6 +288,7 @@ function NewMonitorPage({ onBack, onCreateMonitor }: NewMonitorPageProps) {
                       className={`new-monitor-type-option ${selectedProtocol === option.value ? 'active' : ''}`}
                       onClick={() => {
                         setSelectedProtocol(option.value);
+                        updateUrlForProtocol(option.value);
                         setIsProtocolMenuOpen(false);
                       }}
                     >

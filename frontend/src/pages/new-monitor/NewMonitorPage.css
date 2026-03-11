@@ -60,6 +60,12 @@
   grid-template-columns: auto minmax(0, 1fr) auto;
   gap: 14px;
   align-items: center;
+  cursor: pointer;
+}
+
+.new-monitor-type-selector:focus-visible {
+  outline: 2px solid rgba(82, 133, 219, 0.4);
+  outline-offset: 2px;
 }
 
 .new-monitor-type-badge {
