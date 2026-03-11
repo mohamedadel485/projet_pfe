@@ -41,6 +41,14 @@ export interface BackendMonitor {
   status: 'up' | 'down' | 'paused' | 'pending';
   uptime: number;
   responseTime: number;
+  domainExpiryMode?: 'enabled' | 'disabled';
+  domainExpiryAt?: string;
+  domainExpiryCheckedAt?: string;
+  domainExpiryError?: string;
+  sslExpiryMode?: 'enabled' | 'disabled';
+  sslExpiryAt?: string;
+  sslExpiryCheckedAt?: string;
+  sslExpiryError?: string;
   lastChecked?: string;
   createdAt: string;
   updatedAt: string;
@@ -153,6 +161,8 @@ export interface CreateMonitorInput {
   interval?: number;
   timeout?: number;
   httpMethod?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'HEAD';
+  domainExpiryMode?: 'enabled' | 'disabled';
+  sslExpiryMode?: 'enabled' | 'disabled';
 }
 
 export interface UpdateMonitorInput {
@@ -162,6 +172,8 @@ export interface UpdateMonitorInput {
   interval?: number;
   timeout?: number;
   httpMethod?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'HEAD';
+  domainExpiryMode?: 'enabled' | 'disabled';
+  sslExpiryMode?: 'enabled' | 'disabled';
 }
 
 export interface CreateIntegrationInput {

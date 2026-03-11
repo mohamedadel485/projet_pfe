@@ -180,6 +180,46 @@
   gap: 10px;
 }
 
+.edit-monitor-domain-row {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid #e2eaf7;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.edit-monitor-domain-copy h4 {
+  margin: 0;
+  color: #2d436d;
+  font-size: 0.9rem;
+}
+
+.edit-monitor-domain-copy p {
+  margin: 5px 0 0;
+  font-size: 0.74rem;
+  color: #7c92b6;
+}
+
+.edit-monitor-domain-select select {
+  border: 1px solid #d8e3f5;
+  border-radius: 8px;
+  min-height: 32px;
+  padding: 0 10px;
+  color: #304b74;
+  font-size: 0.78rem;
+  background: #fff;
+  outline: none;
+}
+
+.edit-monitor-domain-select select:focus {
+  border-color: #9cb8e9;
+  box-shadow: 0 0 0 2px rgba(82, 133, 219, 0.15);
+}
+
 .edit-monitor-meta-box h4 {
   margin: 0;
   color: #2d436d;

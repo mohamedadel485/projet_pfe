@@ -3,6 +3,8 @@ import { body, validationResult } from 'express-validator';
 import Monitor from '../models/Monitor';
 import MonitorLog from '../models/MonitorLog';
 import monitorService from '../services/monitorService';
+import { lookupDomainExpiry } from '../services/domainExpiryService';
+import { lookupSslExpiry } from '../services/sslExpiryService';
 import { authenticate, AuthRequest } from '../middleware/auth';
 
 const router = Router();
@@ -22,6 +24,8 @@ router.post(
     body('timeout').optional().isInt({ min: 5, max: 300 }),
     body('httpMethod').optional().isIn(['GET', 'POST', 'PUT', 'DELETE', 'HEAD']),
     body('expectedStatusCode').optional().isInt({ min: 100, max: 599 }),
+    body('domainExpiryMode').optional().isIn(['enabled', 'disabled']),
+    body('sslExpiryMode').optional().isIn(['enabled', 'disabled']),
   ],
   async (req: AuthRequest, res: Response): Promise<void> => {
     try {
@@ -35,6 +39,19 @@ router.post(
         ...req.body,
         owner: req.user!._id,
       };
+
+      if (monitorData.domainExpiryMode === 'enabled') {
+        const lookup = await lookupDomainExpiry(monitorData.url);
+        monitorData.domainExpiryAt = lookup.expiryAt ?? undefined;
+        monitorData.domainExpiryCheckedAt = lookup.checkedAt;
+        monitorData.domainExpiryError = lookup.error ?? undefined;
+      }
+      if (monitorData.sslExpiryMode === 'enabled') {
+        const lookup = await lookupSslExpiry(monitorData.url);
+        monitorData.sslExpiryAt = lookup.expiryAt ?? undefined;
+        monitorData.sslExpiryCheckedAt = lookup.checkedAt;
+        monitorData.sslExpiryError = lookup.error ?? undefined;
+      }
 
       const monitor = new Monitor(monitorData);
       await monitor.save();
@@ -132,6 +149,8 @@ router.put(
     body('type').optional().isIn(['http', 'https', 'ws', 'wss']),
     body('interval').optional().isInt({ min: 1 }),
     body('timeout').optional().isInt({ min: 5, max: 300 }),
+    body('domainExpiryMode').optional().isIn(['enabled', 'disabled']),
+    body('sslExpiryMode').optional().isIn(['enabled', 'disabled']),
   ],
   async (req: AuthRequest, res: Response): Promise<void> => {
     try {
@@ -153,7 +172,40 @@ router.put(
         return;
       }
 
+      const previousUrl = monitor.url;
+      const previousMode = monitor.domainExpiryMode ?? 'disabled';
+      const previousSslMode = monitor.sslExpiryMode ?? 'disabled';
+
       Object.assign(monitor, req.body);
+
+      const currentMode = monitor.domainExpiryMode ?? 'disabled';
+      const currentSslMode = monitor.sslExpiryMode ?? 'disabled';
+      const urlChanged = typeof req.body.url === 'string' && req.body.url !== previousUrl;
+      const modeJustEnabled = previousMode !== 'enabled' && currentMode === 'enabled';
+      const sslModeJustEnabled = previousSslMode !== 'enabled' && currentSslMode === 'enabled';
+
+      if (currentMode !== 'enabled') {
+        monitor.domainExpiryAt = undefined;
+        monitor.domainExpiryCheckedAt = undefined;
+        monitor.domainExpiryError = undefined;
+      } else if (modeJustEnabled || urlChanged) {
+        const lookup = await lookupDomainExpiry(monitor.url);
+        monitor.domainExpiryAt = lookup.expiryAt ?? undefined;
+        monitor.domainExpiryCheckedAt = lookup.checkedAt;
+        monitor.domainExpiryError = lookup.error ?? undefined;
+      }
+
+      if (currentSslMode !== 'enabled') {
+        monitor.sslExpiryAt = undefined;
+        monitor.sslExpiryCheckedAt = undefined;
+        monitor.sslExpiryError = undefined;
+      } else if (sslModeJustEnabled || urlChanged) {
+        const lookup = await lookupSslExpiry(monitor.url);
+        monitor.sslExpiryAt = lookup.expiryAt ?? undefined;
+        monitor.sslExpiryCheckedAt = lookup.checkedAt;
+        monitor.sslExpiryError = lookup.error ?? undefined;
+      }
+
       await monitor.save();
 
       res.json({

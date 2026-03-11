@@ -16,6 +16,14 @@ export interface IMonitor extends Document {
   headers?: Record<string, string>;
   body?: string;
   port?: number;
+  domainExpiryMode?: 'enabled' | 'disabled';
+  domainExpiryAt?: Date;
+  domainExpiryCheckedAt?: Date;
+  domainExpiryError?: string;
+  sslExpiryMode?: 'enabled' | 'disabled';
+  sslExpiryAt?: Date;
+  sslExpiryCheckedAt?: Date;
+  sslExpiryError?: string;
   lastChecked?: Date;
   lastStatus?: 'up' | 'down';
   uptime: number; // pourcentage
@@ -96,6 +104,34 @@ const monitorSchema = new Schema<IMonitor>(
     },
     port: {
       type: Number,
+    },
+    domainExpiryMode: {
+      type: String,
+      enum: ['enabled', 'disabled'],
+      default: 'disabled',
+    },
+    domainExpiryAt: {
+      type: Date,
+    },
+    domainExpiryCheckedAt: {
+      type: Date,
+    },
+    domainExpiryError: {
+      type: String,
+    },
+    sslExpiryMode: {
+      type: String,
+      enum: ['enabled', 'disabled'],
+      default: 'disabled',
+    },
+    sslExpiryAt: {
+      type: Date,
+    },
+    sslExpiryCheckedAt: {
+      type: Date,
+    },
+    sslExpiryError: {
+      type: String,
     },
     lastChecked: {
       type: Date,

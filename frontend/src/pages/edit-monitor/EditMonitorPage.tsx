@@ -6,6 +6,8 @@ interface EditableMonitor {
   id: string;
   name: string;
   url?: string;
+  domainExpiryMode?: 'enabled' | 'disabled';
+  sslExpiryMode?: 'enabled' | 'disabled';
 }
 
 type EditMonitorSideSection = 'details' | 'integrations' | 'maintenance';
@@ -17,7 +19,12 @@ interface EditMonitorPageProps {
   onOpenIntegrationsTeam?: () => void;
   onOpenMaintenanceInfo?: () => void;
   onManageTeam?: () => void;
-  onSaveChanges?: (payload: { name: string; url: string }) => Promise<string | null> | string | null;
+  onSaveChanges?: (payload: {
+    name: string;
+    url: string;
+    domainExpiryMode?: 'enabled' | 'disabled';
+    sslExpiryMode?: 'enabled' | 'disabled';
+  }) => Promise<string | null> | string | null;
   initialSection?: EditMonitorSideSection;
 }
 
@@ -35,6 +42,12 @@ function EditMonitorPage({
   const [monitorName, setMonitorName] = useState(monitor.name);
   const [monitorUrl, setMonitorUrl] = useState(monitor.url ?? '');
   const [tagDraft, setTagDraft] = useState('');
+  const [domainExpiryMode, setDomainExpiryMode] = useState<'enabled' | 'disabled'>(
+    monitor.domainExpiryMode ?? 'disabled',
+  );
+  const [sslExpiryMode, setSslExpiryMode] = useState<'enabled' | 'disabled'>(
+    monitor.sslExpiryMode ?? 'disabled',
+  );
   const [saveError, setSaveError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const nameInputRef = useRef<HTMLInputElement | null>(null);
@@ -43,6 +56,8 @@ function EditMonitorPage({
     setMonitorName(monitor.name);
     setMonitorUrl(monitor.url ?? '');
     setTagDraft('');
+    setDomainExpiryMode(monitor.domainExpiryMode ?? 'disabled');
+    setSslExpiryMode(monitor.sslExpiryMode ?? 'disabled');
     setSaveError(null);
     setIsSaving(false);
   }, [monitor]);
@@ -90,7 +105,7 @@ function EditMonitorPage({
     setIsSaving(true);
     setSaveError(null);
 
-    const error = await onSaveChanges({ name: cleanedName, url: cleanedUrl });
+    const error = await onSaveChanges({ name: cleanedName, url: cleanedUrl, domainExpiryMode, sslExpiryMode });
     if (error) {
       setSaveError(error);
       setIsSaving(false);
@@ -160,6 +175,44 @@ function EditMonitorPage({
                         onChange={(event) => setTagDraft(event.target.value)}
                         disabled={isSaving}
                       />
+                    </div>
+                  </div>
+
+                  <div className="edit-monitor-domain-row">
+                    <div className="edit-monitor-domain-copy">
+                      <h4>Domain expiry reminders</h4>
+                      <p>Enable WHOIS checks to track domain expiration date.</p>
+                    </div>
+                    <div className="edit-monitor-domain-select">
+                      <select
+                        value={domainExpiryMode}
+                        onChange={(event) =>
+                          setDomainExpiryMode(event.target.value === 'enabled' ? 'enabled' : 'disabled')
+                        }
+                        disabled={isSaving}
+                      >
+                        <option value="disabled">Disabled</option>
+                        <option value="enabled">Enabled</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="edit-monitor-domain-row">
+                    <div className="edit-monitor-domain-copy">
+                      <h4>SSL expiry reminders</h4>
+                      <p>Enable TLS certificate checks to track expiration date.</p>
+                    </div>
+                    <div className="edit-monitor-domain-select">
+                      <select
+                        value={sslExpiryMode}
+                        onChange={(event) =>
+                          setSslExpiryMode(event.target.value === 'enabled' ? 'enabled' : 'disabled')
+                        }
+                        disabled={isSaving}
+                      >
+                        <option value="disabled">Disabled</option>
+                        <option value="enabled">Enabled</option>
+                      </select>
                     </div>
                   </div>
 

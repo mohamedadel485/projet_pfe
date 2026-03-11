@@ -29,6 +29,14 @@ interface MonitorDetails {
   name: string;
   protocol: string;
   url?: string;
+  domainExpiryMode?: 'enabled' | 'disabled';
+  domainExpiryAt?: string;
+  domainExpiryCheckedAt?: string;
+  domainExpiryError?: string;
+  sslExpiryMode?: 'enabled' | 'disabled';
+  sslExpiryAt?: string;
+  sslExpiryCheckedAt?: string;
+  sslExpiryError?: string;
   uptimeLabel: string;
   interval: string;
   uptime: string;
@@ -466,6 +474,26 @@ function MonitorDetailsPage({
     }
   }, [monitor.url]);
 
+  const domainExpiryLabel = useMemo(() => {
+    if (monitor.domainExpiryMode !== 'enabled') {
+      return 'Disabled';
+    }
+    if (!monitor.domainExpiryAt) {
+      return 'Unavailable';
+    }
+    return formatShortDate(monitor.domainExpiryAt);
+  }, [monitor.domainExpiryAt, monitor.domainExpiryMode]);
+
+  const sslExpiryLabel = useMemo(() => {
+    if (monitor.sslExpiryMode !== 'enabled') {
+      return 'Disabled';
+    }
+    if (!monitor.sslExpiryAt) {
+      return 'Unavailable';
+    }
+    return formatShortDate(monitor.sslExpiryAt);
+  }, [monitor.sslExpiryAt, monitor.sslExpiryMode]);
+
   return (
     <section className="monitor-details-page">
       <div className="monitor-details-breadcrumb">
@@ -713,6 +741,20 @@ function MonitorDetailsPage({
             <h3>Domain & SSL</h3>
             <p>Domain: {domainAndSsl.domain}</p>
             <p>SSL: {domainAndSsl.ssl}</p>
+            <p>SSL expiry: {sslExpiryLabel}</p>
+            {monitor.sslExpiryMode === 'enabled' && monitor.sslExpiryCheckedAt ? (
+              <p>SSL checked: {formatDateTime(monitor.sslExpiryCheckedAt)}</p>
+            ) : null}
+            {monitor.sslExpiryMode === 'enabled' && monitor.sslExpiryError ? (
+              <p>SSL error: {monitor.sslExpiryError}</p>
+            ) : null}
+            <p>Domain expiry: {domainExpiryLabel}</p>
+            {monitor.domainExpiryMode === 'enabled' && monitor.domainExpiryCheckedAt ? (
+              <p>WHOIS checked: {formatDateTime(monitor.domainExpiryCheckedAt)}</p>
+            ) : null}
+            {monitor.domainExpiryMode === 'enabled' && monitor.domainExpiryError ? (
+              <p>WHOIS error: {monitor.domainExpiryError}</p>
+            ) : null}
           </article>
           <article className="monitor-side-card">
             <div className="monitor-side-card-head">

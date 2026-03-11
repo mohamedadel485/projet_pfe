@@ -12,6 +12,8 @@ interface NewMonitorPageProps {
     interval: number;
     timeout: number;
     httpMethod: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'HEAD';
+    domainExpiryMode?: 'enabled' | 'disabled';
+    sslExpiryMode?: 'enabled' | 'disabled';
   }) => Promise<string | null>;
 }
 
@@ -169,6 +171,8 @@ function NewMonitorPage({ onBack, onCreateMonitor }: NewMonitorPageProps) {
       interval: parseIntervalToMinutes(selectedInterval),
       timeout: parseTimeoutToSeconds(selectedTimeout),
       httpMethod: mapHttpMethod(selectedHttpMethod),
+      domainExpiryMode: domainExpiryMode === 'enabled' ? 'enabled' : 'disabled',
+      sslExpiryMode: sslExpiryMode === 'enabled' ? 'enabled' : 'disabled',
     });
 
     if (error) {

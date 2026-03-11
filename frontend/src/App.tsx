@@ -88,6 +88,14 @@ interface MonitorRow {
   name: string;
   protocol: string;
   url?: string;
+  domainExpiryMode?: 'enabled' | 'disabled';
+  domainExpiryAt?: string;
+  domainExpiryCheckedAt?: string;
+  domainExpiryError?: string;
+  sslExpiryMode?: 'enabled' | 'disabled';
+  sslExpiryAt?: string;
+  sslExpiryCheckedAt?: string;
+  sslExpiryError?: string;
   tags: string[];
   uptimeLabel: string;
   interval: string;
@@ -269,6 +277,14 @@ const mapBackendMonitorToRow = (monitor: BackendMonitor): MonitorRow => {
     name: monitor.name,
     protocol: monitor.type.toUpperCase(),
     url: monitor.url,
+    domainExpiryMode: monitor.domainExpiryMode,
+    domainExpiryAt: monitor.domainExpiryAt,
+    domainExpiryCheckedAt: monitor.domainExpiryCheckedAt,
+    domainExpiryError: monitor.domainExpiryError,
+    sslExpiryMode: monitor.sslExpiryMode,
+    sslExpiryAt: monitor.sslExpiryAt,
+    sslExpiryCheckedAt: monitor.sslExpiryCheckedAt,
+    sslExpiryError: monitor.sslExpiryError,
     tags: monitor.type === 'ws' || monitor.type === 'wss' ? ['API'] : ['Website'],
     uptimeLabel: statusLabel,
     interval: formatIntervalLabel(monitor.interval),
@@ -847,6 +863,8 @@ function App() {
       interval: number;
       timeout: number;
       httpMethod: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'HEAD';
+      domainExpiryMode?: 'enabled' | 'disabled';
+      sslExpiryMode?: 'enabled' | 'disabled';
     }) => {
       if (!authToken) {
         return 'Authentification requise.';
@@ -939,7 +957,10 @@ function App() {
   );
 
   const handleUpdateMonitor = useCallback(
-    async (monitorId: string, payload: { name: string; url: string }) => {
+    async (
+      monitorId: string,
+      payload: { name: string; url: string; domainExpiryMode?: 'enabled' | 'disabled'; sslExpiryMode?: 'enabled' | 'disabled' }
+    ) => {
       if (!authToken) {
         return 'Authentification requise.';
       }
