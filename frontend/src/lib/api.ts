@@ -1,9 +1,16 @@
 const rawApiBaseUrl = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim();
 const rawBackendProxyTarget = (import.meta.env.VITE_BACKEND_PROXY_TARGET as string | undefined)?.trim();
+const hasExplicitBackendProxyTarget =
+  typeof rawBackendProxyTarget === 'string' && rawBackendProxyTarget.trim() !== '';
 
 const API_BASE_URL = rawApiBaseUrl || '/api';
 const BACKEND_PROXY_TARGET = rawBackendProxyTarget || 'http://localhost:3001';
-const LOCAL_DIRECT_BACKEND_FALLBACKS = ['http://localhost:3001', 'http://localhost:3004', 'http://localhost:3003'];
+const LOCAL_DIRECT_BACKEND_FALLBACKS = [
+  'http://localhost:3001',
+  'http://localhost:3002',
+  'http://localhost:3003',
+  'http://localhost:3004',
+];
 
 const isBrowser = typeof window !== 'undefined';
 const isHttpUrl = (value: string): boolean => /^https?:\/\//i.test(value);
@@ -361,13 +368,17 @@ const request = async <T>(path: string, options?: RequestOptions): Promise<T> =>
   const hasBody = options?.body !== undefined;
   const endpoint = buildEndpoint(path);
   const isMaintenancePath = path.startsWith('/maintenances');
-  const directBackendTargets =
-    isLocalhostRuntime()
-      ? Array.from(
-          new Set(
-            [BACKEND_PROXY_TARGET, ...LOCAL_DIRECT_BACKEND_FALLBACKS].filter((target) => isHttpUrl(target))
-          )
+  const isAuthPath = path.startsWith('/auth/');
+  const isAuthRegisterPath = path.startsWith('/auth/register');
+  const isRelativeApiBase = !isHttpUrl(API_BASE_URL);
+  const directBackendTargets = isLocalhostRuntime()
+    ? Array.from(
+        new Set(
+          [BACKEND_PROXY_TARGET, ...LOCAL_DIRECT_BACKEND_FALLBACKS].filter((target) => isHttpUrl(target))
         )
+      )
+    : hasExplicitBackendProxyTarget && isRelativeApiBase && isHttpUrl(BACKEND_PROXY_TARGET)
+      ? [BACKEND_PROXY_TARGET]
       : [];
   const canTryDirectBackend =
     directBackendTargets.length > 0;
@@ -437,7 +448,11 @@ const request = async <T>(path: string, options?: RequestOptions): Promise<T> =>
     const shouldRetryWithDirectBackend =
       !usedDirectBackend &&
       canTryDirectBackend &&
-      (response.status >= 500 || (isMaintenancePath && response.status === 404));
+      (response.status >= 500 ||
+        response.status === 405 ||
+        (isMaintenancePath && response.status === 404) ||
+        (isAuthPath && response.status === 404) ||
+        (isAuthRegisterPath && response.status === 403));
 
     if (shouldRetryWithDirectBackend) {
       for (const target of directBackendTargets) {
