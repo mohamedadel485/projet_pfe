@@ -341,6 +341,20 @@ const getApiErrorMessage = (payload: unknown, fallback: string): string => {
   return fallback;
 };
 
+const normalizeList = <T>(payload: unknown, key: string): T[] => {
+  if (Array.isArray(payload)) {
+    return payload as T[];
+  }
+  if (payload && typeof payload === 'object') {
+    const record = payload as Record<string, unknown>;
+    const value = record[key];
+    if (Array.isArray(value)) {
+      return value as T[];
+    }
+  }
+  return [];
+};
+
 const buildEndpoint = (path: string): string => {
   if (!path.startsWith('/')) {
     return `${API_BASE_URL}/${path}`;
@@ -522,8 +536,10 @@ export const acceptInvitation = (
     body: name && name.trim() !== '' ? { token, password, name: name.trim() } : { token, password },
   });
 
-export const fetchMonitors = (token?: string): Promise<MonitorListResponse> =>
-  request<MonitorListResponse>('/monitors', { token });
+export const fetchMonitors = async (token?: string): Promise<MonitorListResponse> => {
+  const payload = await request<unknown>('/monitors', { token });
+  return { monitors: normalizeList<BackendMonitor>(payload, 'monitors') };
+};
 
 export const fetchIntegrations = (token?: string): Promise<IntegrationsListResponse> =>
   request<IntegrationsListResponse>('/integrations', { token });
@@ -546,7 +562,9 @@ export const fetchMaintenances = (
 
   const query = params.toString();
   const path = query ? `/maintenances?${query}` : '/maintenances';
-  return request<MaintenanceListResponse>(path, { token });
+  return request<unknown>(path, { token }).then((payload) => ({
+    maintenances: normalizeList<BackendMaintenance>(payload, 'maintenances'),
+  }));
 };
 
 export const fetchIncidents = (

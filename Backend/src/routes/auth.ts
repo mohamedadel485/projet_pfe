@@ -54,11 +54,11 @@ router.post(
         return;
       }
 
-      // Vérifier si c'est le premier utilisateur (sera admin)
-      const userCount = await User.countDocuments();
-      const role = userCount === 0 ? 'admin' : 'user';
+      // Vérifier si un admin existe déjà
+      const adminCount = await User.countDocuments({ role: 'admin' });
+      const role = adminCount === 0 ? 'admin' : 'user';
 
-      // Si ce n'est pas le premier utilisateur, refuser (seules les invitations sont autorisées)
+      // Si un admin existe déjà, refuser (seules les invitations sont autorisées)
       if (role === 'user') {
         res.status(403).json({ 
           error: 'L\'inscription directe est désactivée. Vous devez être invité par un administrateur.' 
@@ -142,6 +142,14 @@ router.post(
       if (!isMatch) {
         res.status(401).json({ error: 'Email ou mot de passe incorrect' });
         return;
+      }
+
+      if (user.role !== 'admin') {
+        const adminCount = await User.countDocuments({ role: 'admin' });
+        if (adminCount === 0) {
+          user.role = 'admin';
+          await user.save();
+        }
       }
 
       if (!jwtSecret) {
