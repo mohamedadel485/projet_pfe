@@ -13,9 +13,6 @@ export interface IMonitor extends Document {
   sharedWith: mongoose.Types.ObjectId[];
   httpMethod: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'HEAD';
   expectedStatusCode: number;
-  headers?: Record<string, string>;
-  body?: string;
-  port?: number;
   domainExpiryMode?: 'enabled' | 'disabled';
   domainExpiryAt?: Date;
   domainExpiryCheckedAt?: Date;
@@ -24,6 +21,9 @@ export interface IMonitor extends Document {
   sslExpiryAt?: Date;
   sslExpiryCheckedAt?: Date;
   sslExpiryError?: string;
+  headers?: Record<string, string>;
+  body?: string;
+  port?: number;
   lastChecked?: Date;
   lastStatus?: 'up' | 'down';
   uptime: number; // pourcentage
@@ -95,16 +95,6 @@ const monitorSchema = new Schema<IMonitor>(
       type: Number,
       default: 200,
     },
-    headers: {
-      type: Map,
-      of: String,
-    },
-    body: {
-      type: String,
-    },
-    port: {
-      type: Number,
-    },
     domainExpiryMode: {
       type: String,
       enum: ['enabled', 'disabled'],
@@ -132,6 +122,16 @@ const monitorSchema = new Schema<IMonitor>(
     },
     sslExpiryError: {
       type: String,
+    },
+    headers: {
+      type: Map,
+      of: String,
+    },
+    body: {
+      type: String,
+    },
+    port: {
+      type: Number,
     },
     lastChecked: {
       type: Date,

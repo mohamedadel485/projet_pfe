@@ -1,4 +1,5 @@
 import axios from 'axios';
+import https from 'https';
 import net from 'net';
 import tls from 'tls';
 import Monitor, { IMonitor } from '../models/Monitor';
@@ -12,6 +13,148 @@ interface CheckResult {
   statusCode?: number;
   errorMessage?: string;
 }
+
+interface ExpiryCheckResult {
+  expiryAt?: Date;
+  error?: string;
+}
+
+const EXPIRY_CHECK_INTERVAL_MS = 12 * 60 * 60 * 1000;
+const RDAP_TIMEOUT_MS = 8000;
+const TLS_TIMEOUT_MS = 8000;
+
+const isExpiredOrMissing = (checkedAt?: Date | null): boolean => {
+  if (!checkedAt) return true;
+  const elapsed = Date.now() - checkedAt.getTime();
+  return elapsed >= EXPIRY_CHECK_INTERVAL_MS;
+};
+
+const parseMonitorUrl = (rawUrl: string): URL | null => {
+  try {
+    return new URL(rawUrl);
+  } catch {
+    return null;
+  }
+};
+
+const buildDomainCandidates = (host: string): string[] => {
+  const cleaned = host.replace(/\.$/, '').toLowerCase();
+  const parts = cleaned.split('.').filter(Boolean);
+  if (parts.length <= 1) {
+    return cleaned ? [cleaned] : [];
+  }
+
+  const candidates: string[] = [];
+  for (let index = 0; index < parts.length - 1; index += 1) {
+    const candidate = parts.slice(index).join('.');
+    if (candidate) candidates.push(candidate);
+  }
+
+  return candidates;
+};
+
+const extractRdapExpiry = (payload: Record<string, unknown>): Date | null => {
+  const events = payload.events;
+  if (!Array.isArray(events)) return null;
+
+  for (const event of events) {
+    if (!event || typeof event !== 'object') continue;
+    const record = event as Record<string, unknown>;
+    const action = typeof record.eventAction === 'string' ? record.eventAction.toLowerCase() : '';
+    if (!action.includes('expir')) continue;
+    const eventDate = typeof record.eventDate === 'string' ? record.eventDate : '';
+    const parsed = Date.parse(eventDate);
+    if (!Number.isNaN(parsed)) {
+      return new Date(parsed);
+    }
+  }
+
+  return null;
+};
+
+const fetchRdapPayload = (domain: string): Promise<{ statusCode: number; payload?: Record<string, unknown> }> => {
+  const url = `https://rdap.org/domain/${encodeURIComponent(domain)}`;
+  return new Promise((resolve, reject) => {
+    const request = https.get(
+      url,
+      { headers: { Accept: 'application/rdap+json, application/json' } },
+      (response) => {
+        const statusCode = response.statusCode ?? 0;
+        let raw = '';
+        response.setEncoding('utf8');
+        response.on('data', (chunk) => {
+          raw += chunk;
+        });
+        response.on('end', () => {
+          if (statusCode !== 200) {
+            resolve({ statusCode });
+            return;
+          }
+
+          try {
+            const parsed = JSON.parse(raw) as Record<string, unknown>;
+            resolve({ statusCode, payload: parsed });
+          } catch (error) {
+            reject(new Error('Reponse RDAP invalide'));
+          }
+        });
+      }
+    );
+
+    request.on('error', (error) => reject(error));
+    request.setTimeout(RDAP_TIMEOUT_MS, () => {
+      request.destroy(new Error('Timeout RDAP'));
+    });
+  });
+};
+
+const fetchSslExpiry = (host: string, port: number): Promise<Date> =>
+  new Promise((resolve, reject) => {
+    let settled = false;
+    const finish = (err?: Error, expiry?: Date) => {
+      if (settled) return;
+      settled = true;
+      if (err) {
+        reject(err);
+        return;
+      }
+      if (!expiry) {
+        reject(new Error('Certificat SSL introuvable'));
+        return;
+      }
+      resolve(expiry);
+    };
+
+    const socket = tls.connect(
+      {
+        host,
+        port,
+        servername: host,
+        rejectUnauthorized: false,
+      },
+      () => {
+        const cert = socket.getPeerCertificate();
+        const validTo = typeof cert?.valid_to === 'string' ? cert.valid_to : '';
+        const parsed = Date.parse(validTo);
+        socket.end();
+        if (Number.isNaN(parsed)) {
+          finish(new Error('Date SSL invalide'));
+          return;
+        }
+        finish(undefined, new Date(parsed));
+      }
+    );
+
+    socket.setTimeout(TLS_TIMEOUT_MS);
+    socket.on('timeout', () => {
+      socket.destroy();
+      finish(new Error('Timeout TLS'));
+    });
+    socket.on('error', (error: Error) => {
+      socket.destroy();
+      finish(error);
+    });
+  });
 
 export class MonitorService {
   /**
@@ -158,6 +301,101 @@ export class MonitorService {
     });
   }
 
+  private async checkSslExpiry(monitor: IMonitor, parsedUrl: URL | null): Promise<ExpiryCheckResult> {
+    if (!parsedUrl) {
+      return { error: 'URL invalide' };
+    }
+
+    const isSecure = parsedUrl.protocol === 'https:' || parsedUrl.protocol === 'wss:';
+    if (!isSecure) {
+      return { error: 'TLS non applicable pour ce protocole' };
+    }
+
+    const host = parsedUrl.hostname;
+    if (!host) {
+      return { error: 'Hote introuvable' };
+    }
+
+    const explicitPort = monitor.port ?? (parsedUrl.port ? Number(parsedUrl.port) : undefined);
+    const resolvedPort = Number.isFinite(explicitPort) && Number(explicitPort) > 0 ? Number(explicitPort) : 443;
+
+    try {
+      const expiryAt = await fetchSslExpiry(host, resolvedPort);
+      return { expiryAt };
+    } catch (error) {
+      return { error: (error as Error)?.message || 'Erreur verification SSL' };
+    }
+  }
+
+  private async checkDomainExpiry(monitor: IMonitor, parsedUrl: URL | null): Promise<ExpiryCheckResult> {
+    if (!parsedUrl) {
+      return { error: 'URL invalide' };
+    }
+
+    const host = parsedUrl.hostname;
+    if (!host) {
+      return { error: 'Hote introuvable' };
+    }
+
+    if (host === 'localhost' || net.isIP(host) !== 0) {
+      return { error: 'Domaine non valide pour WHOIS' };
+    }
+
+    const candidates = buildDomainCandidates(host);
+    if (candidates.length === 0) {
+      return { error: 'Domaine invalide' };
+    }
+
+    for (const candidate of candidates) {
+      try {
+        const { statusCode, payload } = await fetchRdapPayload(candidate);
+        if (statusCode === 404) {
+          continue;
+        }
+        if (statusCode !== 200) {
+          return { error: `RDAP ${statusCode}` };
+        }
+        if (payload) {
+          const expiry = extractRdapExpiry(payload);
+          if (expiry) {
+            return { expiryAt: expiry };
+          }
+          return { error: 'Date d\u0027expiration introuvable' };
+        }
+      } catch (error) {
+        return { error: (error as Error)?.message || 'Erreur WHOIS/RDAP' };
+      }
+    }
+
+    return { error: 'Domaine introuvable via RDAP' };
+  }
+
+  async refreshSecurityChecks(monitor: IMonitor): Promise<void> {
+    const now = new Date();
+    const parsedUrl = parseMonitorUrl(monitor.url);
+    let hasUpdates = false;
+
+    if (monitor.sslExpiryMode === 'enabled' && isExpiredOrMissing(monitor.sslExpiryCheckedAt)) {
+      const result = await this.checkSslExpiry(monitor, parsedUrl);
+      monitor.sslExpiryCheckedAt = now;
+      monitor.sslExpiryAt = result.expiryAt;
+      monitor.sslExpiryError = result.expiryAt ? undefined : result.error;
+      hasUpdates = true;
+    }
+
+    if (monitor.domainExpiryMode === 'enabled' && isExpiredOrMissing(monitor.domainExpiryCheckedAt)) {
+      const result = await this.checkDomainExpiry(monitor, parsedUrl);
+      monitor.domainExpiryCheckedAt = now;
+      monitor.domainExpiryAt = result.expiryAt;
+      monitor.domainExpiryError = result.expiryAt ? undefined : result.error;
+      hasUpdates = true;
+    }
+
+    if (hasUpdates) {
+      await monitor.save();
+    }
+  }
+
   /**
    * Enregistre le résultat d'une vérification et met à jour le monitor
    */
@@ -226,6 +464,11 @@ export class MonitorService {
         try {
           const result = await this.checkMonitor(monitor);
           await this.logCheckResult(monitor, result);
+          try {
+            await this.refreshSecurityChecks(monitor);
+          } catch (error) {
+            console.warn(`Erreur verification SSL/WHOIS pour ${monitor.name}:`, error);
+          }
           
           console.log(`Monitor "${monitor.name}" - Status: ${result.status}, Response: ${result.responseTime}ms`);
         } catch (error) {

@@ -8,6 +8,7 @@ import Invitation from '../models/Invitation';
 import Monitor from '../models/Monitor';
 import emailService from '../services/emailService';
 import { authenticate, AuthRequest } from '../middleware/auth';
+import { buildAuthCookieClearOptions, buildAuthCookieOptions, getAuthCookieName } from '../config/auth';
 
 const router = Router();
 const jwtSecret = process.env.JWT_SECRET as string;
@@ -20,6 +21,15 @@ const generatePasswordResetCode = (): string => {
   const min = 10 ** (PASSWORD_RESET_CODE_LENGTH - 1);
   const max = 10 ** PASSWORD_RESET_CODE_LENGTH;
   return String(crypto.randomInt(min, max));
+};
+
+const parseRememberMe = (value: unknown): boolean => {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (['false', '0', 'no', 'n', 'off'].includes(normalized)) return false;
+  }
+  return true;
 };
 
 /**
@@ -45,7 +55,13 @@ router.post(
         return;
       }
 
-      const { email, password, name } = req.body;
+      const { email, password, name, rememberMe: rawRememberMe } = req.body as {
+        email: string;
+        password: string;
+        name: string;
+        rememberMe?: unknown;
+      };
+      const rememberMe = parseRememberMe(rawRememberMe);
 
       // Vérifier si un utilisateur existe déjà
       const existingUser = await User.findOne({ email });
@@ -54,11 +70,11 @@ router.post(
         return;
       }
 
-      // Vérifier si un admin existe déjà
-      const adminCount = await User.countDocuments({ role: 'admin' });
-      const role = adminCount === 0 ? 'admin' : 'user';
+      // Vérifier si c'est le premier utilisateur (sera admin)
+      const userCount = await User.countDocuments();
+      const role = userCount === 0 ? 'admin' : 'user';
 
-      // Si un admin existe déjà, refuser (seules les invitations sont autorisées)
+      // Si ce n'est pas le premier utilisateur, refuser (seules les invitations sont autorisées)
       if (role === 'user') {
         res.status(403).json({ 
           error: 'L\'inscription directe est désactivée. Vous devez être invité par un administrateur.' 
@@ -85,6 +101,8 @@ router.post(
         jwtSecret,
         { expiresIn: jwtExpiresIn }
       );
+      const cookieName = getAuthCookieName();
+      res.cookie(cookieName, token, buildAuthCookieOptions({ rememberMe }));
 
       res.status(201).json({
         message: 'Compte administrateur créé avec succès',
@@ -125,7 +143,12 @@ router.post(
         return;
       }
 
-      const { email, password } = req.body;
+      const { email, password, rememberMe: rawRememberMe } = req.body as {
+        email: string;
+        password: string;
+        rememberMe?: unknown;
+      };
+      const rememberMe = parseRememberMe(rawRememberMe);
 
       const user = await User.findOne({ email });
       if (!user) {
@@ -144,14 +167,6 @@ router.post(
         return;
       }
 
-      if (user.role !== 'admin') {
-        const adminCount = await User.countDocuments({ role: 'admin' });
-        if (adminCount === 0) {
-          user.role = 'admin';
-          await user.save();
-        }
-      }
-
       if (!jwtSecret) {
         res.status(500).json({ error: 'Configuration serveur invalide: JWT_SECRET manquant' });
         return;
@@ -162,6 +177,8 @@ router.post(
         jwtSecret,
         { expiresIn: jwtExpiresIn }
       );
+      const cookieName = getAuthCookieName();
+      res.cookie(cookieName, token, buildAuthCookieOptions({ rememberMe }));
 
       res.json({
         message: 'Connexion réussie',
@@ -341,7 +358,12 @@ router.post(
         return;
       }
 
-      const { token, password } = req.body as { token: string; password: string };
+      const { token, password, rememberMe: rawRememberMe } = req.body as {
+        token: string;
+        password: string;
+        rememberMe?: unknown;
+      };
+      const rememberMe = parseRememberMe(rawRememberMe);
 
       const invitation = await Invitation.findOne({ 
         token, 
@@ -414,6 +436,8 @@ router.post(
         jwtSecret,
         { expiresIn: jwtExpiresIn }
       );
+      const cookieName = getAuthCookieName();
+      res.cookie(cookieName, authToken, buildAuthCookieOptions({ rememberMe }));
 
       res.status(201).json({
         message: 'Compte créé avec succès',
@@ -455,5 +479,15 @@ router.get(
     }
   }
 );
+
+/**
+ * POST /api/auth/logout
+ * Deconnexion (supprime le cookie)
+ */
+router.post('/logout', (_req: Request, res: Response): void => {
+  const cookieName = getAuthCookieName();
+  res.clearCookie(cookieName, buildAuthCookieClearOptions());
+  res.json({ message: 'Deconnexion reussie' });
+});
 
 export default router;

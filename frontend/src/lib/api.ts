@@ -1,27 +1,37 @@
-const rawApiBaseUrl = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim();
-const rawBackendProxyTarget = (import.meta.env.VITE_BACKEND_PROXY_TARGET as string | undefined)?.trim();
-const hasExplicitBackendProxyTarget =
-  typeof rawBackendProxyTarget === 'string' && rawBackendProxyTarget.trim() !== '';
+const rawApiBaseUrl = (
+  import.meta.env.VITE_API_BASE_URL as string | undefined
+)?.trim();
+const rawBackendProxyTarget = (
+  import.meta.env.VITE_BACKEND_PROXY_TARGET as string | undefined
+)?.trim();
 
-const API_BASE_URL = rawApiBaseUrl || '/api';
-const BACKEND_PROXY_TARGET = rawBackendProxyTarget || 'http://localhost:3001';
-const LOCAL_DIRECT_BACKEND_FALLBACKS = [
-  'http://localhost:3001',
-  'http://localhost:3002',
-  'http://localhost:3003',
-  'http://localhost:3004',
-];
+const API_BASE_URL = rawApiBaseUrl || "/api";
+const BACKEND_PROXY_TARGET = rawBackendProxyTarget || "http://localhost:3001";
+const LOCAL_DIRECT_BACKEND_FALLBACKS = Array.from(
+  new Set(
+    [
+      BACKEND_PROXY_TARGET,
+      "http://localhost:3001",
+      "http://127.0.0.1:3001",
+      "http://localhost:3002",
+      "http://127.0.0.1:3002",
+      "http://localhost:3003",
+      "http://127.0.0.1:3003",
+      "http://localhost:3004",
+      "http://127.0.0.1:3004",
+    ].filter((target) => target.trim() !== ""),
+  ),
+);
 
-const isBrowser = typeof window !== 'undefined';
+const isBrowser = typeof window !== "undefined";
 const isHttpUrl = (value: string): boolean => /^https?:\/\//i.test(value);
-const isLocalhostRuntime = (): boolean =>
-  isBrowser &&
-  (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
 
-const AUTH_LOCAL_STORAGE_KEY = 'uptimewarden_auth_token';
-const AUTH_SESSION_STORAGE_KEY = 'uptimewarden_auth_session_token';
+const AUTH_LOCAL_STORAGE_KEY = "uptimewarden_auth_token";
+const AUTH_SESSION_STORAGE_KEY = "uptimewarden_auth_session_token";
+export const COOKIE_AUTH_SENTINEL = "__uptimewarden_cookie_session__";
+const DEFAULT_REQUEST_TIMEOUT_MS = 5000;
 
-export type UserRole = 'admin' | 'user';
+export type UserRole = "admin" | "user";
 
 export interface AuthUser {
   id: string;
@@ -40,19 +50,19 @@ export interface BackendMonitor {
   _id: string;
   name: string;
   url: string;
-  type: 'http' | 'https' | 'ws' | 'wss';
+  type: "http" | "https" | "ws" | "wss";
   interval: number;
   timeout: number;
-  httpMethod: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'HEAD';
+  httpMethod: "GET" | "POST" | "PUT" | "DELETE" | "HEAD";
   expectedStatusCode: number;
-  status: 'up' | 'down' | 'paused' | 'pending';
+  status: "up" | "down" | "paused" | "pending";
   uptime: number;
   responseTime: number;
-  domainExpiryMode?: 'enabled' | 'disabled';
+  domainExpiryMode?: "enabled" | "disabled";
   domainExpiryAt?: string;
   domainExpiryCheckedAt?: string;
   domainExpiryError?: string;
-  sslExpiryMode?: 'enabled' | 'disabled';
+  sslExpiryMode?: "enabled" | "disabled";
   sslExpiryAt?: string;
   sslExpiryCheckedAt?: string;
   sslExpiryError?: string;
@@ -61,8 +71,8 @@ export interface BackendMonitor {
   updatedAt: string;
 }
 
-export type IntegrationProvider = 'webhook' | 'slack' | 'telegram';
-export type IntegrationEvent = 'up' | 'down';
+export type IntegrationProvider = "webhook" | "slack" | "telegram";
+export type IntegrationEvent = "up" | "down";
 
 export interface BackendIntegration {
   _id: string;
@@ -84,14 +94,19 @@ export interface IntegrationsListResponse {
   integrations: BackendIntegration[];
 }
 
-export type BackendMaintenanceStatus = 'scheduled' | 'ongoing' | 'paused' | 'completed' | 'cancelled';
+export type BackendMaintenanceStatus =
+  | "scheduled"
+  | "ongoing"
+  | "paused"
+  | "completed"
+  | "cancelled";
 
 export interface BackendMaintenanceMonitor {
   _id: string;
   name: string;
   url: string;
-  type: 'http' | 'https' | 'ws' | 'wss';
-  status: 'up' | 'down' | 'paused' | 'pending';
+  type: "http" | "https" | "ws" | "wss";
+  status: "up" | "down" | "paused" | "pending";
 }
 
 export interface BackendMaintenance {
@@ -114,14 +129,14 @@ export interface BackendIncidentMonitor {
   _id: string;
   name: string;
   url: string;
-  type: 'http' | 'https' | 'ws' | 'wss';
+  type: "http" | "https" | "ws" | "wss";
   expectedStatusCode: number;
 }
 
 export interface BackendIncident {
   _id: string;
   monitor: BackendIncidentMonitor | null;
-  status: 'up' | 'down';
+  status: "up" | "down";
   responseTime: number;
   statusCode?: number;
   errorMessage?: string;
@@ -144,7 +159,7 @@ export interface IncidentListResponse {
 export interface BackendMonitorLog {
   _id: string;
   monitor: string;
-  status: 'up' | 'down';
+  status: "up" | "down";
   responseTime: number;
   statusCode?: number;
   errorMessage?: string;
@@ -164,23 +179,23 @@ export interface MonitorLogsResponse {
 export interface CreateMonitorInput {
   name: string;
   url: string;
-  type: 'http' | 'https' | 'ws' | 'wss';
+  type: "http" | "https" | "ws" | "wss";
   interval?: number;
   timeout?: number;
-  httpMethod?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'HEAD';
-  domainExpiryMode?: 'enabled' | 'disabled';
-  sslExpiryMode?: 'enabled' | 'disabled';
+  httpMethod?: "GET" | "POST" | "PUT" | "DELETE" | "HEAD";
+  domainExpiryMode?: "enabled" | "disabled";
+  sslExpiryMode?: "enabled" | "disabled";
 }
 
 export interface UpdateMonitorInput {
   name?: string;
   url?: string;
-  type?: 'http' | 'https' | 'ws' | 'wss';
+  type?: "http" | "https" | "ws" | "wss";
   interval?: number;
   timeout?: number;
-  httpMethod?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'HEAD';
-  domainExpiryMode?: 'enabled' | 'disabled';
-  sslExpiryMode?: 'enabled' | 'disabled';
+  httpMethod?: "GET" | "POST" | "PUT" | "DELETE" | "HEAD";
+  domainExpiryMode?: "enabled" | "disabled";
+  sslExpiryMode?: "enabled" | "disabled";
 }
 
 export interface CreateIntegrationInput {
@@ -216,7 +231,7 @@ interface InvitationListResponse {
     name?: string;
     email: string;
     monitorIds?: string[];
-    status: 'pending' | 'accepted' | 'expired';
+    status: "pending" | "accepted" | "expired";
     expiresAt: string;
     createdAt: string;
   }>;
@@ -229,7 +244,7 @@ interface InvitationCreateResponse {
     name: string;
     email: string;
     monitorIds?: string[];
-    status: 'pending' | 'accepted' | 'expired';
+    status: "pending" | "accepted" | "expired";
     expiresAt: string;
     createdAt: string;
   };
@@ -250,7 +265,7 @@ interface AuthMeResponse {
 
 interface MessageResponse {
   message: string;
-  delivery?: 'smtp' | 'development-fallback';
+  delivery?: "smtp" | "development-fallback";
   details?: string;
 }
 
@@ -271,51 +286,42 @@ export class ApiError extends Error {
 
   constructor(message: string, status: number, payload: unknown) {
     super(message);
-    this.name = 'ApiError';
+    this.name = "ApiError";
     this.status = status;
     this.payload = payload;
   }
 }
 
-export const isApiError = (value: unknown): value is ApiError => value instanceof ApiError;
+export const isApiError = (value: unknown): value is ApiError =>
+  value instanceof ApiError;
 
-export const getStoredAuthToken = (): string | null => {
-  if (!isBrowser) return null;
-
-  return (
-    window.sessionStorage.getItem(AUTH_SESSION_STORAGE_KEY) ??
-    window.localStorage.getItem(AUTH_LOCAL_STORAGE_KEY)
-  );
-};
-
-export const saveAuthToken = (token: string, rememberMe: boolean): void => {
+const clearLegacyStoredAuthTokens = (): void => {
   if (!isBrowser) return;
 
   window.localStorage.removeItem(AUTH_LOCAL_STORAGE_KEY);
   window.sessionStorage.removeItem(AUTH_SESSION_STORAGE_KEY);
+};
 
-  if (rememberMe) {
-    window.localStorage.setItem(AUTH_LOCAL_STORAGE_KEY, token);
-    return;
-  }
+export const getStoredAuthToken = (): string | null => {
+  clearLegacyStoredAuthTokens();
+  return null;
+};
 
-  window.sessionStorage.setItem(AUTH_SESSION_STORAGE_KEY, token);
+export const saveAuthToken = (_token: string, _rememberMe: boolean): void => {
+  clearLegacyStoredAuthTokens();
 };
 
 export const clearStoredAuthToken = (): void => {
-  if (!isBrowser) return;
-
-  window.localStorage.removeItem(AUTH_LOCAL_STORAGE_KEY);
-  window.sessionStorage.removeItem(AUTH_SESSION_STORAGE_KEY);
+  clearLegacyStoredAuthTokens();
 };
 
 const getApiErrorMessage = (payload: unknown, fallback: string): string => {
-  if (payload && typeof payload === 'object') {
+  if (payload && typeof payload === "object") {
     const record = payload as Record<string, unknown>;
     const direct = record.error ?? record.message;
     const details = record.details;
-    if (typeof direct === 'string' && direct.trim() !== '') {
-      if (typeof details === 'string' && details.trim() !== '') {
+    if (typeof direct === "string" && direct.trim() !== "") {
+      if (typeof details === "string" && details.trim() !== "") {
         return `${direct} (${details})`;
       }
       return direct;
@@ -324,13 +330,13 @@ const getApiErrorMessage = (payload: unknown, fallback: string): string => {
     const validationErrors = record.errors;
     if (Array.isArray(validationErrors) && validationErrors.length > 0) {
       const firstError = validationErrors[0];
-      if (firstError && typeof firstError === 'object') {
+      if (firstError && typeof firstError === "object") {
         const details = firstError as Record<string, unknown>;
         const msg = details.msg;
         const path = details.path;
 
-        if (typeof msg === 'string' && msg.trim() !== '') {
-          if (typeof path === 'string' && path.trim() !== '') {
+        if (typeof msg === "string" && msg.trim() !== "") {
+          if (typeof path === "string" && path.trim() !== "") {
             return `${msg} (${path})`;
           }
           return msg;
@@ -345,7 +351,7 @@ const normalizeList = <T>(payload: unknown, key: string): T[] => {
   if (Array.isArray(payload)) {
     return payload as T[];
   }
-  if (payload && typeof payload === 'object') {
+  if (payload && typeof payload === "object") {
     const record = payload as Record<string, unknown>;
     const value = record[key];
     if (Array.isArray(value)) {
@@ -356,51 +362,88 @@ const normalizeList = <T>(payload: unknown, key: string): T[] => {
 };
 
 const buildEndpoint = (path: string): string => {
-  if (!path.startsWith('/')) {
-    return `${API_BASE_URL}/${path}`;
-  }
-
-  return `${API_BASE_URL}${path}`;
+  const sanitizedBase = API_BASE_URL.replace(/\/+$/, "");
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  return `${sanitizedBase}${normalizedPath}`;
 };
 
 const buildDirectBackendEndpoint = (target: string, path: string): string => {
-  const sanitizedTarget = target.replace(/\/+$/, '');
-  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
-  const apiPath = normalizedPath.startsWith('/api/') ? normalizedPath : `/api${normalizedPath}`;
+  const sanitizedTarget = target.replace(/\/+$/, "");
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  const apiPath = normalizedPath.startsWith("/api/")
+    ? normalizedPath
+    : `/api${normalizedPath}`;
   return `${sanitizedTarget}${apiPath}`;
 };
 
 interface RequestOptions {
-  method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+  method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   token?: string | null;
   body?: unknown;
   signal?: AbortSignal;
 }
 
-const request = async <T>(path: string, options?: RequestOptions): Promise<T> => {
-  const token = options?.token ?? getStoredAuthToken();
+const fetchWithTimeout = async (
+  input: RequestInfo | URL,
+  init: RequestInit,
+): Promise<Response> => {
+  const externalSignal = init.signal;
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => {
+    controller.abort();
+  }, DEFAULT_REQUEST_TIMEOUT_MS);
+
+  const abortFromExternalSignal = (): void => {
+    controller.abort();
+  };
+
+  if (externalSignal) {
+    if (externalSignal.aborted) {
+      controller.abort();
+    } else {
+      externalSignal.addEventListener("abort", abortFromExternalSignal, {
+        once: true,
+      });
+    }
+  }
+
+  try {
+    return await fetch(input, {
+      ...init,
+      signal: controller.signal,
+    });
+  } finally {
+    window.clearTimeout(timeoutId);
+    externalSignal?.removeEventListener("abort", abortFromExternalSignal);
+  }
+};
+
+const request = async <T>(
+  path: string,
+  options?: RequestOptions,
+): Promise<T> => {
+  const token =
+    options?.token && options.token !== COOKIE_AUTH_SENTINEL
+      ? options.token
+      : null;
   const hasBody = options?.body !== undefined;
   const endpoint = buildEndpoint(path);
-  const isMaintenancePath = path.startsWith('/maintenances');
-  const isAuthPath = path.startsWith('/auth/');
-  const isAuthRegisterPath = path.startsWith('/auth/register');
+  const isMaintenancePath = path.startsWith("/maintenances");
+  const isAuthPath = path.startsWith("/auth/");
+  const isAuthRegisterPath = path.startsWith("/auth/register");
   const isRelativeApiBase = !isHttpUrl(API_BASE_URL);
-  const directBackendTargets = isLocalhostRuntime()
-    ? Array.from(
-        new Set(
-          [BACKEND_PROXY_TARGET, ...LOCAL_DIRECT_BACKEND_FALLBACKS].filter((target) => isHttpUrl(target))
-        )
-      )
-    : hasExplicitBackendProxyTarget && isRelativeApiBase && isHttpUrl(BACKEND_PROXY_TARGET)
-      ? [BACKEND_PROXY_TARGET]
-      : [];
-  const canTryDirectBackend =
-    directBackendTargets.length > 0;
+  const directBackendTargets = LOCAL_DIRECT_BACKEND_FALLBACKS.filter(
+    (target) => buildDirectBackendEndpoint(target, path) !== endpoint,
+  );
+  const canTryDirectBackend = directBackendTargets.length > 0;
 
   const requestInit: RequestInit = {
-    method: options?.method ?? 'GET',
+    method: options?.method ?? "GET",
+    cache: "no-store",
+    credentials: "include",
     headers: {
-      ...(hasBody ? { 'Content-Type': 'application/json' } : {}),
+      ...(hasBody ? { "Content-Type": "application/json" } : {}),
+      "Cache-Control": "no-store",
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     body: hasBody ? JSON.stringify(options?.body) : undefined,
@@ -408,8 +451,8 @@ const request = async <T>(path: string, options?: RequestOptions): Promise<T> =>
   };
 
   const parseResponsePayload = async (response: Response): Promise<unknown> => {
-    const contentType = response.headers.get('content-type') ?? '';
-    if (contentType.includes('application/json')) {
+    const contentType = response.headers.get("content-type") ?? "";
+    if (contentType.includes("application/json")) {
       return response.json();
     }
 
@@ -420,20 +463,23 @@ const request = async <T>(path: string, options?: RequestOptions): Promise<T> =>
   let response: Response;
   let usedDirectBackend = false;
   try {
-    response = await fetch(endpoint, requestInit);
+    response = await fetchWithTimeout(endpoint, requestInit);
   } catch (primaryError) {
     if (!canTryDirectBackend) {
       throw new ApiError(
-        'Connexion impossible au serveur (Failed to fetch). Verifiez que frontend et backend sont demarres.',
+        "Connexion impossible au serveur (Failed to fetch). Verifiez que frontend et backend sont demarres.",
         0,
-        primaryError
+        primaryError,
       );
     }
 
     let directResponse: Response | null = null;
     for (const target of directBackendTargets) {
       try {
-        const candidateResponse = await fetch(buildDirectBackendEndpoint(target, path), requestInit);
+        const candidateResponse = await fetchWithTimeout(
+          buildDirectBackendEndpoint(target, path),
+          requestInit,
+        );
         directResponse = candidateResponse;
         usedDirectBackend = true;
 
@@ -447,9 +493,9 @@ const request = async <T>(path: string, options?: RequestOptions): Promise<T> =>
 
     if (!directResponse) {
       throw new ApiError(
-        `Connexion impossible au serveur (Failed to fetch). Verifiez le backend sur ${directBackendTargets[0] ?? BACKEND_PROXY_TARGET}.`,
+        "Connexion impossible au serveur (Failed to fetch). Verifiez que le backend est demarre sur localhost.",
         0,
-        primaryError
+        primaryError,
       );
     }
 
@@ -461,6 +507,7 @@ const request = async <T>(path: string, options?: RequestOptions): Promise<T> =>
   if (!response.ok) {
     const shouldRetryWithDirectBackend =
       !usedDirectBackend &&
+      isRelativeApiBase &&
       canTryDirectBackend &&
       (response.status >= 500 ||
         response.status === 405 ||
@@ -471,7 +518,10 @@ const request = async <T>(path: string, options?: RequestOptions): Promise<T> =>
     if (shouldRetryWithDirectBackend) {
       for (const target of directBackendTargets) {
         try {
-          const directResponse = await fetch(buildDirectBackendEndpoint(target, path), requestInit);
+          const directResponse = await fetchWithTimeout(
+            buildDirectBackendEndpoint(target, path),
+            requestInit,
+          );
           const directPayload = await parseResponsePayload(directResponse);
 
           if (directResponse.ok) {
@@ -494,125 +544,148 @@ const request = async <T>(path: string, options?: RequestOptions): Promise<T> =>
     throw new ApiError(
       getApiErrorMessage(payload, `Requete API echouee (${response.status})`),
       response.status,
-      payload
+      payload,
     );
   }
 
   return payload as T;
 };
 
-export const login = (email: string, password: string): Promise<AuthResponse> =>
-  request<AuthResponse>('/auth/login', {
-    method: 'POST',
-    body: { email, password },
+export const login = (
+  email: string,
+  password: string,
+  rememberMe = true,
+): Promise<AuthResponse> =>
+  request<AuthResponse>("/auth/login", {
+    method: "POST",
+    body: { email, password, rememberMe },
   });
 
 export const requestPasswordReset = (email: string): Promise<MessageResponse> =>
-  request<MessageResponse>('/auth/forgot-password', {
-    method: 'POST',
+  request<MessageResponse>("/auth/forgot-password", {
+    method: "POST",
     body: { email },
   });
 
 export const resetPasswordWithCode = (
   email: string,
   code: string,
-  newPassword: string
+  newPassword: string,
 ): Promise<MessageResponse> =>
-  request<MessageResponse>('/auth/reset-password', {
-    method: 'POST',
+  request<MessageResponse>("/auth/reset-password", {
+    method: "POST",
     body: { email, code, newPassword },
   });
 
 export const fetchMe = (token?: string): Promise<AuthMeResponse> =>
-  request<AuthMeResponse>('/auth/me', { token });
+  request<AuthMeResponse>("/auth/me", { token });
 
 export const acceptInvitation = (
   token: string,
   password: string,
-  name?: string
+  rememberMe = true,
+  name?: string,
 ): Promise<AuthResponse> =>
-  request<AuthResponse>('/auth/accept-invitation', {
-    method: 'POST',
-    body: name && name.trim() !== '' ? { token, password, name: name.trim() } : { token, password },
+  request<AuthResponse>("/auth/accept-invitation", {
+    method: "POST",
+    body:
+      name && name.trim() !== ""
+        ? { token, password, rememberMe, name: name.trim() }
+        : { token, password, rememberMe },
   });
 
-export const fetchMonitors = async (token?: string): Promise<MonitorListResponse> => {
-  const payload = await request<unknown>('/monitors', { token });
-  return { monitors: normalizeList<BackendMonitor>(payload, 'monitors') };
+export const logout = (): Promise<MessageResponse> =>
+  request<MessageResponse>("/auth/logout", {
+    method: "POST",
+  });
+
+export const fetchMonitors = async (
+  token?: string,
+): Promise<MonitorListResponse> => {
+  const payload = await request<unknown>("/monitors", { token });
+  return { monitors: normalizeList<BackendMonitor>(payload, "monitors") };
 };
 
-export const fetchIntegrations = (token?: string): Promise<IntegrationsListResponse> =>
-  request<IntegrationsListResponse>('/integrations', { token });
+export const fetchIntegrations = (
+  token?: string,
+): Promise<IntegrationsListResponse> =>
+  request<IntegrationsListResponse>("/integrations", { token });
 
 export const fetchMaintenances = (
   token?: string,
-  options?: { status?: BackendMaintenanceStatus; monitorId?: string; search?: string }
+  options?: {
+    status?: BackendMaintenanceStatus;
+    monitorId?: string;
+    search?: string;
+  },
 ): Promise<MaintenanceListResponse> => {
   const params = new URLSearchParams();
 
   if (options?.status) {
-    params.set('status', options.status);
+    params.set("status", options.status);
   }
   if (options?.monitorId) {
-    params.set('monitorId', options.monitorId);
+    params.set("monitorId", options.monitorId);
   }
-  if (options?.search && options.search.trim() !== '') {
-    params.set('search', options.search.trim());
+  if (options?.search && options.search.trim() !== "") {
+    params.set("search", options.search.trim());
   }
 
   const query = params.toString();
-  const path = query ? `/maintenances?${query}` : '/maintenances';
+  const path = query ? `/maintenances?${query}` : "/maintenances";
   return request<unknown>(path, { token }).then((payload) => ({
-    maintenances: normalizeList<BackendMaintenance>(payload, 'maintenances'),
+    maintenances: normalizeList<BackendMaintenance>(payload, "maintenances"),
   }));
 };
 
 export const fetchIncidents = (
   token?: string,
-  options?: { limit?: number; page?: number; status?: 'up' | 'down' }
+  options?: { limit?: number; page?: number; status?: "up" | "down" },
 ): Promise<IncidentListResponse> => {
   const params = new URLSearchParams();
 
   if (options?.limit && Number.isFinite(options.limit)) {
-    params.set('limit', String(options.limit));
+    params.set("limit", String(options.limit));
   }
   if (options?.page && Number.isFinite(options.page)) {
-    params.set('page', String(options.page));
+    params.set("page", String(options.page));
   }
   if (options?.status) {
-    params.set('status', options.status);
+    params.set("status", options.status);
   }
 
   const query = params.toString();
-  const path = query ? `/incidents?${query}` : '/incidents';
+  const path = query ? `/incidents?${query}` : "/incidents";
   return request<IncidentListResponse>(path, { token });
 };
 
 export const fetchMonitorLogs = (
   monitorId: string,
   token?: string,
-  options?: { limit?: number; page?: number }
+  options?: { limit?: number; page?: number },
 ): Promise<MonitorLogsResponse> => {
   const params = new URLSearchParams();
 
   if (options?.limit && Number.isFinite(options.limit)) {
-    params.set('limit', String(options.limit));
+    params.set("limit", String(options.limit));
   }
   if (options?.page && Number.isFinite(options.page)) {
-    params.set('page', String(options.page));
+    params.set("page", String(options.page));
   }
 
   const query = params.toString();
-  const path = query ? `/monitors/${monitorId}/logs?${query}` : `/monitors/${monitorId}/logs`;
+  const path = query
+    ? `/monitors/${monitorId}/logs?${query}`
+    : `/monitors/${monitorId}/logs`;
   return request<MonitorLogsResponse>(path, { token });
 };
 
 export const createMonitor = (
   monitor: CreateMonitorInput,
-  token?: string
+  token?: string,
 ): Promise<{ message: string; monitor: BackendMonitor }> =>
-  request<{ message: string; monitor: BackendMonitor }>('/monitors', {
-    method: 'POST',
+  request<{ message: string; monitor: BackendMonitor }>("/monitors", {
+    method: "POST",
     token,
     body: monitor,
   });
@@ -620,160 +693,214 @@ export const createMonitor = (
 export const updateMonitor = (
   monitorId: string,
   payload: UpdateMonitorInput,
-  token?: string
+  token?: string,
 ): Promise<{ message: string; monitor: BackendMonitor }> =>
-  request<{ message: string; monitor: BackendMonitor }>(`/monitors/${monitorId}`, {
-    method: 'PUT',
-    token,
-    body: payload,
-  });
+  request<{ message: string; monitor: BackendMonitor }>(
+    `/monitors/${monitorId}`,
+    {
+      method: "PUT",
+      token,
+      body: payload,
+    },
+  );
 
 export const createIntegration = (
   input: CreateIntegrationInput,
-  token?: string
+  token?: string,
 ): Promise<{ message: string; integration: BackendIntegration }> =>
-  request<{ message: string; integration: BackendIntegration }>('/integrations', {
-    method: 'POST',
-    token,
-    body: input,
-  });
+  request<{ message: string; integration: BackendIntegration }>(
+    "/integrations",
+    {
+      method: "POST",
+      token,
+      body: input,
+    },
+  );
 
 export const deleteIntegration = (
   integrationId: string,
-  token?: string
+  token?: string,
 ): Promise<{ message: string }> =>
   request<{ message: string }>(`/integrations/${integrationId}`, {
-    method: 'DELETE',
+    method: "DELETE",
     token,
   });
 
 export const pauseMonitor = (
   monitorId: string,
-  token?: string
+  token?: string,
 ): Promise<{ message: string; monitor: BackendMonitor }> =>
-  request<{ message: string; monitor: BackendMonitor }>(`/monitors/${monitorId}/pause`, {
-    method: 'POST',
-    token,
-  });
+  request<{ message: string; monitor: BackendMonitor }>(
+    `/monitors/${monitorId}/pause`,
+    {
+      method: "POST",
+      token,
+    },
+  );
 
 export const resumeMonitor = (
   monitorId: string,
-  token?: string
+  token?: string,
 ): Promise<{ message: string; monitor: BackendMonitor }> =>
-  request<{ message: string; monitor: BackendMonitor }>(`/monitors/${monitorId}/resume`, {
-    method: 'POST',
-    token,
-  });
+  request<{ message: string; monitor: BackendMonitor }>(
+    `/monitors/${monitorId}/resume`,
+    {
+      method: "POST",
+      token,
+    },
+  );
 
 export const checkMonitor = (
   monitorId: string,
-  token?: string
+  token?: string,
 ): Promise<{
   message: string;
-  result: { status: 'up' | 'down'; responseTime: number; statusCode?: number; errorMessage?: string };
+  result: {
+    status: "up" | "down";
+    responseTime: number;
+    statusCode?: number;
+    errorMessage?: string;
+  };
   monitor: BackendMonitor;
 }> =>
   request<{
     message: string;
-    result: { status: 'up' | 'down'; responseTime: number; statusCode?: number; errorMessage?: string };
+    result: {
+      status: "up" | "down";
+      responseTime: number;
+      statusCode?: number;
+      errorMessage?: string;
+    };
     monitor: BackendMonitor;
   }>(`/monitors/${monitorId}/check`, {
-    method: 'POST',
+    method: "POST",
     token,
   });
 
-export const deleteMonitor = (monitorId: string, token?: string): Promise<{ message: string }> =>
+export const deleteMonitor = (
+  monitorId: string,
+  token?: string,
+): Promise<{ message: string }> =>
   request<{ message: string }>(`/monitors/${monitorId}`, {
-    method: 'DELETE',
+    method: "DELETE",
     token,
   });
 
 export const createMaintenance = (
   input: CreateMaintenanceInput,
-  token?: string
+  token?: string,
 ): Promise<{ message: string; maintenance: BackendMaintenance }> =>
-  request<{ message: string; maintenance: BackendMaintenance }>('/maintenances', {
-    method: 'POST',
-    token,
-    body: input,
-  });
+  request<{ message: string; maintenance: BackendMaintenance }>(
+    "/maintenances",
+    {
+      method: "POST",
+      token,
+      body: input,
+    },
+  );
 
 export const startMaintenance = (
   maintenanceId: string,
-  token?: string
+  token?: string,
 ): Promise<{ message: string; maintenance: BackendMaintenance }> =>
-  request<{ message: string; maintenance: BackendMaintenance }>(`/maintenances/${maintenanceId}/start`, {
-    method: 'POST',
-    token,
-  });
+  request<{ message: string; maintenance: BackendMaintenance }>(
+    `/maintenances/${maintenanceId}/start`,
+    {
+      method: "POST",
+      token,
+    },
+  );
 
 export const pauseMaintenance = (
   maintenanceId: string,
-  token?: string
+  token?: string,
 ): Promise<{ message: string; maintenance: BackendMaintenance }> =>
-  request<{ message: string; maintenance: BackendMaintenance }>(`/maintenances/${maintenanceId}/pause`, {
-    method: 'POST',
-    token,
-  });
+  request<{ message: string; maintenance: BackendMaintenance }>(
+    `/maintenances/${maintenanceId}/pause`,
+    {
+      method: "POST",
+      token,
+    },
+  );
 
 export const resumeMaintenance = (
   maintenanceId: string,
-  token?: string
+  token?: string,
 ): Promise<{ message: string; maintenance: BackendMaintenance }> =>
-  request<{ message: string; maintenance: BackendMaintenance }>(`/maintenances/${maintenanceId}/resume`, {
-    method: 'POST',
-    token,
-  });
+  request<{ message: string; maintenance: BackendMaintenance }>(
+    `/maintenances/${maintenanceId}/resume`,
+    {
+      method: "POST",
+      token,
+    },
+  );
 
 export const deleteMaintenance = (
   maintenanceId: string,
-  token?: string
+  token?: string,
 ): Promise<{ message: string }> =>
   request<{ message: string }>(`/maintenances/${maintenanceId}`, {
-    method: 'DELETE',
+    method: "DELETE",
     token,
   });
 
 export const fetchUsers = (token?: string): Promise<UserListResponse> =>
-  request<UserListResponse>('/users', { token });
+  request<UserListResponse>("/users", { token });
 
-export const fetchInvitations = (token?: string): Promise<InvitationListResponse> =>
-  request<InvitationListResponse>('/invitations', { token });
+export const fetchInvitations = (
+  token?: string,
+): Promise<InvitationListResponse> =>
+  request<InvitationListResponse>("/invitations", { token });
 
-export const fetchInvitationByToken = (token: string): Promise<InvitationByTokenResponse> =>
-  request<InvitationByTokenResponse>(`/invitations/${encodeURIComponent(token)}`);
+export const fetchInvitationByToken = (
+  token: string,
+): Promise<InvitationByTokenResponse> =>
+  request<InvitationByTokenResponse>(
+    `/invitations/${encodeURIComponent(token)}`,
+  );
 
 export const createInvitation = (
   name: string,
   email: string,
   monitorIds: string[] = [],
-  token?: string
+  token?: string,
 ): Promise<InvitationCreateResponse> =>
-  request<InvitationCreateResponse>('/invitations', {
-    method: 'POST',
+  request<InvitationCreateResponse>("/invitations", {
+    method: "POST",
     token,
     body: { name, email, monitorIds },
   });
 
-export const deleteUser = (userId: string, token?: string): Promise<{ message: string }> =>
+export const deleteUser = (
+  userId: string,
+  token?: string,
+): Promise<{ message: string }> =>
   request<{ message: string }>(`/users/${userId}`, {
-    method: 'DELETE',
+    method: "DELETE",
     token,
   });
 
 export const updateUser = (
   userId: string,
-  payload: Partial<{ role: UserRole; isActive: boolean; name: string; email: string }>,
-  token?: string
+  payload: Partial<{
+    role: UserRole;
+    isActive: boolean;
+    name: string;
+    email: string;
+  }>,
+  token?: string,
 ): Promise<UserMutationResponse> =>
   request<UserMutationResponse>(`/users/${userId}`, {
-    method: 'PUT',
+    method: "PUT",
     token,
     body: payload,
   });
 
-export const deleteInvitation = (invitationId: string, token?: string): Promise<{ message: string }> =>
+export const deleteInvitation = (
+  invitationId: string,
+  token?: string,
+): Promise<{ message: string }> =>
   request<{ message: string }>(`/invitations/${invitationId}`, {
-    method: 'DELETE',
+    method: "DELETE",
     token,
   });

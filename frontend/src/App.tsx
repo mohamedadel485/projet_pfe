@@ -22,12 +22,14 @@ import InviteTeamMemberPage from './pages/team-members/InviteTeamMemberPage';
 import TeamMembersManagePage from './pages/team-members/TeamMembersManagePage';
 import TeamMembersPage from './pages/team-members/TeamMembersPage';
 import {
+  COOKIE_AUTH_SENTINEL,
   clearStoredAuthToken,
   acceptInvitation,
   checkMonitor,
   createInvitation,
   createIntegration,
   createMonitor,
+  logout,
   updateMonitor,
   deleteInvitation,
   deleteMonitor,
@@ -38,7 +40,6 @@ import {
   fetchMe,
   fetchMonitors,
   fetchUsers,
-  getStoredAuthToken,
   isApiError,
   login,
   pauseMonitor,
@@ -179,9 +180,67 @@ const routeByMenuLabel: Record<MenuLabel, string> = {
   'Integrations & API': '/integrations-api',
 };
 
+const USER_CACHE_KEY = 'uptimewarden_cached_user';
+
+const readCachedUser = (): AuthUser | null => {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = window.localStorage.getItem(USER_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<AuthUser>;
+    if (!parsed || typeof parsed !== 'object') return null;
+    if (typeof parsed.id !== 'string' || typeof parsed.email !== 'string') return null;
+    if (parsed.role !== 'admin' && parsed.role !== 'user') return null;
+    const name = typeof parsed.name === 'string' ? parsed.name : parsed.email;
+    return {
+      id: parsed.id,
+      email: parsed.email,
+      name,
+      role: parsed.role,
+    };
+  } catch {
+    return null;
+  }
+};
+
+const writeCachedUser = (user: AuthUser | null): void => {
+  if (typeof window === 'undefined') return;
+  if (!user) {
+    window.localStorage.removeItem(USER_CACHE_KEY);
+    return;
+  }
+  window.localStorage.setItem(USER_CACHE_KEY, JSON.stringify(user));
+};
+
 const normalizePathname = (pathname: string): string => {
   if (!pathname || pathname === '/') return '/';
   return pathname.endsWith('/') ? pathname.slice(0, -1) : pathname;
+};
+
+const isPublicAuthPath = (pathname: string): boolean =>
+  pathname === '/login' ||
+  pathname === '/confirmation-code' ||
+  pathname === '/forgot-password' ||
+  pathname === '/accept-invitation';
+
+const getInvitationTokenFromSearch = (): string | null => {
+  if (typeof window === 'undefined') return null;
+  const token = new URLSearchParams(window.location.search).get('token');
+  if (!token) return null;
+  const trimmedToken = token.trim();
+  return trimmedToken === '' ? null : trimmedToken;
+};
+
+const buildAcceptInvitationPath = (token: string): string =>
+  `/accept-invitation?token=${encodeURIComponent(token)}`;
+
+const isInvitationAcceptanceLocation = (pathname: string): boolean => {
+  const normalizedPath = normalizePathname(pathname);
+  const invitationToken = getInvitationTokenFromSearch();
+  return Boolean(
+    invitationToken &&
+      (normalizedPath === '/accept-invitation' || normalizedPath === '/login')
+  );
 };
 
 const formatAppError = (error: unknown, fallback: string): string => {
@@ -330,8 +389,9 @@ function App() {
   const monitorSortMenuRef = useRef<HTMLDivElement | null>(null);
   const monitorTagMenuRef = useRef<HTMLDivElement | null>(null);
   const bulkActionsMenuRef = useRef<HTMLDivElement | null>(null);
-  const [authToken, setAuthToken] = useState<string | null>(() => getStoredAuthToken());
-  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
+  const [authToken, setAuthToken] = useState<string | null>(COOKIE_AUTH_SENTINEL);
+  const [isAuthBootstrapComplete, setIsAuthBootstrapComplete] = useState(false);
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(() => readCachedUser());
   const [monitorRows, setMonitorRows] = useState<MonitorRow[]>([]);
   const [isMonitorsLoading, setIsMonitorsLoading] = useState(false);
   const [monitorLoadError, setMonitorLoadError] = useState<string | null>(null);
@@ -490,16 +550,21 @@ function App() {
   const isStatusPagesPage = activeMenuLabel === 'Status pages';
   const isTeamMembersPage = activeMenuLabel === 'Team members';
   const isCurrentUserAdmin = currentUser?.role === 'admin';
-  const canCurrentUserInviteTeam = Boolean(authToken);
+  const canCurrentUserInviteTeam = Boolean(authToken && currentUser);
   const userInitials = useMemo(() => {
-    if (!currentUser?.name) return '??';
-    return currentUser.name
+    const label = currentUser?.name ?? currentUser?.email ?? '';
+    if (!label) return '';
+    return label
       .split(' ')
       .filter(Boolean)
       .slice(0, 2)
       .map((value) => value.charAt(0).toUpperCase())
       .join('');
   }, [currentUser]);
+  const isUserLoading = Boolean(authToken) && !currentUser && !isAuthBootstrapComplete;
+  const profileName = isUserLoading ? 'Loading...' : currentUser?.name || currentUser?.email || '';
+  const profileEmail =
+    !isUserLoading && currentUser?.email && currentUser?.name ? currentUser.email : null;
   const appShellClasses = [
     'app-shell',
     isIncidentsPage ? 'incidents-view' : '',
@@ -513,6 +578,7 @@ function App() {
   const applyRoute = useCallback((rawPathname: string) => {
     const pathname = normalizePathname(rawPathname);
     const segments = pathname.split('/').filter(Boolean);
+    const invitationToken = getInvitationTokenFromSearch();
 
     let nextMenuLabel: MenuLabel = 'Monitoring';
     let nextIntegrationsSubPage: IntegrationsSubPage = 'api';
@@ -527,7 +593,14 @@ function App() {
     let nextIsMonitorWizardOpen = false;
     let nextIsBulkUploadOpen = false;
 
-    if (pathname === '/login') {
+    if (pathname === '/login' && invitationToken) {
+      const canonicalInvitationPath = buildAcceptInvitationPath(invitationToken);
+      const currentAuthPath = `${pathname}${window.location.search}`;
+      if (currentAuthPath !== canonicalInvitationPath) {
+        window.history.replaceState({}, '', canonicalInvitationPath);
+      }
+      nextAuthRoute = 'accept-invitation';
+    } else if (pathname === '/login') {
       nextAuthRoute = 'login';
     } else if (pathname === '/confirmation-code') {
       nextAuthRoute = 'confirmation-code';
@@ -626,8 +699,9 @@ function App() {
     [applyRoute],
   );
 
-  const clearSessionAndRedirectToLogin = useCallback(() => {
+  const clearLocalSession = useCallback(() => {
     clearStoredAuthToken();
+    setIsAuthBootstrapComplete(true);
     setAuthToken(null);
     setCurrentUser(null);
     setMonitorRows([]);
@@ -637,9 +711,13 @@ function App() {
     setSelectedMonitorIds([]);
     setSelectedMonitorId(null);
     setEditingMonitorId(null);
+  }, []);
+
+  const clearSessionAndRedirectToLogin = useCallback(() => {
+    clearLocalSession();
     setPasswordResetContext(null);
     navigateTo('/login', { replace: true });
-  }, [navigateTo]);
+  }, [clearLocalSession, navigateTo]);
 
   const refreshMonitors = useCallback(
     async (token: string) => {
@@ -739,8 +817,9 @@ function App() {
   const handleSignIn = useCallback(
     async ({ email, password, rememberMe }: { email: string; password: string; rememberMe: boolean }) => {
       try {
-        const response = await login(email, password);
+        const response = await login(email, password, rememberMe);
         saveAuthToken(response.token, rememberMe);
+        setIsAuthBootstrapComplete(false);
         setAuthToken(response.token);
         setCurrentUser(response.user);
         setMonitorLoadError(null);
@@ -781,8 +860,9 @@ function App() {
           // Ignore: accept endpoint will return a clear error if token is invalid/expired.
         }
 
-        const response = await acceptInvitation(token, password, fallbackNameForLegacyApi);
+        const response = await acceptInvitation(token, password, rememberMe, fallbackNameForLegacyApi);
         saveAuthToken(response.token, rememberMe);
+        setIsAuthBootstrapComplete(false);
         setAuthToken(response.token);
         setCurrentUser(response.user);
         setMonitorLoadError(null);
@@ -966,7 +1046,12 @@ function App() {
       }
 
       try {
-        await updateMonitor(monitorId, payload, authToken);
+        const response = await updateMonitor(monitorId, payload, authToken);
+        setMonitorRows((prev) =>
+          prev.map((monitor) =>
+            monitor.id === monitorId ? mapBackendMonitorToRow(response.monitor) : monitor
+          )
+        );
         await refreshMonitors(authToken);
         navigateTo(`/monitoring/${monitorId}`);
         return null;
@@ -1132,16 +1217,27 @@ function App() {
   }, []);
 
   useEffect(() => {
-    const pathname = normalizePathname(window.location.pathname);
-    const isAuthPath =
-      pathname === '/login' ||
-      pathname === '/confirmation-code' ||
-      pathname === '/forgot-password' ||
-      pathname === '/accept-invitation';
+    clearStoredAuthToken();
+  }, []);
 
-    if (!authToken && !isAuthPath) {
+  useEffect(() => {
+    writeCachedUser(currentUser);
+  }, [currentUser]);
+
+  useEffect(() => {
+    const pathname = normalizePathname(window.location.pathname);
+    const isAuthPath = isPublicAuthPath(pathname);
+    const isInvitationAcceptancePath = isInvitationAcceptanceLocation(pathname);
+
+    if (!isAuthBootstrapComplete && authToken) {
+      applyRoute(pathname);
+    } else if (!authToken && !isAuthPath) {
       navigateTo('/login', { replace: true });
-    } else if (authToken && (pathname === '/' || isAuthPath)) {
+    } else if (
+      authToken &&
+      currentUser &&
+      (pathname === '/' || (isAuthPath && !isInvitationAcceptancePath))
+    ) {
       navigateTo('/monitoring', { replace: true });
     } else if (pathname === '/') {
       navigateTo('/login', { replace: true });
@@ -1155,7 +1251,7 @@ function App() {
 
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
-  }, [applyRoute, authToken, navigateTo]);
+  }, [applyRoute, authToken, currentUser, isAuthBootstrapComplete, navigateTo]);
 
   useEffect(() => {
     if (!currentUser || currentUser.role === 'admin') return;
@@ -1171,6 +1267,7 @@ function App() {
 
   useEffect(() => {
     if (!authToken) {
+      setIsAuthBootstrapComplete(true);
       setCurrentUser(null);
       setMonitorRows([]);
       setTeamMembers([]);
@@ -1179,23 +1276,54 @@ function App() {
     }
 
     let cancelled = false;
+    setIsAuthBootstrapComplete(false);
 
     const bootstrapSession = async () => {
+      const pathname = normalizePathname(window.location.pathname);
+      const isAuthPath = isPublicAuthPath(pathname);
+
       try {
         const meResponse = await fetchMe(authToken);
         if (cancelled) return;
+        if (
+          !meResponse ||
+          typeof meResponse !== 'object' ||
+          !('user' in meResponse) ||
+          !meResponse.user ||
+          !meResponse.user.role
+        ) {
+          const cachedUser = readCachedUser();
+          if (!cachedUser) {
+            if (isAuthPath) {
+              clearLocalSession();
+              return;
+            }
+            clearSessionAndRedirectToLogin();
+            return;
+          }
+          setCurrentUser(cachedUser);
+          setIsAuthBootstrapComplete(true);
+          return;
+        }
         setCurrentUser(meResponse.user);
         await Promise.all([
           refreshMonitors(authToken),
           refreshTeamSummary(authToken, meResponse.user.role),
         ]);
+        if (cancelled) return;
+        setIsAuthBootstrapComplete(true);
       } catch (error) {
         if (cancelled) return;
         if (isApiError(error) && error.status === 401) {
+          if (isAuthPath) {
+            clearLocalSession();
+            return;
+          }
           clearSessionAndRedirectToLogin();
           return;
         }
         setMonitorLoadError(formatAppError(error, 'Impossible de charger la session.'));
+        setIsAuthBootstrapComplete(true);
       }
     };
 
@@ -1204,7 +1332,7 @@ function App() {
     return () => {
       cancelled = true;
     };
-  }, [authToken, clearSessionAndRedirectToLogin, refreshMonitors, refreshTeamSummary]);
+  }, [authToken, clearLocalSession, clearSessionAndRedirectToLogin, refreshMonitors, refreshTeamSummary]);
 
   useEffect(() => {
     setSelectedMonitorIds((previousIds) =>
@@ -1426,7 +1554,7 @@ function App() {
   }
 
   if (authRoute === 'accept-invitation') {
-    const invitationToken = new URLSearchParams(window.location.search).get('token');
+    const invitationToken = getInvitationTokenFromSearch();
     return (
       <AcceptInvitationPage
         token={invitationToken}
@@ -1512,17 +1640,25 @@ function App() {
         </nav>
 
         <div className="sidebar-footer">
-          <div className="profile-avatar">{userInitials}</div>
+          <div className="profile-avatar">{isUserLoading ? '…' : userInitials || '-'}</div>
           <div className="profile-copy">
-            <strong>{currentUser?.name ?? 'Guest'}</strong>
-            {currentUser?.email ? <span>{currentUser.email}</span> : null}
+            {profileName ? <strong>{profileName}</strong> : null}
+            {profileEmail ? <span>{profileEmail}</span> : null}
           </div>
           <button
             className="logout-button"
             aria-label="Go to login"
             onClick={() => {
-              clearSessionAndRedirectToLogin();
-              setMobileMenuOpen(false);
+              void (async () => {
+                try {
+                  await logout();
+                } catch {
+                  // Ignore logout errors and clear local session anyway.
+                } finally {
+                  clearSessionAndRedirectToLogin();
+                  setMobileMenuOpen(false);
+                }
+              })();
             }}
           >
             <LogOut size={14} />

@@ -1,10 +1,34 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import User, { IUser } from '../models/User';
+import { getAuthCookieName } from '../config/auth';
 
 export interface AuthRequest extends Request {
   user?: IUser;
 }
+
+const parseCookies = (header?: string): Record<string, string> => {
+  if (!header) return {};
+  return header.split(';').reduce<Record<string, string>>((acc, part) => {
+    const trimmed = part.trim();
+    if (trimmed === '') return acc;
+    const separatorIndex = trimmed.indexOf('=');
+    if (separatorIndex === -1) {
+      acc[trimmed] = '';
+      return acc;
+    }
+    const key = trimmed.slice(0, separatorIndex).trim();
+    const value = trimmed.slice(separatorIndex + 1).trim();
+    if (key) {
+      try {
+        acc[key] = decodeURIComponent(value);
+      } catch {
+        acc[key] = value;
+      }
+    }
+    return acc;
+  }, {});
+};
 
 export const authenticate = async (
   req: AuthRequest,
@@ -12,7 +36,11 @@ export const authenticate = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const token = req.header('Authorization')?.replace('Bearer ', '');
+    const headerToken = req.header('Authorization')?.replace('Bearer ', '');
+    const cookieName = getAuthCookieName();
+    const cookies = parseCookies(req.headers.cookie);
+    const cookieToken = cookies[cookieName];
+    const token = headerToken || cookieToken;
 
     if (!token) {
       res.status(401).json({ error: 'Authentification requise' });

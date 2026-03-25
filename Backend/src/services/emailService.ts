@@ -29,6 +29,14 @@ export class EmailService {
     }
   }
 
+  private buildInvitationLink(token: string): string {
+    const frontendUrl = (process.env.FRONTEND_URL || 'http://localhost:5173').trim();
+    const baseUrl = frontendUrl.endsWith('/') ? frontendUrl : `${frontendUrl}/`;
+    const invitationUrl = new URL('accept-invitation', baseUrl);
+    invitationUrl.searchParams.set('token', token);
+    return invitationUrl.toString();
+  }
+
   /**
    * Envoie un email d'invitation
    */
@@ -39,7 +47,7 @@ export class EmailService {
   ): Promise<void> {
     this.ensureSmtpConfigured();
 
-    const invitationLink = `${process.env.FRONTEND_URL}/accept-invitation?token=${token}`;
+    const invitationLink = this.buildInvitationLink(token);
 
     const mailOptions = {
       from: process.env.EMAIL_FROM,

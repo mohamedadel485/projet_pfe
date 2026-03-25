@@ -11,6 +11,26 @@ const envPath = path.resolve(__dirname, '..', '.env');
 // Force .env values to win over inherited shell environment values.
 dotenv.config({ path: envPath, override: true });
 
+const DEFAULT_DEVELOPMENT_FRONTEND_URL = 'http://localhost:5173';
+const DEFAULT_DEVELOPMENT_JWT_SECRET = 'uptimewarden-local-dev-secret';
+
+const applyDevelopmentEnvDefaults = (): void => {
+  const isProduction = (process.env.NODE_ENV ?? 'development') === 'production';
+
+  if (!process.env.FRONTEND_URL || process.env.FRONTEND_URL.trim() === '') {
+    process.env.FRONTEND_URL = DEFAULT_DEVELOPMENT_FRONTEND_URL;
+  }
+
+  if (!isProduction && (!process.env.JWT_SECRET || process.env.JWT_SECRET.trim() === '')) {
+    process.env.JWT_SECRET = DEFAULT_DEVELOPMENT_JWT_SECRET;
+    console.warn(
+      `JWT_SECRET absent dans ${envPath}. Valeur de developpement temporaire utilisee.`
+    );
+  }
+};
+
+applyDevelopmentEnvDefaults();
+
 import authRoutes from './routes/auth';
 import userRoutes from './routes/users';
 import monitorRoutes from './routes/monitors';
@@ -20,10 +40,13 @@ import maintenanceRoutes from './routes/maintenances';
 import integrationRoutes from './routes/integrations';
 
 const app: Application = express();
+app.set('etag', false);
 const DEFAULT_PORT = 3001;
 const MAX_PORT_RETRIES = 10;
 const DEFAULT_ALLOWED_ORIGINS = ['http://localhost:5173', 'http://127.0.0.1:5173'];
 const LOCALHOST_ORIGIN_PATTERN = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i;
+const PRIVATE_NETWORK_ORIGIN_PATTERN =
+  /^https?:\/\/(?:10(?:\.\d{1,3}){3}|192\.168(?:\.\d{1,3}){2}|172\.(?:1[6-9]|2\d|3[0-1])(?:\.\d{1,3}){2})(:\d+)?$/i;
 
 const parsePort = (rawPort: string): number => {
   const parsed = Number(rawPort);
@@ -97,12 +120,14 @@ const isDevelopmentLike = (process.env.NODE_ENV ?? 'development') !== 'productio
 
 app.use(
   cors({
+    credentials: true,
     origin: (origin, callback) => {
       if (
         !origin ||
         allowedOrigins.includes('*') ||
         allowedOrigins.includes(origin) ||
-        ((allowAnyLocalhostOrigin || isDevelopmentLike) && LOCALHOST_ORIGIN_PATTERN.test(origin))
+        ((allowAnyLocalhostOrigin || isDevelopmentLike) && LOCALHOST_ORIGIN_PATTERN.test(origin)) ||
+        (isDevelopmentLike && PRIVATE_NETWORK_ORIGIN_PATTERN.test(origin))
       ) {
         callback(null, true);
         return;
@@ -112,6 +137,13 @@ app.use(
     },
   })
 );
+app.use((req: Request, res: Response, next: NextFunction) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  res.setHeader('Surrogate-Control', 'no-store');
+  next();
+});
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 

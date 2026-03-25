@@ -8,13 +8,14 @@
     "build": "tsc",
     "prestart": "npm run build",
     "start": "node dist/server.js",
-    "start:foreground": "npm run build && pm2 start dist/server.js --no-daemon --name uptime-monitor-backend",
+    "start:foreground": "npm run build && pm2 start dist/server.js --no-daemon",
     "start:background": "npm run build && pm2 start dist/server.js --name uptime-monitor-backend",
-    "start:fg": "npm run start:foreground --name uptime-monitor-backend",
-    "start:bg": "npm run start:background --name uptime-monitor-backend",
-    "stop": "pm2 stop uptime-monitor-backend --name uptime-monitor-backend",
-    "restart": "pm2 restart uptime-monitor-backend --name uptime-monitor-backend",
+    "start:fg": "npm run start:foreground",
+    "start:bg": "npm run start:background",
+    "stop": "pm2 stop uptime-monitor-backend",
+    "restart": "pm2 restart uptime-monitor-backend",
     "enable-autostart": "pm2 startup && pm2 save",
+    "create:first-admin": "ts-node src/scripts/createFirstAdmin.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [
@@ -34,10 +35,9 @@
     "express-validator": "^7.0.1",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.23.0",
-    "node-cron": "^3.0.3",
-    "nodemailer": "^6.9.7",
     "pm2": "^6.0.13",
-    "whoiser": "^1.18.0"
+    "node-cron": "^3.0.3",
+    "nodemailer": "^6.9.7"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",

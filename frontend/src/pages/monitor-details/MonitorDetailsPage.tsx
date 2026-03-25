@@ -478,21 +478,27 @@ function MonitorDetailsPage({
     if (monitor.domainExpiryMode !== 'enabled') {
       return 'Disabled';
     }
+    if (!monitor.domainExpiryCheckedAt) {
+      return 'Checking...';
+    }
     if (!monitor.domainExpiryAt) {
       return 'Unavailable';
     }
     return formatShortDate(monitor.domainExpiryAt);
-  }, [monitor.domainExpiryAt, monitor.domainExpiryMode]);
+  }, [monitor.domainExpiryAt, monitor.domainExpiryCheckedAt, monitor.domainExpiryMode]);
 
   const sslExpiryLabel = useMemo(() => {
     if (monitor.sslExpiryMode !== 'enabled') {
       return 'Disabled';
     }
+    if (!monitor.sslExpiryCheckedAt) {
+      return 'Checking...';
+    }
     if (!monitor.sslExpiryAt) {
       return 'Unavailable';
     }
     return formatShortDate(monitor.sslExpiryAt);
-  }, [monitor.sslExpiryAt, monitor.sslExpiryMode]);
+  }, [monitor.sslExpiryAt, monitor.sslExpiryCheckedAt, monitor.sslExpiryMode]);
 
   return (
     <section className="monitor-details-page">

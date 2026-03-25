@@ -3,8 +3,6 @@ import { body, validationResult } from 'express-validator';
 import Monitor from '../models/Monitor';
 import MonitorLog from '../models/MonitorLog';
 import monitorService from '../services/monitorService';
-import { lookupDomainExpiry } from '../services/domainExpiryService';
-import { lookupSslExpiry } from '../services/sslExpiryService';
 import { authenticate, AuthRequest } from '../middleware/auth';
 
 const router = Router();
@@ -40,21 +38,16 @@ router.post(
         owner: req.user!._id,
       };
 
-      if (monitorData.domainExpiryMode === 'enabled') {
-        const lookup = await lookupDomainExpiry(monitorData.url);
-        monitorData.domainExpiryAt = lookup.expiryAt ?? undefined;
-        monitorData.domainExpiryCheckedAt = lookup.checkedAt;
-        monitorData.domainExpiryError = lookup.error ?? undefined;
-      }
-      if (monitorData.sslExpiryMode === 'enabled') {
-        const lookup = await lookupSslExpiry(monitorData.url);
-        monitorData.sslExpiryAt = lookup.expiryAt ?? undefined;
-        monitorData.sslExpiryCheckedAt = lookup.checkedAt;
-        monitorData.sslExpiryError = lookup.error ?? undefined;
-      }
-
       const monitor = new Monitor(monitorData);
       await monitor.save();
+
+      if (monitor.domainExpiryMode === 'enabled' || monitor.sslExpiryMode === 'enabled') {
+        try {
+          await monitorService.refreshSecurityChecks(monitor);
+        } catch (error) {
+          console.warn('Erreur verification SSL/WHOIS (creation monitor):', error);
+        }
+      }
 
       res.status(201).json({
         message: 'Monitor créé avec succès',
@@ -172,41 +165,16 @@ router.put(
         return;
       }
 
-      const previousUrl = monitor.url;
-      const previousMode = monitor.domainExpiryMode ?? 'disabled';
-      const previousSslMode = monitor.sslExpiryMode ?? 'disabled';
-
       Object.assign(monitor, req.body);
-
-      const currentMode = monitor.domainExpiryMode ?? 'disabled';
-      const currentSslMode = monitor.sslExpiryMode ?? 'disabled';
-      const urlChanged = typeof req.body.url === 'string' && req.body.url !== previousUrl;
-      const modeJustEnabled = previousMode !== 'enabled' && currentMode === 'enabled';
-      const sslModeJustEnabled = previousSslMode !== 'enabled' && currentSslMode === 'enabled';
-
-      if (currentMode !== 'enabled') {
-        monitor.domainExpiryAt = undefined;
-        monitor.domainExpiryCheckedAt = undefined;
-        monitor.domainExpiryError = undefined;
-      } else if (modeJustEnabled || urlChanged) {
-        const lookup = await lookupDomainExpiry(monitor.url);
-        monitor.domainExpiryAt = lookup.expiryAt ?? undefined;
-        monitor.domainExpiryCheckedAt = lookup.checkedAt;
-        monitor.domainExpiryError = lookup.error ?? undefined;
-      }
-
-      if (currentSslMode !== 'enabled') {
-        monitor.sslExpiryAt = undefined;
-        monitor.sslExpiryCheckedAt = undefined;
-        monitor.sslExpiryError = undefined;
-      } else if (sslModeJustEnabled || urlChanged) {
-        const lookup = await lookupSslExpiry(monitor.url);
-        monitor.sslExpiryAt = lookup.expiryAt ?? undefined;
-        monitor.sslExpiryCheckedAt = lookup.checkedAt;
-        monitor.sslExpiryError = lookup.error ?? undefined;
-      }
-
       await monitor.save();
+
+      if (monitor.domainExpiryMode === 'enabled' || monitor.sslExpiryMode === 'enabled') {
+        try {
+          await monitorService.refreshSecurityChecks(monitor);
+        } catch (error) {
+          console.warn('Erreur verification SSL/WHOIS (update monitor):', error);
+        }
+      }
 
       res.json({
         message: 'Monitor mis à jour avec succès',
@@ -349,6 +317,11 @@ router.post(
 
       const result = await monitorService.checkMonitor(monitor);
       await monitorService.logCheckResult(monitor, result);
+      try {
+        await monitorService.refreshSecurityChecks(monitor);
+      } catch (error) {
+        console.warn('Erreur verification SSL/WHOIS (manual check):', error);
+      }
 
       res.json({
         message: 'Vérification effectuée',
