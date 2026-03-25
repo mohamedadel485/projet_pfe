@@ -1,5 +1,6 @@
 import { Router, Response } from 'express';
 import Monitor from '../models/Monitor';
+import Incident from '../models/Incident';
 import MonitorLog from '../models/MonitorLog';
 import { authenticate, AuthRequest } from '../middleware/auth';
 
@@ -73,92 +74,141 @@ router.get(
         ])
       );
 
-      const logQuery: {
-        monitor: { $in: typeof monitorIds };
-      } = {
+      const incidentQuery: Record<string, unknown> = {
         monitor: { $in: monitorIds },
       };
 
-      const logs = await MonitorLog.find(logQuery)
-        .sort({ monitor: 1, checkedAt: 1 })
+      if (status === 'up' || status === 'down') {
+        incidentQuery.status = status === 'up' ? 'resolved' : 'ongoing';
+      }
+
+      const total = await Incident.countDocuments(incidentQuery);
+      const incidentDocs = await Incident.find(incidentQuery)
+        .sort({ startedAt: -1 })
+        .skip(skip)
+        .limit(parsedLimit)
         .lean();
 
-      const openIncidentByMonitor = new Map<
-        string,
-        {
-          startedAt: Date;
-          firstLog: typeof logs[number];
-        }
-      >();
-      const incidents: AggregatedIncident[] = [];
+      if (incidentDocs.length === 0) {
+        const legacyLogQuery = {
+          monitor: { $in: monitorIds },
+        };
 
-      for (const log of logs) {
-        const monitorId = String(log.monitor);
-        const openedIncident = openIncidentByMonitor.get(monitorId);
+        const logs = await MonitorLog.find(legacyLogQuery)
+          .sort({ monitor: 1, checkedAt: 1 })
+          .lean();
 
-        if (log.status === 'down') {
-          if (!openedIncident) {
-            openIncidentByMonitor.set(monitorId, {
-              startedAt: new Date(log.checkedAt),
-              firstLog: log,
-            });
+        const openIncidentByMonitor = new Map<
+          string,
+          {
+            startedAt: Date;
+            firstLog: typeof logs[number];
           }
-          continue;
+        >();
+        const legacyIncidents: AggregatedIncident[] = [];
+
+        for (const log of logs) {
+          const monitorId = String(log.monitor);
+          const openedIncident = openIncidentByMonitor.get(monitorId);
+
+          if (log.status === 'down') {
+            if (!openedIncident) {
+              openIncidentByMonitor.set(monitorId, {
+                startedAt: new Date(log.checkedAt),
+                firstLog: log,
+              });
+            }
+            continue;
+          }
+
+          if (openedIncident) {
+            const startedAt = openedIncident.startedAt;
+            const resolvedAt = new Date(log.checkedAt);
+            const durationMs = Math.max(0, resolvedAt.getTime() - startedAt.getTime());
+
+            legacyIncidents.push({
+              _id: String(openedIncident.firstLog._id),
+              monitor: monitorById.get(monitorId) ?? null,
+              status: 'up',
+              responseTime: durationMs,
+              statusCode: openedIncident.firstLog.statusCode,
+              errorMessage: openedIncident.firstLog.errorMessage,
+              checkedAt: startedAt.toISOString(),
+              startedAt: startedAt.toISOString(),
+              resolvedAt: resolvedAt.toISOString(),
+              durationMs,
+            });
+
+            openIncidentByMonitor.delete(monitorId);
+          }
         }
 
-        if (openedIncident) {
+        const now = Date.now();
+        for (const [monitorId, openedIncident] of openIncidentByMonitor.entries()) {
           const startedAt = openedIncident.startedAt;
-          const resolvedAt = new Date(log.checkedAt);
-          const durationMs = Math.max(0, resolvedAt.getTime() - startedAt.getTime());
+          const durationMs = Math.max(0, now - startedAt.getTime());
 
-          incidents.push({
+          legacyIncidents.push({
             _id: String(openedIncident.firstLog._id),
             monitor: monitorById.get(monitorId) ?? null,
-            status: 'up',
+            status: 'down',
             responseTime: durationMs,
             statusCode: openedIncident.firstLog.statusCode,
             errorMessage: openedIncident.firstLog.errorMessage,
             checkedAt: startedAt.toISOString(),
             startedAt: startedAt.toISOString(),
-            resolvedAt: resolvedAt.toISOString(),
+            resolvedAt: null,
             durationMs,
           });
-
-          openIncidentByMonitor.delete(monitorId);
         }
+
+        legacyIncidents.sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime());
+
+        const filteredLegacyIncidents =
+          status === 'up' || status === 'down'
+            ? legacyIncidents.filter((incident) => incident.status === status)
+            : legacyIncidents;
+
+        const totalLegacy = filteredLegacyIncidents.length;
+        const paginatedLegacyIncidents = filteredLegacyIncidents.slice(skip, skip + parsedLimit);
+
+        res.json({
+          incidents: paginatedLegacyIncidents,
+          pagination: {
+            total: totalLegacy,
+            page: parsedPage,
+            limit: parsedLimit,
+            pages: Math.ceil(totalLegacy / parsedLimit),
+          },
+        });
+        return;
       }
 
-      const now = Date.now();
-      for (const [monitorId, openedIncident] of openIncidentByMonitor.entries()) {
-        const startedAt = openedIncident.startedAt;
-        const durationMs = Math.max(0, now - startedAt.getTime());
+      const incidents: AggregatedIncident[] = incidentDocs.map((incident) => {
+        const startedAt = new Date(incident.startedAt);
+        const resolvedAt = incident.resolvedAt ? new Date(incident.resolvedAt) : null;
+        const durationMs =
+          incident.status === 'resolved'
+            ? Math.max(0, Number(incident.durationMs) || 0)
+            : Math.max(0, Date.now() - startedAt.getTime());
+        const incidentMonitor = monitorById.get(String(incident.monitor)) ?? null;
 
-        incidents.push({
-          _id: String(openedIncident.firstLog._id),
-          monitor: monitorById.get(monitorId) ?? null,
-          status: 'down',
+        return {
+          _id: String(incident._id),
+          monitor: incidentMonitor,
+          status: incident.status === 'resolved' ? 'up' : 'down',
           responseTime: durationMs,
-          statusCode: openedIncident.firstLog.statusCode,
-          errorMessage: openedIncident.firstLog.errorMessage,
+          statusCode: incident.statusCode,
+          errorMessage: incident.errorMessage,
           checkedAt: startedAt.toISOString(),
           startedAt: startedAt.toISOString(),
-          resolvedAt: null,
+          resolvedAt: resolvedAt ? resolvedAt.toISOString() : null,
           durationMs,
-        });
-      }
-
-      incidents.sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime());
-
-      const filteredIncidents =
-        status === 'up' || status === 'down'
-          ? incidents.filter((incident) => incident.status === status)
-          : incidents;
-
-      const total = filteredIncidents.length;
-      const paginatedIncidents = filteredIncidents.slice(skip, skip + parsedLimit);
+        };
+      });
 
       res.json({
-        incidents: paginatedIncidents,
+        incidents,
         pagination: {
           total,
           page: parsedPage,

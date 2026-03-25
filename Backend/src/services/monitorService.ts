@@ -4,6 +4,7 @@ import net from 'net';
 import tls from 'tls';
 import Monitor, { IMonitor } from '../models/Monitor';
 import MonitorLog from '../models/MonitorLog';
+import incidentService from './incidentService';
 import maintenanceService from './maintenanceService';
 import integrationService from './integrationService';
 
@@ -401,6 +402,7 @@ export class MonitorService {
    */
   async logCheckResult(monitor: IMonitor, result: CheckResult): Promise<void> {
     const previousStatus = monitor.status;
+    const checkedAt = new Date();
 
     // Enregistrer le log
     await MonitorLog.create({
@@ -409,11 +411,11 @@ export class MonitorService {
       responseTime: result.responseTime,
       statusCode: result.statusCode,
       errorMessage: result.errorMessage,
-      checkedAt: new Date(),
+      checkedAt,
     });
 
     // Mettre à jour le monitor
-    monitor.lastChecked = new Date();
+    monitor.lastChecked = checkedAt;
     monitor.lastStatus = result.status;
     monitor.totalChecks += 1;
     monitor.responseTime = result.responseTime;
@@ -432,6 +434,16 @@ export class MonitorService {
     }
 
     await monitor.save();
+
+    try {
+      await incidentService.recordMonitorCheck({
+        monitor,
+        result,
+        checkedAt,
+      });
+    } catch (error) {
+      console.error('Erreur lors de la mise a jour des incidents:', error);
+    }
 
     const shouldNotifyIntegration =
       (previousStatus === 'up' || previousStatus === 'down') &&

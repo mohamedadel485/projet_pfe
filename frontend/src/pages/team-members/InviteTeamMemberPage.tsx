@@ -16,7 +16,7 @@ interface MonitorOption {
 
 interface InviteTeamMemberPageProps {
   monitorOptions?: MonitorOption[];
-  onInviteTeam?: (payload: InvitePayload) => Promise<string | null>;
+  onInviteTeam?: (payload: InvitePayload) => Promise<{ error?: string | null; notice?: string | null }>;
 }
 
 const defaultMonitorOptions: MonitorOption[] = [
@@ -51,15 +51,15 @@ function InviteTeamMemberPage({ monitorOptions = defaultMonitorOptions, onInvite
     setSubmitSuccess(null);
     setIsSubmitting(true);
 
-    const error = await onInviteTeam({
+    const result = await onInviteTeam({
       name: name.trim(),
       email: email.trim(),
       role,
       monitorIds: selectedMonitorIds,
     });
 
-    if (error) {
-      setSubmitError(error);
+    if (result.error) {
+      setSubmitError(result.error);
       setIsSubmitting(false);
       return;
     }
@@ -69,7 +69,7 @@ function InviteTeamMemberPage({ monitorOptions = defaultMonitorOptions, onInvite
     setRole('admin');
     setSelectedMonitorIds([]);
     setIsMonitorListOpen(false);
-    setSubmitSuccess('Invitation envoyee avec succes.');
+    setSubmitSuccess(result.notice ?? 'Invitation envoyee avec succes.');
     setIsSubmitting(false);
   };
 

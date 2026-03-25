@@ -58,6 +58,7 @@ export interface BackendMonitor {
   status: "up" | "down" | "paused" | "pending";
   uptime: number;
   responseTime: number;
+  sharedWith?: string[];
   domainExpiryMode?: "enabled" | "disabled";
   domainExpiryAt?: string;
   domainExpiryCheckedAt?: string;
@@ -239,6 +240,9 @@ interface InvitationListResponse {
 
 interface InvitationCreateResponse {
   message: string;
+  delivery?: "smtp" | "manual-link";
+  warning?: string;
+  invitationUrl?: string;
   invitation: {
     id: string;
     name: string;
@@ -785,6 +789,33 @@ export const deleteMonitor = (
     method: "DELETE",
     token,
   });
+
+export const shareMonitorWithUser = (
+  monitorId: string,
+  userId: string,
+  token?: string,
+): Promise<{ message: string; warning?: string; monitor: BackendMonitor }> =>
+  request<{ message: string; warning?: string; monitor: BackendMonitor }>(
+    `/monitors/${monitorId}/share`,
+    {
+      method: "POST",
+      token,
+      body: { userId },
+    },
+  );
+
+export const removeMonitorShare = (
+  monitorId: string,
+  userId: string,
+  token?: string,
+): Promise<{ message: string; monitor: BackendMonitor }> =>
+  request<{ message: string; monitor: BackendMonitor }>(
+    `/monitors/${monitorId}/share/${userId}`,
+    {
+      method: "DELETE",
+      token,
+    },
+  );
 
 export const createMaintenance = (
   input: CreateMaintenanceInput,

@@ -173,6 +173,22 @@
   background: #1a51ad;
 }
 
+.integration-add-button:disabled {
+  opacity: 1;
+}
+
+.integration-add-button.coming-soon {
+  border: 1px solid #d7e3f4;
+  background: #f4f8ff;
+  color: #59739b;
+  min-width: 120px;
+  cursor: not-allowed;
+}
+
+.integration-add-button.coming-soon:hover {
+  background: #f4f8ff;
+}
+
 .integrations-api-empty {
   border: 1px dashed #c9d7ed;
   border-radius: 8px;

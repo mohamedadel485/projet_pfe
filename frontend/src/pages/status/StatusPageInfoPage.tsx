@@ -1,186 +1,226 @@
+import { ChevronRight, Upload } from 'lucide-react';
 import { type ChangeEvent, useEffect, useRef, useState } from 'react';
-import { ChevronDown, ChevronRight } from 'lucide-react';
+import type { StatusPageMonitorOption } from './StatusPageMonitorsPage';
 import './status-page-info-page.css';
-import arabicFlag from '../../images/arabic.jpg';
-import englishFlag from '../../images/English.jpg';
-import franceFlag from '../../images/france.svg';
 
 interface StatusPageInfoPageProps {
   statusPageId: string;
+  statusPageName?: string;
+  monitors: StatusPageMonitorOption[];
   onBackToMonitoring: () => void;
   onBackToStatusPages: () => void;
-  onCreateMonitor?: () => void;
-  onOpenIntegrationsTeam?: () => void;
-  onOpenMaintenanceInfo?: () => void;
+  onOpenMonitorsStep: () => void;
 }
 
-interface ToggleOption {
-  id: string;
-  label: string;
-  description: string;
-  checked?: boolean;
+interface StoredStatusPageSettings extends Record<string, unknown> {
+  pageName?: string;
+  customDomain?: string;
+  logoName?: string;
+  password?: string;
+  passwordEnabled?: boolean;
+  density?: 'wide' | 'compact';
+  alignment?: 'left' | 'center';
 }
 
 interface StatusPageFormValues {
   pageName: string;
-  homepageUrl: string;
   customDomain: string;
-  googleAnalytics: string;
+  logoName: string;
   password: string;
-  language: LanguageValue;
+  passwordEnabled: boolean;
+  density: 'wide' | 'compact';
+  alignment: 'left' | 'center';
 }
 
-const EMPTY_STATUS_PAGE_FORM: StatusPageFormValues = {
-  pageName: '',
-  homepageUrl: '',
-  customDomain: '',
-  googleAnalytics: '',
-  password: '',
-  language: 'english',
-};
-
-type LanguageValue = 'english' | 'french' | 'arabic';
-
-interface LanguageOption {
-  value: LanguageValue;
+interface DensityOption {
+  value: 'wide' | 'compact';
   label: string;
-  flag: string;
-  flagImage?: string;
+  description: string;
 }
 
-const languageOptions: LanguageOption[] = [
-  { value: 'english', label: 'English', flag: '🇬🇧' },
-  { value: 'french', label: 'French', flag: '🇫🇷' },
-  { value: 'arabic', label: 'Arabic', flag: '🇲🇦' },
-];
+interface AlignmentOption {
+  value: 'left' | 'center';
+  label: string;
+  description: string;
+}
 
-const languageOptionsWithAssets: LanguageOption[] = languageOptions.map((languageOption) =>
-  languageOption.value === 'english'
-    ? { ...languageOption, flagImage: englishFlag }
-    : languageOption.value === 'french'
-      ? { ...languageOption, flagImage: franceFlag }
-      : languageOption.value === 'arabic'
-        ? { ...languageOption, flagImage: arabicFlag }
-        : languageOption,
-);
+const getStatusPageSettingsStorageKey = (statusPageId: string) =>
+  `uptimewarden_status_page_settings_${statusPageId}`;
 
-const renderLanguageFlag = (languageOption: LanguageOption) => {
-  if (languageOption.flagImage) {
-    return <img src={languageOption.flagImage} alt="" className="status-page-language-flag-image" />;
+const getStatusPageMonitorStorageKey = (statusPageId: string) =>
+  `uptimewarden_status_page_monitors_${statusPageId}`;
+
+const createDefaultFormValues = (statusPageName?: string): StatusPageFormValues => ({
+  pageName: statusPageName || '',
+  customDomain: '',
+  logoName: '',
+  password: '',
+  passwordEnabled: false,
+  density: 'wide',
+  alignment: 'left',
+});
+
+const readStoredStatusPageState = (statusPageId: string, statusPageName?: string) => {
+  const defaultValues = createDefaultFormValues(statusPageName);
+  let storedSettings: StoredStatusPageSettings = {};
+  let formValues = defaultValues;
+
+  try {
+    const storedValue = window.localStorage.getItem(getStatusPageSettingsStorageKey(statusPageId));
+    if (storedValue) {
+      const parsedValue = JSON.parse(storedValue);
+      if (parsedValue && typeof parsedValue === 'object') {
+        storedSettings = parsedValue as StoredStatusPageSettings;
+        formValues = {
+          pageName:
+            typeof storedSettings.pageName === 'string' && storedSettings.pageName.trim()
+              ? storedSettings.pageName
+              : defaultValues.pageName,
+          customDomain: typeof storedSettings.customDomain === 'string' ? storedSettings.customDomain : '',
+          logoName: typeof storedSettings.logoName === 'string' ? storedSettings.logoName : '',
+          password: typeof storedSettings.password === 'string' ? storedSettings.password : '',
+          passwordEnabled:
+            typeof storedSettings.passwordEnabled === 'boolean'
+              ? storedSettings.passwordEnabled
+              : typeof storedSettings.password === 'string' && storedSettings.password.trim().length > 0,
+          density: storedSettings.density === 'compact' ? 'compact' : defaultValues.density,
+          alignment: storedSettings.alignment === 'center' ? 'center' : defaultValues.alignment,
+        };
+      }
+    }
+  } catch {
+    storedSettings = {};
+    formValues = defaultValues;
   }
 
-  return languageOption.flag;
+  return { storedSettings, formValues };
 };
 
-const whiteLabelOptions: ToggleOption[] = [
+const densityOptions: DensityOption[] = [
   {
-    id: 'remove-monitoring-logo',
-    label: 'Remove Monitoring logo',
-    description: 'This will hide "Powered by Monitoring" link in footer.',
-    checked: true,
+    value: 'wide',
+    label: 'Wide',
+    description: 'Airy spacing for a cleaner and easier public page.',
   },
   {
-    id: 'remove-cookie-consent',
-    label: 'Remove cookie consent',
-    description: 'Available only for a Custom Domain status page',
-    checked: true,
+    value: 'compact',
+    label: 'Compact',
+    description: 'Denser layout to show more monitors at once.',
   },
 ];
 
-const featureOptions: ToggleOption[] = [
+const alignmentOptions: AlignmentOption[] = [
   {
-    id: 'show-bar-charts',
-    label: 'Show bar charts',
-    description: 'Show uptime charts on the status page home screen.',
-    checked: true,
+    value: 'left',
+    label: 'Logo on left',
+    description: 'Keep branding aligned with your monitor list.',
   },
   {
-    id: 'show-outage-details',
-    label: 'Show outage details',
-    description: 'Display outage reason details for users.',
-    checked: true,
-  },
-  {
-    id: 'show-uptime-percentage',
-    label: 'Show uptime percentage',
-    description: 'Display uptime percentage near each monitor.',
-    checked: true,
-  },
-  {
-    id: 'enable-details-page',
-    label: 'Enable details page',
-    description: 'Show uptime, response times and event history.',
-    checked: true,
-  },
-  {
-    id: 'enable-floating-bar',
-    label: 'Enable floating status bar',
-    description: 'Keep overall status visible at the bottom.',
-    checked: true,
-  },
-  {
-    id: 'show-monitor-url',
-    label: 'Show monitor URL',
-    description: 'Display each monitor URL to users.',
-    checked: true,
+    value: 'center',
+    label: 'Logo on center',
+    description: 'Push your brand more visually at the top of the page.',
   },
 ];
 
-const privacyOptions: ToggleOption[] = [
-  {
-    id: 'help-improve',
-    label: 'Help us improve',
-    description: 'Share anonymous usage analytics.',
-  },
-  {
-    id: 'small-cookie-dialog',
-    label: 'Use small cookie dialog',
-    description: 'Compact consent dialog for public pages.',
-  },
-];
+const readSelectedMonitorIds = (statusPageId: string, monitors: StatusPageMonitorOption[]) => {
+  const validMonitorIds = new Set(monitors.map((monitor) => monitor.id));
+  let nextSelectedMonitorIds: string[] = [];
+
+  try {
+    const storedValue = window.localStorage.getItem(getStatusPageMonitorStorageKey(statusPageId));
+    if (storedValue) {
+      const parsedValue = JSON.parse(storedValue);
+      if (Array.isArray(parsedValue)) {
+        nextSelectedMonitorIds = parsedValue.filter(
+          (monitorId): monitorId is string => typeof monitorId === 'string' && validMonitorIds.has(monitorId),
+        );
+      }
+    }
+  } catch {
+    nextSelectedMonitorIds = [];
+  }
+
+  if (nextSelectedMonitorIds.length === 0 && statusPageId !== 'new' && validMonitorIds.has(statusPageId)) {
+    nextSelectedMonitorIds = [statusPageId];
+  }
+
+  return nextSelectedMonitorIds;
+};
 
 function StatusPageInfoPage({
   statusPageId,
+  statusPageName,
+  monitors,
   onBackToMonitoring,
   onBackToStatusPages,
-  onCreateMonitor,
-  onOpenIntegrationsTeam,
-  onOpenMaintenanceInfo,
+  onOpenMonitorsStep,
 }: StatusPageInfoPageProps) {
-  const [formValues, setFormValues] = useState<StatusPageFormValues>(EMPTY_STATUS_PAGE_FORM);
-  const [isLanguageMenuOpen, setIsLanguageMenuOpen] = useState(false);
-  const languageMenuRef = useRef<HTMLDivElement | null>(null);
+  const [formValues, setFormValues] = useState<StatusPageFormValues>(
+    () => readStoredStatusPageState(statusPageId, statusPageName).formValues,
+  );
+  const [storedSettings, setStoredSettings] = useState<StoredStatusPageSettings>(
+    () => readStoredStatusPageState(statusPageId, statusPageName).storedSettings,
+  );
+  const [selectedMonitorIds, setSelectedMonitorIds] = useState<string[]>([]);
+  const [saveNotice, setSaveNotice] = useState<string | null>(null);
+  const [hydratedStatusPageId, setHydratedStatusPageId] = useState(statusPageId);
+  const logoInputRef = useRef<HTMLInputElement | null>(null);
+
+  const isNewStatusPage = statusPageId === 'new';
+  const monitorIdsKey = monitors.map((monitor) => monitor.id).join('|');
 
   useEffect(() => {
-    setFormValues(EMPTY_STATUS_PAGE_FORM);
-  }, [statusPageId]);
+    const { storedSettings: nextStoredSettings, formValues: nextFormValues } = readStoredStatusPageState(
+      statusPageId,
+      statusPageName,
+    );
+
+    setStoredSettings(nextStoredSettings);
+    setFormValues(nextFormValues);
+    setSelectedMonitorIds(readSelectedMonitorIds(statusPageId, monitors));
+    setSaveNotice(null);
+    setHydratedStatusPageId(statusPageId);
+  }, [monitorIdsKey, monitors, statusPageId, statusPageName]);
 
   useEffect(() => {
-    if (!isLanguageMenuOpen) return;
+    if (hydratedStatusPageId !== statusPageId) return;
 
-    const handleDocumentMouseDown = (event: MouseEvent) => {
-      const target = event.target as Node | null;
-      if (target && !languageMenuRef.current?.contains(target)) {
-        setIsLanguageMenuOpen(false);
-      }
-    };
+    try {
+      window.localStorage.setItem(
+        getStatusPageSettingsStorageKey(statusPageId),
+        JSON.stringify({
+          ...storedSettings,
+          pageName: formValues.pageName,
+          customDomain: formValues.customDomain,
+          logoName: formValues.logoName,
+          password: formValues.password,
+          passwordEnabled: formValues.passwordEnabled,
+          density: formValues.density,
+          alignment: formValues.alignment,
+        }),
+      );
+    } catch {
+      // Ignore storage failures and keep the form interactive.
+    }
+  }, [formValues, hydratedStatusPageId, statusPageId, storedSettings]);
 
-    const handleDocumentKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setIsLanguageMenuOpen(false);
-      }
-    };
+  useEffect(() => {
+    if (!saveNotice) return;
 
-    document.addEventListener('mousedown', handleDocumentMouseDown);
-    document.addEventListener('keydown', handleDocumentKeyDown);
+    const timer = window.setTimeout(() => {
+      setSaveNotice(null);
+    }, 3500);
 
     return () => {
-      document.removeEventListener('mousedown', handleDocumentMouseDown);
-      document.removeEventListener('keydown', handleDocumentKeyDown);
+      window.clearTimeout(timer);
     };
-  }, [isLanguageMenuOpen]);
+  }, [saveNotice]);
 
-  const handleInputChange =
+  const selectedMonitors = monitors.filter((monitor) => selectedMonitorIds.includes(monitor.id));
+  const selectedPreview = selectedMonitors.slice(0, 3);
+  const selectedOverflowCount = Math.max(0, selectedMonitors.length - selectedPreview.length);
+
+  const updateTextField =
     (field: keyof StatusPageFormValues) => (event: ChangeEvent<HTMLInputElement>) => {
       const { value } = event.target;
       setFormValues((currentValues) => ({
@@ -189,16 +229,49 @@ function StatusPageInfoPage({
       }));
     };
 
-  const selectedLanguage =
-    languageOptionsWithAssets.find((languageOption) => languageOption.value === formValues.language) ??
-    languageOptionsWithAssets[0];
+  const handleLogoSelection = (event: ChangeEvent<HTMLInputElement>) => {
+    const selectedFile = event.target.files?.[0];
+    if (!selectedFile) return;
 
-  const handleLanguageSelect = (language: LanguageValue) => {
     setFormValues((currentValues) => ({
       ...currentValues,
-      language,
+      logoName: selectedFile.name,
     }));
-    setIsLanguageMenuOpen(false);
+  };
+
+  const handleDensitySelect = (density: StatusPageFormValues['density']) => {
+    setFormValues((currentValues) => ({
+      ...currentValues,
+      density,
+    }));
+  };
+
+  const handleAlignmentSelect = (alignment: StatusPageFormValues['alignment']) => {
+    setFormValues((currentValues) => ({
+      ...currentValues,
+      alignment,
+    }));
+  };
+
+  const handlePasswordEnabledChange = (enabled: boolean) => {
+    setFormValues((currentValues) => ({
+      ...currentValues,
+      passwordEnabled: enabled,
+    }));
+  };
+
+  const handleFinishSetup = () => {
+    if (!formValues.pageName.trim()) {
+      setSaveNotice('Status page name is required.');
+      return;
+    }
+
+    if (formValues.passwordEnabled && !formValues.password.trim()) {
+      setSaveNotice('Enter a password or disable password protection.');
+      return;
+    }
+
+    setSaveNotice(isNewStatusPage ? 'Status page setup saved locally.' : 'Global settings saved locally.');
   };
 
   return (
@@ -213,217 +286,297 @@ function StatusPageInfoPage({
             Status pages
           </button>
         </nav>
-        <h1>Edit Status pages</h1>
+
+        <div className="status-page-info-header-copy">
+          <h1>{isNewStatusPage ? 'Create status page' : 'Global settings'}</h1>
+          <p>Only the sections from your screenshot were removed. The other settings are kept.</p>
+        </div>
       </header>
 
       <div className="status-page-info-layout">
         <div className="status-page-info-main">
-          <section className="status-page-info-card">
-            <h2>Name & homepage</h2>
-            <div className="status-page-field status-page-primary-field">
-              <span>Name of the status page</span>
-              <small>Use HTTP (S) monitor to monitor your website, API endpoint, or anything running on HTTP.</small>
-            </div>
-            <div className="status-page-field-grid two-columns status-page-homepage-row">
-              <label className="status-page-field status-page-input-only">
+          {saveNotice ? <p className="status-page-info-notice">{saveNotice}</p> : null}
+
+          <section className="status-page-info-card status-page-info-main-card">
+            <div className="status-page-info-section two-columns">
+              <label className="status-page-info-field">
+                <span>Name of the status page</span>
+                <small>Required. Used in page heading, browser title and shared links.</small>
                 <input
                   type="text"
                   value={formValues.pageName}
-                  onChange={handleInputChange('pageName')}
+                  onChange={updateTextField('pageName')}
                   placeholder="Status page"
                   autoComplete="off"
                 />
               </label>
-              <label className="status-page-field status-page-input-only">
-                <input
-                  type="text"
-                  value={formValues.homepageUrl}
-                  onChange={handleInputChange('homepageUrl')}
-                  placeholder="E.g. https://"
-                  autoComplete="off"
-                />
-              </label>
-            </div>
-          </section>
 
-          <section className="status-page-info-card">
-            <h2>White-label</h2>
-            <div className="status-page-field-grid two-columns">
-              <label className="status-page-field">
-                <span>Custom domain</span>
-                <small>
-                  Host status page on your domain. Make sure you create a CNAME DNS record for your domain to
-                  stats.metal2000.com
-                </small>
+              <label className="status-page-info-field">
+                <div className="status-page-info-field-topline">
+                  <span>Custom domain</span>
+                  <em>Optional</em>
+                </div>
+                <small>Host the page on your own domain when you are ready to publish it.</small>
                 <input
                   type="text"
                   value={formValues.customDomain}
-                  onChange={handleInputChange('customDomain')}
-                  placeholder="E.g. status.yourdomain.com"
-                  autoComplete="off"
-                />
-              </label>
-              <label className="status-page-field">
-                <span>Google Analytics</span>
-                <small>
-                  Available only for custom Domain status page Please use format G-XXXXXX We
-                  <br />
-                  use{' '}
-                  <a
-                    href="https://developers.google.com/analytics/devguides/collection/gtagjs"
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    Global site tag (gtag.js) - Google analytics implementation
-                  </a>
-                </small>
-                <input
-                  type="text"
-                  value={formValues.googleAnalytics}
-                  onChange={handleInputChange('googleAnalytics')}
-                  placeholder="XXXXXXXXXX"
+                  onChange={updateTextField('customDomain')}
+                  placeholder="e.g. status.yourdomain.com"
                   autoComplete="off"
                 />
               </label>
             </div>
-            <div className="status-page-switch-grid two-columns">
-              {whiteLabelOptions.map((option) => (
-                <label className="status-page-switch-item" key={option.id}>
-                  <span className="status-page-switch-control">
-                    <input type="checkbox" defaultChecked={option.checked} />
-                    <span className="status-page-switch-slider" />
-                  </span>
-                  <span className="status-page-switch-copy">
-                    <strong>{option.label}</strong>
-                    <small>{option.description}</small>
-                  </span>
-                </label>
-              ))}
-            </div>
-          </section>
 
-          <section className="status-page-info-card">
-            <h2>Access</h2>
-            <div className="status-page-field-grid two-columns">
-              <label className="status-page-field span-two">
-                <span>Password</span>
-                <small>
-                  Host status page on your domain. Make sure you create a CNAME DNS record for your domain to
-                  stats.metal2000.com
-                </small>
-                <input
-                  type="password"
-                  value={formValues.password}
-                  onChange={handleInputChange('password')}
-                  placeholder="Enter password"
-                  autoComplete="new-password"
-                />
-              </label>
-              <label className="status-page-field">
-                <span>Language</span>
-                <small>Language used on this public page.</small>
-                <div className="status-page-language-select" ref={languageMenuRef}>
-                  <button
-                    type="button"
-                    className={`status-page-language-trigger ${isLanguageMenuOpen ? 'open' : ''}`}
-                    aria-haspopup="listbox"
-                    aria-expanded={isLanguageMenuOpen}
-                    onClick={() => setIsLanguageMenuOpen((currentOpen) => !currentOpen)}
-                  >
-                    <span className="status-page-language-current">
-                      <span className="status-page-language-flag" aria-hidden="true">
-                        {renderLanguageFlag(selectedLanguage)}
-                      </span>
-                      <span>{selectedLanguage.label}</span>
-                    </span>
-                    <ChevronDown size={14} />
-                  </button>
+            <div className="status-page-info-section">
+              <div className="status-page-info-section-header">
+                <h2>Logo</h2>
+                <p>Upload a brand mark for the page header. PNG, JPG or SVG recommended.</p>
+              </div>
 
-                  {isLanguageMenuOpen && (
-                    <div className="status-page-language-menu" role="listbox" aria-label="Language">
-                      {languageOptionsWithAssets.map((languageOption) => (
-                        <button
-                          key={languageOption.value}
-                          type="button"
-                          role="option"
-                          aria-selected={formValues.language === languageOption.value}
-                          className={`status-page-language-item ${
-                            formValues.language === languageOption.value ? 'selected' : ''
-                          }`}
-                          onClick={() => handleLanguageSelect(languageOption.value)}
-                        >
-                          <span className="status-page-language-flag" aria-hidden="true">
-                            {renderLanguageFlag(languageOption)}
-                          </span>
-                          <span>{languageOption.label}</span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
+              <input
+                ref={logoInputRef}
+                className="status-page-info-hidden-file-input"
+                type="file"
+                accept=".png,.jpg,.jpeg,.svg"
+                onChange={handleLogoSelection}
+              />
+
+              <button
+                type="button"
+                className={`status-page-info-logo-dropzone ${formValues.logoName ? 'has-file' : ''}`}
+                onClick={() => logoInputRef.current?.click()}
+              >
+                <span className="status-page-info-logo-icon" aria-hidden="true">
+                  <Upload size={16} />
+                </span>
+                <div className="status-page-info-logo-copy">
+                  <strong>{formValues.logoName || 'Drag and drop your logo here or choose by click'}</strong>
+                  <small>
+                    {formValues.logoName
+                      ? 'Click to replace the selected file.'
+                      : 'Best result: square logo, lightweight image and transparent background.'}
+                  </small>
                 </div>
+              </button>
+            </div>
+
+            <div className="status-page-info-section">
+              <div className="status-page-info-section-header">
+                <h2>Layout</h2>
+                <p>Choose spacing and logo placement for the public page.</p>
+              </div>
+
+              <div className="status-page-info-preview-grid two-columns">
+                <div className="status-page-info-preview-block">
+                  <div className="status-page-info-preview-block-head">
+                    <h3>Density</h3>
+                    <p>For better readability, compact to display as much info at once as possible.</p>
+                  </div>
+
+                  <div className="status-page-info-preview-options">
+                    {densityOptions.map((option) => {
+                      const isSelected = formValues.density === option.value;
+
+                      return (
+                        <button
+                          key={option.value}
+                          type="button"
+                          className={`status-page-info-preview-card ${isSelected ? 'selected' : ''}`}
+                          onClick={() => handleDensitySelect(option.value)}
+                        >
+                          <div className="status-page-info-preview-head">
+                            <span className={`status-page-info-preview-check ${isSelected ? 'selected' : ''}`} aria-hidden="true" />
+                            <div className="status-page-info-preview-copy">
+                              <strong>{option.label}</strong>
+                              <small>{option.description}</small>
+                            </div>
+                          </div>
+
+                          <div className={`status-page-info-mini-preview density-${option.value}`}>
+                            <div className="status-page-info-mini-preview-shell">
+                              <div className="status-page-info-mini-preview-topline" />
+                              <div className="status-page-info-mini-preview-banner" />
+                              <div className="status-page-info-mini-preview-row" />
+                              <div className="status-page-info-mini-preview-row short" />
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="status-page-info-preview-block">
+                  <div className="status-page-info-preview-block-head">
+                    <h3>Alignment</h3>
+                    <p>Use maximum space with logo on left or push your brand first.</p>
+                  </div>
+
+                  <div className="status-page-info-preview-options">
+                    {alignmentOptions.map((option) => {
+                      const isSelected = formValues.alignment === option.value;
+
+                      return (
+                        <button
+                          key={option.value}
+                          type="button"
+                          className={`status-page-info-preview-card ${isSelected ? 'selected' : ''}`}
+                          onClick={() => handleAlignmentSelect(option.value)}
+                        >
+                          <div className="status-page-info-preview-head">
+                            <span className={`status-page-info-preview-check ${isSelected ? 'selected' : ''}`} aria-hidden="true" />
+                            <div className="status-page-info-preview-copy">
+                              <strong>{option.label}</strong>
+                              <small>{option.description}</small>
+                            </div>
+                          </div>
+
+                          <div className={`status-page-info-mini-preview alignment-${option.value}`}>
+                            <div className="status-page-info-mini-preview-shell">
+                              <div className="status-page-info-mini-preview-topline" />
+                              <div className="status-page-info-mini-preview-banner" />
+                              <div className="status-page-info-mini-preview-row" />
+                              <div className="status-page-info-mini-preview-row short" />
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="status-page-info-section">
+              <div className="status-page-info-section-header">
+                <h2>Password</h2>
+                <p>Protect the page with a password if you do not want it to be public yet.</p>
+              </div>
+
+              <label className="status-page-info-toggle-item status-page-info-password-toggle">
+                <span className="status-page-info-toggle-control">
+                  <input
+                    type="checkbox"
+                    checked={formValues.passwordEnabled}
+                    onChange={(event) => handlePasswordEnabledChange(event.target.checked)}
+                  />
+                  <span className="status-page-info-toggle-slider" aria-hidden="true" />
+                </span>
+
+                <div className="status-page-info-toggle-copy">
+                  <strong>Password protection</strong>
+                  <small>
+                    {formValues.passwordEnabled
+                      ? 'Visitors must enter the password to open this status page.'
+                      : 'The status page stays public without password protection.'}
+                  </small>
+                </div>
+
+                <span
+                  className={`status-page-info-password-toggle-badge ${formValues.passwordEnabled ? 'enabled' : 'disabled'}`}
+                >
+                  {formValues.passwordEnabled ? 'Enabled' : 'Disabled'}
+                </span>
               </label>
-              <label className="status-page-field">
-                <span>Robots meta tag</span>
-                <small>Control indexing of this status page in search engines.</small>
-                <select defaultValue="index">
-                  <option value="index">Index (visible in search engines)</option>
-                  <option value="noindex">Noindex (hidden from search engines)</option>
-                </select>
-              </label>
-            </div>
-          </section>
 
-          <section className="status-page-info-card">
-            <h2>Features</h2>
-            <div className="status-page-switch-grid two-columns">
-              {featureOptions.map((option) => (
-                <label className="status-page-switch-item" key={option.id}>
-                  <span className="status-page-switch-control">
-                    <input type="checkbox" defaultChecked={option.checked} />
-                    <span className="status-page-switch-slider" />
-                  </span>
-                  <span className="status-page-switch-copy">
-                    <strong>{option.label}</strong>
-                    <small>{option.description}</small>
-                  </span>
+              {formValues.passwordEnabled ? (
+                <label className="status-page-info-field">
+                  <span>Password</span>
+                  <input
+                    type="password"
+                    value={formValues.password}
+                    onChange={updateTextField('password')}
+                    placeholder="Enter password"
+                    autoComplete="new-password"
+                  />
                 </label>
-              ))}
+              ) : (
+                <p className="status-page-info-password-note">
+                  Enable password protection to require a password on the public status page.
+                </p>
+              )}
             </div>
-          </section>
 
-          <section className="status-page-info-card">
-            <h2>Privacy</h2>
-            <div className="status-page-switch-grid two-columns">
-              {privacyOptions.map((option) => (
-                <label className="status-page-switch-item" key={option.id}>
-                  <span className="status-page-switch-control">
-                    <input type="checkbox" defaultChecked={option.checked} />
-                    <span className="status-page-switch-slider" />
-                  </span>
-                  <span className="status-page-switch-copy">
-                    <strong>{option.label}</strong>
-                    <small>{option.description}</small>
-                  </span>
-                </label>
-              ))}
-            </div>
+            <footer className="status-page-info-actions">
+              <button type="button" className="status-page-info-secondary" onClick={onOpenMonitorsStep}>
+                Back to monitors
+              </button>
+              <button type="button" className="status-page-info-primary" onClick={handleFinishSetup}>
+                {isNewStatusPage ? 'Finish: Create status page' : 'Save global settings'}
+              </button>
+            </footer>
           </section>
-
-          <div className="status-page-info-actions">
-            <button type="button" className="status-page-info-primary" onClick={() => onCreateMonitor?.()}>
-              Create monitor
-            </button>
-          </div>
         </div>
 
-        <aside className="status-page-info-sidebar" aria-label="Status page sections">
-          <p className="status-page-info-sidebar-title">Monitor details</p>
-          <button type="button" onClick={() => onOpenIntegrationsTeam?.()}>
-            Integrations & Team
-          </button>
-          <button type="button" onClick={() => onOpenMaintenanceInfo?.()}>
-            Maintenance info
-          </button>
+        <aside className="status-page-info-sidebar" aria-label="Status page setup steps">
+          <section className="status-page-info-sidebar-card">
+            <p className="status-page-info-sidebar-label">Setup flow</p>
+
+            <button type="button" className="status-page-info-step link" onClick={onOpenMonitorsStep}>
+              <span className="status-page-info-step-index">1</span>
+              <div className="status-page-info-step-copy">
+                <strong>Monitors</strong>
+                <small>Select the services to display</small>
+              </div>
+              <ChevronRight size={15} />
+            </button>
+
+            <div className="status-page-info-step active">
+              <span className="status-page-info-step-index">2</span>
+              <div className="status-page-info-step-copy">
+                <strong>Global settings</strong>
+                <small>Name, domain, logo and password</small>
+              </div>
+            </div>
+          </section>
+
+          <section className="status-page-info-sidebar-card">
+            <p className="status-page-info-sidebar-label">Summary</p>
+            <h3>{formValues.pageName.trim() || statusPageName || 'New status page'}</h3>
+            <p className="status-page-info-sidebar-summary">
+              {selectedMonitorIds.length > 0
+                ? `${selectedMonitorIds.length} monitor${selectedMonitorIds.length > 1 ? 's' : ''} selected.`
+                : 'No monitors selected yet.'}
+            </p>
+
+            {selectedPreview.length > 0 ? (
+              <div className="status-page-info-sidebar-tags">
+                {selectedPreview.map((monitor) => (
+                  <span key={`summary-${monitor.id}`}>{monitor.name}</span>
+                ))}
+                {selectedOverflowCount > 0 ? <span>+{selectedOverflowCount} more</span> : null}
+              </div>
+            ) : null}
+
+            <div className="status-page-info-sidebar-meta">
+              <div>
+                <span>Custom domain</span>
+                <strong>{formValues.customDomain.trim() || 'Not set'}</strong>
+              </div>
+              <div>
+                <span>Logo</span>
+                <strong>{formValues.logoName.trim() || 'Not uploaded'}</strong>
+              </div>
+              <div>
+                <span>Density</span>
+                <strong>{formValues.density === 'compact' ? 'Compact' : 'Wide'}</strong>
+              </div>
+              <div>
+                <span>Alignment</span>
+                <strong>{formValues.alignment === 'center' ? 'Logo center' : 'Logo left'}</strong>
+              </div>
+              <div>
+                <span>Password</span>
+                <strong>
+                  {formValues.passwordEnabled
+                    ? formValues.password.trim()
+                      ? 'Enabled'
+                      : 'Missing password'
+                    : 'Disabled'}
+                </strong>
+              </div>
+            </div>
+          </section>
         </aside>
       </div>
     </section>

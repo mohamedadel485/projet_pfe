@@ -24,8 +24,9 @@ interface IntegrationCard {
   id: string;
   name: string;
   description: string;
-  category: Exclude<IntegrationCategory, 'All'>;
+  categories: Exclude<IntegrationCategory, 'All'>[];
   icon: IntegrationIcon;
+  isAvailable: boolean;
 }
 
 interface IntegrationModalPreset {
@@ -46,29 +47,25 @@ const integrationCards: IntegrationCard[] = [
     id: 'slack',
     name: 'Slack',
     description: 'Slack messages are a great way to inform the entire team of a downtime.',
-    category: 'Chat platforms',
+    categories: ['Chat platforms'],
     icon: 'slack',
+    isAvailable: false,
   },
   {
     id: 'telegram',
     name: 'Telegram',
     description: 'Telegram messages are a great way to inform the entire team of a downtime.',
-    category: 'Chat platforms',
+    categories: ['Chat platforms'],
     icon: 'telegram',
+    isAvailable: false,
   },
   {
-    id: 'webhook-primary',
+    id: 'webhook',
     name: 'Webhook',
     description: 'Webhook calls are a great way to connect your incident workflow and automations.',
-    category: 'Webhooks',
+    categories: ['Webhooks', 'Connectors & Incident manag.'],
     icon: 'webhook',
-  },
-  {
-    id: 'webhook-secondary',
-    name: 'Webhook',
-    description: 'Webhook calls are a great way to connect your incident workflow and automations.',
-    category: 'Connectors & Incident manag.',
-    icon: 'webhook',
+    isAvailable: true,
   },
 ];
 
@@ -128,7 +125,7 @@ function IntegrationsApiPage({ onOpenIntegrationsTeam: _onOpenIntegrationsTeam }
   const visibleCards = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
     return integrationCards.filter((card) => {
-      const matchesCategory = activeCategory === 'All' || card.category === activeCategory;
+      const matchesCategory = activeCategory === 'All' || card.categories.includes(activeCategory);
       const matchesQuery =
         normalizedQuery.length === 0 ||
         card.name.toLowerCase().includes(normalizedQuery) ||
@@ -158,6 +155,8 @@ function IntegrationsApiPage({ onOpenIntegrationsTeam: _onOpenIntegrationsTeam }
   };
 
   const openIntegrationModal = (card: IntegrationCard) => {
+    if (!card.isAvailable) return;
+
     setActiveCard(card);
     setEndpointValue('');
     setCustomValue('');
@@ -336,14 +335,21 @@ function IntegrationsApiPage({ onOpenIntegrationsTeam: _onOpenIntegrationsTeam }
                 </div>
 
                 <button
-                  className="integration-add-button"
+                  className={`integration-add-button${card.isAvailable ? '' : ' coming-soon'}`}
                   type="button"
+                  disabled={!card.isAvailable}
                   onClick={() => {
                     openIntegrationModal(card);
                   }}
                 >
-                  <Plus size={12} />
-                  Add
+                  {card.isAvailable ? (
+                    <>
+                      <Plus size={12} />
+                      Add
+                    </>
+                  ) : (
+                    'Coming soon'
+                  )}
                 </button>
               </article>
             ))}

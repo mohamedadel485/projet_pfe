@@ -1,7 +1,9 @@
 import { Router, Response } from 'express';
 import { body, validationResult } from 'express-validator';
+import User from '../models/User';
 import Monitor from '../models/Monitor';
 import MonitorLog from '../models/MonitorLog';
+import emailService from '../services/emailService';
 import monitorService from '../services/monitorService';
 import { authenticate, AuthRequest } from '../middleware/auth';
 
@@ -402,6 +404,7 @@ router.post(
     try {
       const { id } = req.params;
       const { userId } = req.body;
+      const normalizedUserId = String(userId).trim();
 
       const monitor = await Monitor.findOne({
         _id: id,
@@ -413,16 +416,46 @@ router.post(
         return;
       }
 
-      if (monitor.sharedWith.includes(userId)) {
+      const targetUser = await User.findById(normalizedUserId).select('name email isActive');
+      if (!targetUser) {
+        res.status(404).json({ error: 'Utilisateur non trouve' });
+        return;
+      }
+
+      if (!targetUser.isActive) {
+        res.status(400).json({ error: 'Cet utilisateur est desactive' });
+        return;
+      }
+
+      const alreadyShared = monitor.sharedWith.some((sharedUserId) => sharedUserId.toString() === normalizedUserId);
+      if (alreadyShared) {
         res.status(400).json({ error: 'Monitor déjà partagé avec cet utilisateur' });
         return;
       }
 
-      monitor.sharedWith.push(userId);
+      monitor.sharedWith.push(targetUser._id);
       await monitor.save();
 
+      try {
+        await emailService.sendMonitorAccessNotification(
+          targetUser.email,
+          targetUser.name,
+          monitor.name,
+          monitor.id,
+          req.user?.name
+        );
+      } catch (mailError) {
+        console.error('Notification email partage monitor echouee:', mailError);
+        res.json({
+          message: 'Monitor partage avec succes.',
+          warning: "Acces ajoute, mais la notification email n'a pas pu etre envoyee.",
+          monitor,
+        });
+        return;
+      }
+
       res.json({
-        message: 'Monitor partagé avec succès',
+        message: 'Monitor partage avec succes et notification envoyee par email.',
         monitor,
       });
     } catch (error: any) {

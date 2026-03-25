@@ -16,6 +16,7 @@ import NewMonitorPage from './pages/new-monitor/NewMonitorPage';
 import MonitorWizardPage, { type MonitorWizardSubmission } from './pages/monitor-wizard/MonitorWizardPage';
 import BulkUploadPage, { type BulkUploadSubmission } from './pages/bulk-upload/BulkUploadPage';
 import StatusPageInfoPage from './pages/status/StatusPageInfoPage';
+import StatusPageMonitorsPage from './pages/status/StatusPageMonitorsPage';
 import StatusPagePublicPage from './pages/status/StatusPagePublicPage';
 import StatusPagesPage from './pages/status/StatusPagesPage';
 import InviteTeamMemberPage from './pages/team-members/InviteTeamMemberPage';
@@ -43,10 +44,12 @@ import {
   isApiError,
   login,
   pauseMonitor,
+  removeMonitorShare,
   requestPasswordReset,
   resetPasswordWithCode,
   resumeMonitor,
   saveAuthToken,
+  shareMonitorWithUser,
   type CreateIntegrationInput,
   type CreateMonitorInput,
   type BackendMonitor,
@@ -89,6 +92,7 @@ interface MonitorRow {
   name: string;
   protocol: string;
   url?: string;
+  sharedUserIds?: string[];
   domainExpiryMode?: 'enabled' | 'disabled';
   domainExpiryAt?: string;
   domainExpiryCheckedAt?: string;
@@ -116,7 +120,9 @@ interface TeamMemberEntry {
 
 interface TeamInvitationEntry {
   id: string;
+  name?: string;
   email: string;
+  monitorIds: string[];
   status: 'pending' | 'accepted' | 'expired';
   createdAt: string;
   expiresAt: string;
@@ -125,6 +131,7 @@ interface TeamInvitationEntry {
 type IntegrationsSubPage = 'api' | 'team';
 type TeamMembersSubPage = 'overview' | 'invite' | 'manage';
 type MaintenanceSubPage = 'overview' | 'windows';
+type StatusPageEditorView = 'settings' | 'monitors';
 type AuthRoute = 'login' | 'confirmation-code' | 'forgot-password' | 'accept-invitation' | null;
 type PasswordResetContext = { email: string; newPassword: string } | null;
 type NewMonitorOption = 'single' | 'wizard' | 'bulk';
@@ -336,6 +343,9 @@ const mapBackendMonitorToRow = (monitor: BackendMonitor): MonitorRow => {
     name: monitor.name,
     protocol: monitor.type.toUpperCase(),
     url: monitor.url,
+    sharedUserIds: Array.isArray(monitor.sharedWith)
+      ? monitor.sharedWith.filter((userId): userId is string => typeof userId === 'string')
+      : [],
     domainExpiryMode: monitor.domainExpiryMode,
     domainExpiryAt: monitor.domainExpiryAt,
     domainExpiryCheckedAt: monitor.domainExpiryCheckedAt,
@@ -366,6 +376,7 @@ function App() {
   const [editingMonitorId, setEditingMonitorId] = useState<string | null>(null);
   const [selectedStatusPageId, setSelectedStatusPageId] = useState<string | null>(null);
   const [isStatusPagePublicView, setIsStatusPagePublicView] = useState(false);
+  const [statusPageEditorView, setStatusPageEditorView] = useState<StatusPageEditorView>('settings');
   const [isCreatingMonitor, setIsCreatingMonitor] = useState(false);
   const [isMonitorWizardOpen, setIsMonitorWizardOpen] = useState(false);
   const [isBulkUploadOpen, setIsBulkUploadOpen] = useState(false);
@@ -589,6 +600,7 @@ function App() {
     let nextEditingMonitorId: string | null = null;
     let nextSelectedStatusPageId: string | null = null;
     let nextIsStatusPagePublicView = false;
+    let nextStatusPageEditorView: StatusPageEditorView = 'settings';
     let nextIsCreatingMonitor = false;
     let nextIsMonitorWizardOpen = false;
     let nextIsBulkUploadOpen = false;
@@ -641,9 +653,14 @@ function App() {
       nextMenuLabel = 'Status pages';
       nextSelectedStatusPageId = segments[1];
       nextIsStatusPagePublicView = true;
+    } else if (segments.length === 3 && segments[0] === 'status-pages' && segments[2] === 'monitors') {
+      nextMenuLabel = 'Status pages';
+      nextSelectedStatusPageId = segments[1];
+      nextStatusPageEditorView = 'monitors';
     } else if (segments.length === 2 && segments[0] === 'status-pages') {
       nextMenuLabel = 'Status pages';
       nextSelectedStatusPageId = segments[1];
+      nextStatusPageEditorView = 'settings';
     } else if (pathname === '/status-pages') {
       nextMenuLabel = 'Status pages';
     } else if (pathname === '/maintenance/windows') {
@@ -675,6 +692,7 @@ function App() {
     setEditingMonitorId(nextEditingMonitorId);
     setSelectedStatusPageId(nextSelectedStatusPageId);
     setIsStatusPagePublicView(nextIsStatusPagePublicView);
+    setStatusPageEditorView(nextStatusPageEditorView);
     setIsCreatingMonitor(nextIsCreatingMonitor);
     setIsMonitorWizardOpen(nextIsMonitorWizardOpen);
     setIsBulkUploadOpen(nextIsBulkUploadOpen);
@@ -762,13 +780,19 @@ function App() {
         const mapInvitationEntry = (invitation: {
           _id?: string;
           id?: string;
+          name?: string;
           email: string;
+          monitorIds?: string[];
           status: 'pending' | 'accepted' | 'expired';
           createdAt: string;
           expiresAt: string;
         }) => ({
           id: invitation._id ?? invitation.id ?? invitation.email,
+          name: invitation.name,
           email: invitation.email,
+          monitorIds: Array.isArray(invitation.monitorIds)
+            ? invitation.monitorIds.filter((monitorId): monitorId is string => typeof monitorId === 'string')
+            : [],
           status: invitation.status,
           createdAt: invitation.createdAt,
           expiresAt: invitation.expiresAt,
@@ -1066,6 +1090,23 @@ function App() {
     [authToken, clearSessionAndRedirectToLogin, navigateTo, refreshMonitors],
   );
 
+  const appendInvitationLinkNotice = useCallback(async (baseNotice: string, invitationUrl?: string): Promise<string> => {
+    if (!invitationUrl) {
+      return baseNotice;
+    }
+
+    if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+      try {
+        await navigator.clipboard.writeText(invitationUrl);
+        return `${baseNotice} Le lien d'invitation a ete copie dans le presse-papiers.`;
+      } catch {
+        return `${baseNotice} Lien: ${invitationUrl}`;
+      }
+    }
+
+    return `${baseNotice} Lien: ${invitationUrl}`;
+  }, []);
+
   const handleInviteTeamMember = useCallback(
     async ({
       name,
@@ -1077,6 +1118,116 @@ function App() {
       role: 'admin' | 'member';
       monitorIds: string[];
     }) => {
+      const token = authToken;
+      const adminUser = currentUser;
+
+      if (!token) {
+        return { error: 'Authentification requise.' };
+      }
+      if (!adminUser || adminUser.role !== 'admin') {
+        return { error: 'Acces reserve aux admins.' };
+      }
+
+      try {
+        const response = await createInvitation(name, email, monitorIds, token);
+        const appliedMonitorIds = response.invitation.monitorIds ?? [];
+        if (monitorIds.length > 0 && appliedMonitorIds.length === 0) {
+          return {
+            error: "Invitation creee sans droits monitors. Redemarrez le backend sur le code actuel puis reinvitez l'utilisateur.",
+          };
+        }
+
+        const successBase = response.warning ?? 'Invitation envoyee avec succes.';
+        const notice = await appendInvitationLinkNotice(successBase, response.invitationUrl);
+        await refreshTeamSummary(token, adminUser.role);
+        return { error: null, notice };
+      } catch (error) {
+        if (isApiError(error) && error.status === 401) {
+          clearSessionAndRedirectToLogin();
+          return { error: 'Session expiree. Reconnectez-vous.' };
+        }
+        return { error: formatAppError(error, "Impossible d'envoyer l'invitation.") };
+      }
+    },
+    [appendInvitationLinkNotice, authToken, clearSessionAndRedirectToLogin, currentUser, refreshTeamSummary],
+  );
+
+  const handleGrantMonitorAccess = useCallback(
+    async ({ monitorId, name, email }: { monitorId: string; name?: string; email: string }) => {
+      const token = authToken;
+      const adminUser = currentUser;
+
+      if (!token) {
+        return { error: 'Authentification requise.' };
+      }
+      if (!adminUser || adminUser.role !== 'admin') {
+        return { error: 'Acces reserve aux admins.' };
+      }
+
+      const normalizedEmail = email.trim().toLowerCase();
+      if (normalizedEmail === '') {
+        return { error: "L'email est requis." };
+      }
+
+      const existingUser = teamMembers.find((member) => member.email.trim().toLowerCase() === normalizedEmail);
+      const targetMonitor = monitorRows.find((monitor) => monitor.id === monitorId);
+
+      try {
+        if (existingUser) {
+          if (targetMonitor?.sharedUserIds?.includes(existingUser.id)) {
+            return { error: 'Cet utilisateur a deja acces a ce monitor.' };
+          }
+
+          const response = await shareMonitorWithUser(monitorId, existingUser.id, token);
+          await refreshMonitors(token);
+          await refreshTeamSummary(token, adminUser.role);
+          const notice = response.warning
+            ? `${response.message} ${response.warning}`
+            : response.message;
+          return { error: null, notice };
+        } else {
+          const safeName =
+            name?.trim() ||
+            normalizedEmail.split('@')[0]?.trim() ||
+            'Team member';
+
+          const response = await createInvitation(safeName, normalizedEmail, [monitorId], token);
+          const appliedMonitorIds = response.invitation.monitorIds ?? [];
+
+          if (appliedMonitorIds.length === 0) {
+            return {
+              error: "Invitation creee sans droits monitor. Redemarrez le backend sur le code actuel puis reinvitez l'utilisateur.",
+            };
+          }
+
+          const successBase = response.warning ?? 'Invitation envoyee avec succes.';
+          const notice = await appendInvitationLinkNotice(successBase, response.invitationUrl);
+          await refreshMonitors(token);
+          await refreshTeamSummary(token, adminUser.role);
+          return { error: null, notice };
+        }
+      } catch (error) {
+        if (isApiError(error) && error.status === 401) {
+          clearSessionAndRedirectToLogin();
+          return { error: 'Session expiree. Reconnectez-vous.' };
+        }
+        return { error: formatAppError(error, "Impossible d'ajouter l'utilisateur a ce monitor.") };
+      }
+    },
+    [
+      appendInvitationLinkNotice,
+      authToken,
+      clearSessionAndRedirectToLogin,
+      currentUser,
+      monitorRows,
+      refreshMonitors,
+      refreshTeamSummary,
+      teamMembers,
+    ],
+  );
+
+  const handleRevokeMonitorAccess = useCallback(
+    async ({ monitorId, userId }: { monitorId: string; userId: string }) => {
       if (!authToken) {
         return 'Authentification requise.';
       }
@@ -1085,11 +1236,8 @@ function App() {
       }
 
       try {
-        const response = await createInvitation(name, email, monitorIds, authToken);
-        const appliedMonitorIds = response.invitation.monitorIds ?? [];
-        if (monitorIds.length > 0 && appliedMonitorIds.length === 0) {
-          return "Invitation creee sans droits monitors. Redemarrez le backend sur le code actuel puis reinvitez l'utilisateur.";
-        }
+        await removeMonitorShare(monitorId, userId, authToken);
+        await refreshMonitors(authToken);
         await refreshTeamSummary(authToken, currentUser.role);
         return null;
       } catch (error) {
@@ -1097,10 +1245,10 @@ function App() {
           clearSessionAndRedirectToLogin();
           return 'Session expiree. Reconnectez-vous.';
         }
-        return formatAppError(error, "Impossible d'envoyer l'invitation.");
+        return formatAppError(error, "Impossible de retirer l'acces a ce monitor.");
       }
     },
-    [authToken, clearSessionAndRedirectToLogin, currentUser, refreshTeamSummary],
+    [authToken, clearSessionAndRedirectToLogin, currentUser, refreshMonitors, refreshTeamSummary],
   );
 
   const handleDeleteTeamUser = useCallback(
@@ -1673,6 +1821,9 @@ function App() {
           key={`edit-${teamMonitor.id}-integrations`}
           monitor={teamMonitor}
           initialSection="integrations"
+          currentUserRole={currentUser?.role}
+          teamMembers={teamMembers}
+          invitations={teamInvitations}
           onBack={() => {
             navigateTo('/monitoring');
           }}
@@ -1683,8 +1834,11 @@ function App() {
             navigateTo(`/monitoring/${teamMonitor.id}/integrations-team`);
           }}
           onManageTeam={() => {
-            navigateTo('/team-members');
+            navigateTo('/team-members/manage');
           }}
+          onGrantMonitorAccess={(payload) => handleGrantMonitorAccess({ monitorId: teamMonitor.id, ...payload })}
+          onRevokeMonitorAccess={(userId) => handleRevokeMonitorAccess({ monitorId: teamMonitor.id, userId })}
+          onDeleteInvitation={handleDeleteInvitation}
           onSaveChanges={(payload) => handleUpdateMonitor(teamMonitor.id, payload)}
           onOpenMaintenanceInfo={() => {
             navigateTo('/maintenance');
@@ -1697,6 +1851,9 @@ function App() {
           key={`edit-${editingMonitor.id}-details`}
           monitor={editingMonitor}
           initialSection="details"
+          currentUserRole={currentUser?.role}
+          teamMembers={teamMembers}
+          invitations={teamInvitations}
           onBack={() => {
             navigateTo(`/monitoring/${editingMonitor.id}`);
           }}
@@ -1707,8 +1864,11 @@ function App() {
             navigateTo(`/monitoring/${editingMonitor.id}/integrations-team`);
           }}
           onManageTeam={() => {
-            navigateTo('/team-members');
+            navigateTo('/team-members/manage');
           }}
+          onGrantMonitorAccess={(payload) => handleGrantMonitorAccess({ monitorId: editingMonitor.id, ...payload })}
+          onRevokeMonitorAccess={(userId) => handleRevokeMonitorAccess({ monitorId: editingMonitor.id, userId })}
+          onDeleteInvitation={handleDeleteInvitation}
           onSaveChanges={(payload) => handleUpdateMonitor(editingMonitor.id, payload)}
           onOpenMaintenanceInfo={() => {
             navigateTo('/maintenance');
@@ -1781,23 +1941,53 @@ function App() {
           />
         </div>
       ) : isStatusPagesPage ? selectedStatusPageId ? (
-        (
-          <StatusPageInfoPage
+        statusPageEditorView === 'monitors' ? (
+          <StatusPageMonitorsPage
             statusPageId={selectedStatusPageId}
+            statusPageName={monitorRows.find((monitor) => monitor.id === selectedStatusPageId)?.name}
+            monitors={monitorRows.map((monitor) => ({
+              id: monitor.id,
+              name: monitor.name,
+              url: monitor.url,
+              protocol: monitor.protocol,
+              tags: monitor.tags,
+              state: monitor.state,
+              uptime: monitor.uptime,
+            }))}
             onBackToMonitoring={() => {
               navigateTo('/monitoring');
             }}
             onBackToStatusPages={() => {
               navigateTo('/status-pages');
             }}
+            onOpenGlobalSettings={() => {
+              navigateTo(`/status-pages/${selectedStatusPageId}`);
+            }}
             onCreateMonitor={() => {
               navigateTo('/monitoring/new');
             }}
-            onOpenIntegrationsTeam={() => {
-              navigateTo('/integrations-team');
+          />
+        ) : (
+          <StatusPageInfoPage
+            statusPageId={selectedStatusPageId}
+            statusPageName={monitorRows.find((monitor) => monitor.id === selectedStatusPageId)?.name}
+            monitors={monitorRows.map((monitor) => ({
+              id: monitor.id,
+              name: monitor.name,
+              url: monitor.url,
+              protocol: monitor.protocol,
+              tags: monitor.tags,
+              state: monitor.state,
+              uptime: monitor.uptime,
+            }))}
+            onBackToMonitoring={() => {
+              navigateTo('/monitoring');
             }}
-            onOpenMaintenanceInfo={() => {
-              navigateTo('/maintenance');
+            onBackToStatusPages={() => {
+              navigateTo('/status-pages');
+            }}
+            onOpenMonitorsStep={() => {
+              navigateTo(`/status-pages/${selectedStatusPageId}/monitors`);
             }}
           />
         )
@@ -1805,10 +1995,13 @@ function App() {
         <div className="panel-main">
           <StatusPagesPage
             onCreateStatusPage={() => {
-              navigateTo('/status-pages/new');
+              navigateTo('/status-pages/new/monitors');
             }}
             onOpenStatusPage={(statusPageId) => {
               navigateTo(`/status-pages/${statusPageId}`);
+            }}
+            onOpenStatusPageMonitors={(statusPageId) => {
+              navigateTo(`/status-pages/${statusPageId}/monitors`);
             }}
             onPreviewStatusPage={(statusPageId) => {
               navigateTo(`/status-pages/${statusPageId}/public`);

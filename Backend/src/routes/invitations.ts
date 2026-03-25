@@ -97,7 +97,9 @@ router.post(
         console.error('Envoi email invitation échoué:', mailError);
         res.status(201).json({
           message: 'Invitation créée avec succès (email non envoye).',
+          delivery: 'manual-link',
           warning: "SMTP indisponible: l'invitation a ete creee sans envoi d'email.",
+          invitationUrl: emailService.getInvitationLink(token),
           invitation: {
             id: invitation._id,
             name: invitation.name,
@@ -112,7 +114,9 @@ router.post(
       }
 
       res.status(201).json({
+        delivery: 'smtp',
         message: 'Invitation envoyée avec succès',
+        invitationUrl: emailService.getInvitationLink(token),
         invitation: {
           id: invitation._id,
           name: invitation.name,
@@ -291,7 +295,9 @@ router.post(
         console.error('Renvoi email invitation échoué:', mailError);
         res.status(200).json({
           message: 'Invitation renvoyée avec succès (email non envoye).',
+          delivery: 'manual-link',
           warning: "SMTP indisponible: l'invitation a ete renvoyee sans envoi d'email.",
+          invitationUrl: emailService.getInvitationLink(invitation.token),
           invitation: {
             id: invitation._id,
             name: invitation.name,
@@ -305,7 +311,9 @@ router.post(
       }
 
       res.json({ 
+        delivery: 'smtp',
         message: 'Invitation renvoyée avec succès',
+        invitationUrl: emailService.getInvitationLink(invitation.token),
         invitation: {
           id: invitation._id,
           name: invitation.name,

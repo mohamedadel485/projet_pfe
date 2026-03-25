@@ -22,6 +22,7 @@ interface StatusPageRow {
 
 interface StatusPagesPageProps {
   onOpenStatusPage: (statusPageId: string) => void;
+  onOpenStatusPageMonitors: (statusPageId: string) => void;
   onPreviewStatusPage?: (statusPageId: string) => void;
   onCreateStatusPage?: () => void;
 }
@@ -34,7 +35,12 @@ const mapMonitorToStatusPageRow = (monitor: BackendMonitor): StatusPageRow => ({
   status: monitor.status === 'paused' ? 'Unpublished' : 'Published',
 });
 
-function StatusPagesPage({ onOpenStatusPage, onPreviewStatusPage, onCreateStatusPage }: StatusPagesPageProps) {
+function StatusPagesPage({
+  onOpenStatusPage,
+  onOpenStatusPageMonitors,
+  onPreviewStatusPage,
+  onCreateStatusPage,
+}: StatusPagesPageProps) {
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [openMenuPosition, setOpenMenuPosition] = useState<{ top: number; left: number } | null>(null);
   const [statusPageRows, setStatusPageRows] = useState<StatusPageRow[]>([]);
@@ -272,7 +278,7 @@ function StatusPagesPage({ onOpenStatusPage, onPreviewStatusPage, onCreateStatus
                                 event.stopPropagation();
                                 setOpenMenuId(null);
                                 setOpenMenuPosition(null);
-                                openStatusPageDetails(statusPage.id);
+                                onOpenStatusPageMonitors(statusPage.id);
                               }}
                             >
                               <span className="status-pages-menu-item-icon" aria-hidden="true">

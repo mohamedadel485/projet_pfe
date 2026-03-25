@@ -175,11 +175,6 @@ const durationLabelToSeconds = (value: string): string => {
   return String(hours * 3600 + minutes * 60 + seconds);
 };
 
-const parseCheckedAtMs = (incident: BackendIncident): number => {
-  const timestamp = Date.parse(incident.checkedAt);
-  return Number.isNaN(timestamp) ? 0 : timestamp;
-};
-
 const deriveRootCause = (incident: BackendIncident): string => {
   if (typeof incident.errorMessage === 'string' && incident.errorMessage.trim() !== '') {
     return incident.errorMessage;
@@ -195,97 +190,33 @@ const deriveRootCause = (incident: BackendIncident): string => {
   return incident.status === 'up' ? 'Recovered' : 'Unknown error';
 };
 
-const buildResolvedIncidentRow = (
-  startedLog: BackendIncident,
-  resolvedLog: BackendIncident,
-  rootCauseLog: BackendIncident
-): IncidentRow => {
-  const monitorName = startedLog.monitor?.name ?? resolvedLog.monitor?.name ?? 'Unknown monitor';
-  const monitorId = startedLog.monitor?._id ?? resolvedLog.monitor?._id ?? null;
-  const monitorUrl = startedLog.monitor?.url ?? resolvedLog.monitor?.url ?? '';
-  const startedMs = parseCheckedAtMs(startedLog);
-  const resolvedMs = parseCheckedAtMs(resolvedLog);
-  const durationMs = resolvedMs > startedMs ? resolvedMs - startedMs : rootCauseLog.responseTime;
+const buildIncidentRowsFromLogs = (incidents: BackendIncident[]): IncidentRow[] => {
+  const rows = incidents.map((incident): IncidentRow => {
+    const startedSource = incident.startedAt ?? incident.checkedAt;
+    const startedMs = Date.parse(startedSource);
+    const resolvedMs = incident.resolvedAt ? Date.parse(incident.resolvedAt) : 0;
+    const durationMs =
+      typeof incident.durationMs === 'number' && incident.durationMs >= 0
+        ? incident.durationMs
+        : incident.status === 'down'
+          ? Math.max(0, Date.now() - (Number.isNaN(startedMs) ? 0 : startedMs))
+          : Math.max(0, resolvedMs - (Number.isNaN(startedMs) ? 0 : startedMs));
 
-  return {
-    id: `incident-${monitorId ?? 'unknown'}-${startedMs}-${resolvedMs}`,
-    status: 'Resolved',
-    monitor: monitorName,
-    monitorId,
-    monitorUrl,
-    rootCause: deriveRootCause(rootCauseLog),
-    comments: 0,
-    started: formatIncidentDate(startedLog.checkedAt),
-    resolved: formatIncidentDate(resolvedLog.checkedAt),
-    duration: formatDurationFromMs(durationMs),
-    visibility: 'Included',
-    statusCode: rootCauseLog.statusCode,
-  };
-};
-
-const buildOngoingIncidentRow = (startedLog: BackendIncident, rootCauseLog: BackendIncident): IncidentRow => {
-  const monitorName = startedLog.monitor?.name ?? 'Unknown monitor';
-  const monitorId = startedLog.monitor?._id ?? null;
-  const monitorUrl = startedLog.monitor?.url ?? '';
-  const startedMs = parseCheckedAtMs(startedLog);
-
-  return {
-    id: `incident-${monitorId ?? 'unknown'}-${startedMs}-ongoing`,
-    status: 'Ongoing',
-    monitor: monitorName,
-    monitorId,
-    monitorUrl,
-    rootCause: deriveRootCause(rootCauseLog),
-    comments: 0,
-    started: formatIncidentDate(startedLog.checkedAt),
-    resolved: '-',
-    duration: 'Ongoing',
-    visibility: 'Included',
-    statusCode: rootCauseLog.statusCode,
-  };
-};
-
-const buildIncidentRowsFromLogs = (logs: BackendIncident[]): IncidentRow[] => {
-  const rows: IncidentRow[] = [];
-  const groupedByMonitor = new Map<string, BackendIncident[]>();
-
-  for (const log of logs) {
-    const groupKey = log.monitor?._id ?? `unknown-${log._id ?? log.checkedAt}`;
-    const group = groupedByMonitor.get(groupKey);
-    if (group) {
-      group.push(log);
-    } else {
-      groupedByMonitor.set(groupKey, [log]);
-    }
-  }
-
-  for (const monitorLogs of groupedByMonitor.values()) {
-    monitorLogs.sort((a, b) => parseCheckedAtMs(a) - parseCheckedAtMs(b));
-
-    let openedIncidentStart: BackendIncident | null = null;
-    let latestDownLog: BackendIncident | null = null;
-
-    for (const log of monitorLogs) {
-      if (log.status === 'down') {
-        if (!openedIncidentStart) {
-          openedIncidentStart = log;
-        }
-        latestDownLog = log;
-        continue;
-      }
-
-      // A true "Resolved" incident exists only when a previous "down" sequence ends with an "up".
-      if (openedIncidentStart && latestDownLog) {
-        rows.push(buildResolvedIncidentRow(openedIncidentStart, log, latestDownLog));
-        openedIncidentStart = null;
-        latestDownLog = null;
-      }
-    }
-
-    if (openedIncidentStart && latestDownLog) {
-      rows.push(buildOngoingIncidentRow(openedIncidentStart, latestDownLog));
-    }
-  }
+    return {
+      id: incident._id,
+      status: incident.status === 'up' ? 'Resolved' : 'Ongoing',
+      monitor: incident.monitor?.name ?? 'Unknown monitor',
+      monitorId: incident.monitor?._id ?? null,
+      monitorUrl: incident.monitor?.url ?? '',
+      rootCause: deriveRootCause(incident),
+      comments: 0,
+      started: formatIncidentDate(startedSource),
+      resolved: incident.resolvedAt ? formatIncidentDate(incident.resolvedAt) : '-',
+      duration: incident.status === 'down' ? 'Ongoing' : formatDurationFromMs(durationMs),
+      visibility: 'Included',
+      statusCode: incident.statusCode,
+    };
+  });
 
   rows.sort((a, b) => {
     const dateDelta = parseIncidentDate(b.started) - parseIncidentDate(a.started);
