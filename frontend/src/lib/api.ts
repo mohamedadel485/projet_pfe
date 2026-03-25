@@ -273,6 +273,26 @@ interface MessageResponse {
   details?: string;
 }
 
+export interface AssistantChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+export interface AssistantChatAction {
+  kind: "navigate" | "prompt" | "reply";
+  label: string;
+  description: string;
+  value: string;
+}
+
+export interface AssistantChatResponse {
+  intent: "answer" | "create_monitor" | "clarify";
+  reply: string;
+  missingFields: string[];
+  createdMonitor: BackendMonitor | null;
+  actions: AssistantChatAction[];
+}
+
 interface UserMutationResponse {
   message: string;
   user: {
@@ -385,17 +405,20 @@ interface RequestOptions {
   token?: string | null;
   body?: unknown;
   signal?: AbortSignal;
+  timeoutMs?: number;
 }
 
 const fetchWithTimeout = async (
   input: RequestInfo | URL,
   init: RequestInit,
+  timeoutMs: number = DEFAULT_REQUEST_TIMEOUT_MS,
 ): Promise<Response> => {
   const externalSignal = init.signal;
   const controller = new AbortController();
+  const resolvedTimeoutMs = Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : DEFAULT_REQUEST_TIMEOUT_MS;
   const timeoutId = window.setTimeout(() => {
     controller.abort();
-  }, DEFAULT_REQUEST_TIMEOUT_MS);
+  }, resolvedTimeoutMs);
 
   const abortFromExternalSignal = (): void => {
     controller.abort();
@@ -432,9 +455,11 @@ const request = async <T>(
       : null;
   const hasBody = options?.body !== undefined;
   const endpoint = buildEndpoint(path);
+  const requestTimeoutMs = options?.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
   const isMaintenancePath = path.startsWith("/maintenances");
   const isAuthPath = path.startsWith("/auth/");
   const isAuthRegisterPath = path.startsWith("/auth/register");
+  const isAssistantPath = path.startsWith("/assistant/");
   const isRelativeApiBase = !isHttpUrl(API_BASE_URL);
   const directBackendTargets = LOCAL_DIRECT_BACKEND_FALLBACKS.filter(
     (target) => buildDirectBackendEndpoint(target, path) !== endpoint,
@@ -467,7 +492,7 @@ const request = async <T>(
   let response: Response;
   let usedDirectBackend = false;
   try {
-    response = await fetchWithTimeout(endpoint, requestInit);
+    response = await fetchWithTimeout(endpoint, requestInit, requestTimeoutMs);
   } catch (primaryError) {
     if (!canTryDirectBackend) {
       throw new ApiError(
@@ -483,6 +508,7 @@ const request = async <T>(
         const candidateResponse = await fetchWithTimeout(
           buildDirectBackendEndpoint(target, path),
           requestInit,
+          requestTimeoutMs,
         );
         directResponse = candidateResponse;
         usedDirectBackend = true;
@@ -517,6 +543,7 @@ const request = async <T>(
         response.status === 405 ||
         (isMaintenancePath && response.status === 404) ||
         (isAuthPath && response.status === 404) ||
+        (isAssistantPath && response.status === 404) ||
         (isAuthRegisterPath && response.status === 403));
 
     if (shouldRetryWithDirectBackend) {
@@ -525,6 +552,7 @@ const request = async <T>(
           const directResponse = await fetchWithTimeout(
             buildDirectBackendEndpoint(target, path),
             requestInit,
+            requestTimeoutMs,
           );
           const directPayload = await parseResponsePayload(directResponse);
 
@@ -692,6 +720,17 @@ export const createMonitor = (
     method: "POST",
     token,
     body: monitor,
+  });
+
+export const sendAssistantChat = (
+  messages: AssistantChatMessage[],
+  token?: string | null,
+): Promise<AssistantChatResponse> =>
+  request<AssistantChatResponse>("/assistant/chat", {
+    method: "POST",
+    token: token ?? undefined,
+    body: { messages },
+    timeoutMs: 20000,
   });
 
 export const updateMonitor = (

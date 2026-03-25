@@ -15,6 +15,7 @@ import MonitorDetailsPage from './pages/monitor-details/MonitorDetailsPage';
 import NewMonitorPage from './pages/new-monitor/NewMonitorPage';
 import MonitorWizardPage, { type MonitorWizardSubmission } from './pages/monitor-wizard/MonitorWizardPage';
 import BulkUploadPage, { type BulkUploadSubmission } from './pages/bulk-upload/BulkUploadPage';
+import AssistantChatbot from './components/assistant-chat/AssistantChatbot';
 import StatusPageInfoPage from './pages/status/StatusPageInfoPage';
 import StatusPageMonitorsPage from './pages/status/StatusPageMonitorsPage';
 import StatusPagePublicPage from './pages/status/StatusPagePublicPage';
@@ -1668,6 +1669,19 @@ function App() {
     setSelectedMonitorIds(areAllMonitorsSelected ? [] : monitorRows.map((monitor) => monitor.id));
   };
 
+  const handleAssistantMonitorCreated = useCallback(
+    async (_monitor: BackendMonitor) => {
+      if (!authToken) {
+        return;
+      }
+
+      await refreshMonitors(authToken);
+    },
+    [authToken, refreshMonitors],
+  );
+
+  const showAssistant = Boolean(currentUser && isAuthBootstrapComplete && !authRoute && !isStatusPagePublicView);
+
   if (authRoute === 'login') {
     return (
       <LoginPage
@@ -2469,6 +2483,16 @@ function App() {
           </aside>
         </>
       )}
+
+      <AssistantChatbot
+        enabled={showAssistant}
+        userName={currentUser?.name}
+        authToken={authToken}
+        onOpenManualCreatePage={() => {
+          navigateTo('/monitoring/new');
+        }}
+        onMonitorCreated={handleAssistantMonitorCreated}
+      />
     </div>
   );
 }

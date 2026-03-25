@@ -38,6 +38,7 @@ import invitationRoutes from './routes/invitations';
 import incidentRoutes from './routes/incidents';
 import maintenanceRoutes from './routes/maintenances';
 import integrationRoutes from './routes/integrations';
+import assistantRoutes from './routes/assistant';
 
 const app: Application = express();
 app.set('etag', false);
@@ -160,6 +161,7 @@ app.use('/api/invitations', invitationRoutes);
 app.use('/api/incidents', incidentRoutes);
 app.use('/api/maintenances', maintenanceRoutes);
 app.use('/api/integrations', integrationRoutes);
+app.use('/api/assistant', assistantRoutes);
 
 app.get('/', (_req: Request, res: Response) => {
   res.json({
@@ -174,6 +176,7 @@ app.get('/', (_req: Request, res: Response) => {
       incidents: '/api/incidents',
       maintenances: '/api/maintenances',
       integrations: '/api/integrations',
+      assistant: '/api/assistant',
     },
   });
 });
