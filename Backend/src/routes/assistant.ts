@@ -6,6 +6,8 @@ import {
   analyzeAssistantChat,
   buildWorkspaceSummary,
   createAssistantSuccessReply,
+  generateGenericChatReply,
+  type GenericChatOptions,
   type AssistantChatMessage,
   type AssistantMonitorDraft,
 } from '../services/assistantService';
@@ -29,6 +31,19 @@ const normalizeMessageArray = (input: unknown): AssistantChatMessage[] => {
       return { role, content };
     })
     .filter((message) => message.content !== '');
+};
+
+const parseGenericChatOptions = (body: Record<string, unknown>): GenericChatOptions => {
+  const temperatureValue = Number(body.temperature);
+
+  return {
+    model: typeof body.model === 'string' && body.model.trim() !== '' ? body.model.trim() : null,
+    temperature: Number.isFinite(temperatureValue) ? temperatureValue : null,
+    systemInstruction:
+      typeof body.systemInstruction === 'string' && body.systemInstruction.trim() !== ''
+        ? body.systemInstruction.trim()
+        : null,
+  };
 };
 
 const buildMonitorPayload = (
@@ -70,6 +85,27 @@ router.post(
 
       if (messages.length === 0) {
         res.status(400).json({ error: 'Le message du chat est requis.' });
+        return;
+      }
+
+      const mode =
+        typeof req.body?.mode === 'string' && req.body.mode.trim() === 'generic'
+          ? 'generic'
+          : 'assistant';
+
+      if (mode === 'generic') {
+        const reply = await generateGenericChatReply(
+          messages,
+          parseGenericChatOptions((req.body ?? {}) as Record<string, unknown>)
+        );
+
+        res.json({
+          intent: 'answer',
+          reply,
+          missingFields: [],
+          createdMonitor: null,
+          actions: [],
+        });
         return;
       }
 

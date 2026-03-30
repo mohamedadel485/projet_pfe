@@ -279,6 +279,13 @@ export interface AssistantChatMessage {
   content: string;
 }
 
+export interface AssistantChatOptions {
+  mode?: "assistant" | "generic";
+  model?: string;
+  temperature?: number;
+  systemInstruction?: string;
+}
+
 export interface AssistantChatAction {
   kind: "navigate" | "prompt" | "reply";
   label: string;
@@ -292,6 +299,12 @@ export interface AssistantChatResponse {
   missingFields: string[];
   createdMonitor: BackendMonitor | null;
   actions: AssistantChatAction[];
+}
+
+export interface BackendHealthResponse {
+  status: string;
+  timestamp: string;
+  uptime: number;
 }
 
 interface UserMutationResponse {
@@ -726,13 +739,17 @@ export const createMonitor = (
 export const sendAssistantChat = (
   messages: AssistantChatMessage[],
   token?: string | null,
+  options?: AssistantChatOptions,
 ): Promise<AssistantChatResponse> =>
   request<AssistantChatResponse>("/assistant/chat", {
     method: "POST",
     token: token ?? undefined,
-    body: { messages },
+    body: { messages, ...options },
     timeoutMs: 20000,
   });
+
+export const fetchBackendHealth = (): Promise<BackendHealthResponse> =>
+  request<BackendHealthResponse>("/health");
 
 export const updateMonitor = (
   monitorId: string,

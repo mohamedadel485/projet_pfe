@@ -64,6 +64,10 @@ interface RawAssistantAnalysisResult {
 const GEMINI_MODEL = process.env.GEMINI_MODEL?.trim() || 'gemini-3.1-pro-preview';
 const GEMINI_TIMEOUT_MS = 15000;
 const MAX_CONVERSATION_TURNS = 12;
+const GENERIC_GEMINI_MODEL = process.env.GEMINI_MODEL?.trim() || 'gemini-3-flash-preview';
+const DEFAULT_GENERIC_SYSTEM_PROMPT =
+  "Tu es un assistant utile, clair et sympathique. Reponds en francais sauf si l'utilisateur demande une autre langue.";
+const DEFAULT_GENERIC_TEMPERATURE = 0.7;
 
 let ai: GoogleGenAI | null = null;
 try {
@@ -136,6 +140,21 @@ const getLatestUserMessage = (messages: AssistantChatMessage[]): string => {
     }
   }
   return '';
+};
+
+export interface GenericChatOptions {
+  model?: string | null;
+  temperature?: number | null;
+  systemInstruction?: string | null;
+}
+
+const normalizeTemperature = (value: number | null | undefined): number => {
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) {
+    return DEFAULT_GENERIC_TEMPERATURE;
+  }
+
+  return Math.max(0, Math.min(numericValue, 2));
 };
 
 const stripTrailingPunctuation = (value: string): string => value.replace(/[)\].,!?;:]+$/g, '');
@@ -926,6 +945,53 @@ export const analyzeAssistantChat = async (
   } catch (error) {
     console.warn('Gemini assistant unavailable, fallback local parser used:', error);
     return fallbackAnalyze(latestUserMessage, workspace);
+  }
+};
+
+export const generateGenericChatReply = async (
+  messages: AssistantChatMessage[],
+  options: GenericChatOptions = {}
+): Promise<string> => {
+  const normalizedMessages = normalizeConversation(messages);
+  const latestUserMessage = getLatestUserMessage(normalizedMessages);
+
+  if (latestUserMessage === '') {
+    return 'Je suis pret. Dis-moi ce que tu veux explorer ou tester.';
+  }
+
+  if (!ai) {
+    return "Je n'arrive pas a joindre Gemini pour le moment. Reessaie dans un instant.";
+  }
+
+  const model =
+    typeof options.model === 'string' && options.model.trim() !== ''
+      ? options.model.trim()
+      : GENERIC_GEMINI_MODEL;
+  const systemInstruction =
+    typeof options.systemInstruction === 'string' && options.systemInstruction.trim() !== ''
+      ? options.systemInstruction.trim()
+      : DEFAULT_GENERIC_SYSTEM_PROMPT;
+  const temperature = normalizeTemperature(options.temperature);
+
+  try {
+    const response = await withTimeout(
+      ai.models.generateContent({
+        model,
+        contents: conversationToText(normalizedMessages),
+        config: {
+          systemInstruction,
+          temperature,
+        },
+      }),
+      GEMINI_TIMEOUT_MS,
+      'Gemini chatbot'
+    );
+
+    const reply = typeof response.text === 'string' ? response.text.trim() : '';
+    return reply !== '' ? reply : 'Je n ai pas obtenu de reponse textuelle. Reessaie dans un instant.';
+  } catch (error) {
+    console.warn('Gemini chatbot unavailable, fallback reply used:', error);
+    return "Je n'arrive pas a joindre Gemini pour le moment. Reessaie dans un instant.";
   }
 };
 

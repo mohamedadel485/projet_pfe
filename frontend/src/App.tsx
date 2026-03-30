@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CiSliderHorizontal } from 'react-icons/ci';
+import { Bot } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import ExclamationHexagonIcon from './ExclamationHexagonIcon';
 import monitoringMenuIcon from './images/m1.png';
+import ChatbotPage from './pages/chatbot/ChatbotPage';
 import EditMonitorPage from './pages/edit-monitor/EditMonitorPage';
 import IncidentsPage from './pages/incidents/IncidentsPage';
 import IntegrationsApiPage from './pages/integrations-api/IntegrationsApiPage';
@@ -81,7 +83,14 @@ import {
 } from 'lucide-react';
 
 type HistoryState = 'up' | 'warning' | 'down';
-type MenuLabel = 'Monitoring' | 'Incidents' | 'Status pages' | 'Maintenance' | 'Team members' | 'Integrations & API';
+type MenuLabel =
+  | 'Monitoring'
+  | 'Incidents'
+  | 'Status pages'
+  | 'Maintenance'
+  | 'Team members'
+  | 'Integrations & API'
+  | 'Chatbot';
 
 interface MenuItem {
   label: MenuLabel;
@@ -179,6 +188,7 @@ const menuItems: MenuItem[] = [
   { label: 'Maintenance', icon: Wrench },
   { label: 'Team members', icon: Users },
   { label: 'Integrations & API', materialIcon: 'graph_1' },
+  { label: 'Chatbot', icon: Bot },
 ];
 
 const routeByMenuLabel: Record<MenuLabel, string> = {
@@ -188,6 +198,7 @@ const routeByMenuLabel: Record<MenuLabel, string> = {
   Maintenance: '/maintenance',
   'Team members': '/team-members',
   'Integrations & API': '/integrations-api',
+  Chatbot: '/chatbot',
 };
 
 const USER_CACHE_KEY = 'uptimewarden_cached_user';
@@ -563,6 +574,7 @@ function App() {
   const isMaintenancePage = activeMenuLabel === 'Maintenance';
   const isStatusPagesPage = activeMenuLabel === 'Status pages';
   const isTeamMembersPage = activeMenuLabel === 'Team members';
+  const isChatbotPage = activeMenuLabel === 'Chatbot';
   const isCurrentUserAdmin = isAdminRole(currentUser?.role);
   const canCurrentUserInviteTeam = Boolean(authToken && isCurrentUserAdmin);
   const userInitials = useMemo(() => {
@@ -583,6 +595,7 @@ function App() {
     'app-shell',
     isIncidentsPage ? 'incidents-view' : '',
     isStatusPagesPage ? 'status-pages-view' : '',
+    isChatbotPage ? 'chatbot-view' : '',
     mobileMenuOpen ? 'menu-open' : '',
     sidebarCollapsed ? 'sidebar-collapsed' : '',
   ]
@@ -679,6 +692,8 @@ function App() {
       nextTeamMembersSubPage = 'manage';
     } else if (pathname === '/team-members') {
       nextMenuLabel = 'Team members';
+    } else if (pathname === '/chatbot') {
+      nextMenuLabel = 'Chatbot';
     }
 
     setActiveMenuLabel(nextMenuLabel);
@@ -1694,7 +1709,9 @@ function App() {
     [authToken, refreshMonitors],
   );
 
-  const showAssistant = Boolean(currentUser && isAuthBootstrapComplete && !authRoute && !isStatusPagePublicView);
+  const showAssistant = Boolean(
+    currentUser && isAuthBootstrapComplete && !authRoute && !isStatusPagePublicView && !isChatbotPage,
+  );
 
   if (authRoute === 'login') {
     return (
@@ -2090,6 +2107,10 @@ function App() {
           }}
           showWindowsOnly={maintenanceSubPage === 'windows'}
         />
+      ) : isChatbotPage ? (
+        <div className="panel-main chatbot-page-shell">
+          <ChatbotPage authToken={authToken} userName={currentUser?.name} />
+        </div>
       ) : (
         <>
           {/* --- Header (spans center + right columns) --- */}
