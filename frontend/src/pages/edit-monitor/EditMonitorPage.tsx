@@ -1,5 +1,7 @@
 import { ChevronRight, Clock3, Mail, Pencil, Search, Trash2, UserPlus, Users } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { getUserRoleLabel, isAdminRole } from '../../lib/roles';
+import type { UserRole } from '../../lib/api';
 import './EditMonitorPage.css';
 
 interface EditableMonitor {
@@ -17,7 +19,7 @@ interface EditableTeamMember {
   id: string;
   name: string;
   email: string;
-  role: 'admin' | 'user';
+  role: UserRole;
   isActive: boolean;
 }
 
@@ -33,7 +35,7 @@ interface EditableInvitation {
 
 interface EditMonitorPageProps {
   monitor: EditableMonitor;
-  currentUserRole?: 'admin' | 'user';
+  currentUserRole?: UserRole;
   teamMembers?: EditableTeamMember[];
   invitations?: EditableInvitation[];
   onBack: () => void;
@@ -137,7 +139,7 @@ function EditMonitorPage({
   const activeSideSection = initialSection;
   const isDetailsSection = activeSideSection === 'details';
   const isIntegrationsSection = activeSideSection === 'integrations';
-  const canManageMonitorAccess = currentUserRole === 'admin';
+  const canManageMonitorAccess = isAdminRole(currentUserRole);
 
   const normalizedAccessQuery = accessQuery.trim().toLowerCase();
 
@@ -571,8 +573,8 @@ function EditMonitorPage({
                               </div>
 
                               <div className="edit-monitor-access-row-actions">
-                                <span className={`edit-monitor-access-role ${member.role}`}>
-                                  {member.role === 'admin' ? 'Admin' : 'Member'}
+                                <span className={`edit-monitor-access-role ${isAdminRole(member.role) ? 'admin' : 'user'}`}>
+                                  {getUserRoleLabel(member.role)}
                                 </span>
                                 {canManageMonitorAccess ? (
                                   <button

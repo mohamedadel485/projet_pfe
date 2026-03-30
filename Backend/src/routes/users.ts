@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import { body, validationResult } from 'express-validator';
 import User from '../models/User';
 import { authenticate, isAdmin, AuthRequest } from '../middleware/auth';
+import { isUserRole } from '../utils/roles';
 
 const router = Router();
 
@@ -18,7 +19,11 @@ router.get(
       const { role, isActive } = req.query;
 
       const query: any = {};
-      if (role) {
+      if (role !== undefined) {
+        if (typeof role !== 'string' || !isUserRole(role)) {
+          res.status(400).json({ error: "Le parametre 'role' doit etre 'super_admin', 'admin' ou 'user'" });
+          return;
+        }
         query.role = role;
       }
       if (isActive !== undefined) {
@@ -114,6 +119,21 @@ router.put(
         user.email = email;
       }
 
+      if (user.role === 'super_admin' && req.user!.role !== 'super_admin') {
+        res.status(403).json({ error: 'Le super administrateur ne peut pas etre modifie par un administrateur standard.' });
+        return;
+      }
+
+      if (user.role === 'super_admin' && role && role !== 'super_admin') {
+        res.status(400).json({ error: 'Le role du super administrateur ne peut pas etre modifie.' });
+        return;
+      }
+
+      if (user.role === 'super_admin' && isActive === false) {
+        res.status(400).json({ error: 'Le super administrateur ne peut pas etre desactive.' });
+        return;
+      }
+
       if (name) user.name = name;
       if (role) user.role = role;
       if (isActive !== undefined) user.isActive = isActive;
@@ -156,6 +176,11 @@ router.delete(
       }
 
       // Empêcher l'admin de se supprimer lui-même
+      if (user.role === 'super_admin') {
+        res.status(403).json({ error: 'Le super administrateur ne peut pas etre supprime.' });
+        return;
+      }
+
       if (user._id.toString() === req.user!._id.toString()) {
         res.status(400).json({ error: 'Vous ne pouvez pas vous supprimer vous-même' });
         return;
@@ -186,8 +211,8 @@ router.get(
       const baseQuery: any = {};
 
       if (role !== undefined) {
-        if (role !== 'admin' && role !== 'user') {
-          res.status(400).json({ error: "Le paramètre 'role' doit être 'admin' ou 'user'" });
+        if (typeof role !== 'string' || !isUserRole(role)) {
+          res.status(400).json({ error: "Le parametre 'role' doit etre 'super_admin', 'admin' ou 'user'" });
           return;
         }
         baseQuery.role = role;
@@ -228,6 +253,7 @@ router.get(
       const totalUsers = await User.countDocuments(baseQuery);
       const activeUsers = await User.countDocuments({ ...baseQuery, isActive: true });
       const inactiveUsers = await User.countDocuments({ ...baseQuery, isActive: false });
+      const superAdminUsers = await User.countDocuments({ ...baseQuery, role: 'super_admin' });
       const adminUsers = await User.countDocuments({ ...baseQuery, role: 'admin' });
       const regularUsers = await User.countDocuments({ ...baseQuery, role: 'user' });
 
@@ -236,6 +262,7 @@ router.get(
           total: totalUsers,
           active: activeUsers,
           inactive: inactiveUsers,
+          superAdmins: superAdminUsers,
           admins: adminUsers,
           users: regularUsers,
         },

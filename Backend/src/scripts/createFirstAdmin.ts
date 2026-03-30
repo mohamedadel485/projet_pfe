@@ -4,6 +4,7 @@ import { stdin as input, stdout as output } from 'node:process';
 import dotenv from 'dotenv';
 import User from '../models/User';
 import { connectDB, disconnectDB } from '../config/database';
+import { ADMIN_ROLES } from '../utils/roles';
 
 const envPath = path.resolve(__dirname, '../../.env');
 dotenv.config({ path: envPath, override: true });
@@ -24,7 +25,7 @@ interface AdminCredentials {
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const printUsage = (): void => {
-  console.log('Usage: npm run create:first-admin -- [--email admin@example.com --name "Admin" --password "secret123"]');
+  console.log('Usage: npm run create:first-admin -- [--email admin@example.com --name "Super Admin" --password "secret123"]');
   console.log('Si des arguments sont manquants, le script les demandera dans le terminal.');
 };
 
@@ -150,13 +151,13 @@ const promptForCredentials = async (options: CliOptions): Promise<AdminCredentia
   };
 
   try {
-    const email = (await askUntilValid('Email admin: ', options.email, validateEmail)).toLowerCase();
-    const name = await askUntilValid('Nom admin: ', options.name, validateName);
+    const email = (await askUntilValid('Email super admin: ', options.email, validateEmail)).toLowerCase();
+    const name = await askUntilValid('Nom super admin: ', options.name, validateName);
 
     let password = options.password ?? '';
     while (true) {
       if (password === '') {
-        password = await rl.question('Mot de passe admin: ');
+        password = await rl.question('Mot de passe super admin: ');
       }
 
       const passwordError = validatePassword(password);
@@ -196,14 +197,14 @@ const resolveCredentials = async (options: CliOptions): Promise<AdminCredentials
 };
 
 const ensureDatabaseIsEmpty = async (): Promise<void> => {
-  const adminCount = await User.countDocuments({ role: 'admin' });
+  const adminCount = await User.countDocuments({ role: { $in: ADMIN_ROLES } });
   if (adminCount > 0) {
-    throw new Error('Un administrateur existe deja. Ce script sert uniquement a creer le premier admin.');
+    throw new Error('Un super administrateur existe deja. Ce script sert uniquement a creer le premier super admin.');
   }
 
   const userCount = await User.countDocuments();
   if (userCount > 0) {
-    throw new Error('Des utilisateurs existent deja. Refus de creer un premier admin sur une base non vide.');
+    throw new Error('Des utilisateurs existent deja. Refus de creer un premier super admin sur une base non vide.');
   }
 };
 
@@ -226,14 +227,14 @@ const createFirstAdmin = async (): Promise<void> => {
       email: credentials.email,
       name: credentials.name,
       password: credentials.password,
-      role: 'admin',
+      role: 'super_admin',
       isActive: true,
     });
 
     await user.save();
 
     console.log('');
-    console.log('Premier administrateur cree avec succes.');
+    console.log('Premier super administrateur cree avec succes.');
     console.log(`Email: ${user.email}`);
     console.log(`Nom: ${user.name}`);
     console.log(`ID: ${String(user._id)}`);
@@ -244,7 +245,7 @@ const createFirstAdmin = async (): Promise<void> => {
 
 void createFirstAdmin().catch(async (error: unknown) => {
   console.error('');
-  console.error('Impossible de creer le premier administrateur.');
+  console.error('Impossible de creer le premier super administrateur.');
   console.error(error instanceof Error ? error.message : error);
 
   try {

@@ -269,6 +269,20 @@
   cursor: not-allowed;
 }
 
+.team-members-manage-page .team-members-protected-badge {
+  border-radius: 999px;
+  background: #edf4ff;
+  color: #2f5fa8;
+  min-height: 24px;
+  padding: 0 9px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
 .team-members-manage-page .team-members-delete-button {
   border: 1px solid #f3ccd2;
   border-radius: 7px;

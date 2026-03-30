@@ -55,8 +55,10 @@ import {
   type CreateMonitorInput,
   type BackendMonitor,
   type AuthUser,
+  type EditableUserRole,
   type UserRole,
 } from './lib/api';
+import { isAdminRole, isUserRole } from './lib/roles';
 import {
   ArrowUpDown,
   Check,
@@ -198,7 +200,7 @@ const readCachedUser = (): AuthUser | null => {
     const parsed = JSON.parse(raw) as Partial<AuthUser>;
     if (!parsed || typeof parsed !== 'object') return null;
     if (typeof parsed.id !== 'string' || typeof parsed.email !== 'string') return null;
-    if (parsed.role !== 'admin' && parsed.role !== 'user') return null;
+    if (!isUserRole(parsed.role)) return null;
     const name = typeof parsed.name === 'string' ? parsed.name : parsed.email;
     return {
       id: parsed.id,
@@ -561,8 +563,8 @@ function App() {
   const isMaintenancePage = activeMenuLabel === 'Maintenance';
   const isStatusPagesPage = activeMenuLabel === 'Status pages';
   const isTeamMembersPage = activeMenuLabel === 'Team members';
-  const isCurrentUserAdmin = currentUser?.role === 'admin';
-  const canCurrentUserInviteTeam = Boolean(authToken && currentUser);
+  const isCurrentUserAdmin = isAdminRole(currentUser?.role);
+  const canCurrentUserInviteTeam = Boolean(authToken && isCurrentUserAdmin);
   const userInitials = useMemo(() => {
     const label = currentUser?.name ?? currentUser?.email ?? '';
     if (!label) return '';
@@ -761,7 +763,7 @@ function App() {
 
   const refreshTeamSummary = useCallback(
     async (token: string, role: AuthUser['role']) => {
-      if (role !== 'admin') {
+      if (!isAdminRole(role)) {
         setTeamMembers([]);
         setTeamInvitations([]);
         return;
@@ -1025,7 +1027,7 @@ function App() {
         }
 
         await refreshMonitors(authToken);
-        if (currentUser?.role === 'admin') {
+        if (isAdminRole(currentUser?.role)) {
           await refreshTeamSummary(authToken, currentUser.role);
         }
         navigateTo('/monitoring');
@@ -1125,7 +1127,7 @@ function App() {
       if (!token) {
         return { error: 'Authentification requise.' };
       }
-      if (!adminUser || adminUser.role !== 'admin') {
+      if (!adminUser || !isAdminRole(adminUser.role)) {
         return { error: 'Acces reserve aux admins.' };
       }
 
@@ -1161,7 +1163,7 @@ function App() {
       if (!token) {
         return { error: 'Authentification requise.' };
       }
-      if (!adminUser || adminUser.role !== 'admin') {
+      if (!adminUser || !isAdminRole(adminUser.role)) {
         return { error: 'Acces reserve aux admins.' };
       }
 
@@ -1232,7 +1234,7 @@ function App() {
       if (!authToken) {
         return 'Authentification requise.';
       }
-      if (!currentUser || currentUser.role !== 'admin') {
+      if (!currentUser || !isAdminRole(currentUser.role)) {
         return 'Acces reserve aux admins.';
       }
 
@@ -1257,8 +1259,12 @@ function App() {
       if (!authToken) {
         return 'Authentification requise.';
       }
-      if (!currentUser || currentUser.role !== 'admin') {
+      if (!currentUser || !isAdminRole(currentUser.role)) {
         return 'Acces reserve aux admins.';
+      }
+      const targetUser = teamMembers.find((member) => member.id === userId);
+      if (targetUser?.role === 'super_admin') {
+        return 'Le super administrateur ne peut pas etre supprime.';
       }
       if (userId === currentUser.id) {
         return 'Vous ne pouvez pas vous supprimer vous-meme.';
@@ -1276,16 +1282,20 @@ function App() {
         return formatAppError(error, "Impossible de supprimer l'utilisateur.");
       }
     },
-    [authToken, clearSessionAndRedirectToLogin, currentUser, refreshTeamSummary],
+    [authToken, clearSessionAndRedirectToLogin, currentUser, refreshTeamSummary, teamMembers],
   );
 
   const handleTeamUserRoleChange = useCallback(
-    async (userId: string, nextRole: UserRole) => {
+    async (userId: string, nextRole: EditableUserRole) => {
       if (!authToken) {
         return 'Authentification requise.';
       }
-      if (!currentUser || currentUser.role !== 'admin') {
+      if (!currentUser || !isAdminRole(currentUser.role)) {
         return 'Acces reserve aux admins.';
+      }
+      const targetUser = teamMembers.find((member) => member.id === userId);
+      if (targetUser?.role === 'super_admin') {
+        return 'Le role du super administrateur ne peut pas etre modifie.';
       }
       if (userId === currentUser.id) {
         return 'Vous ne pouvez pas modifier votre propre role.';
@@ -1303,7 +1313,7 @@ function App() {
         return formatAppError(error, "Impossible de modifier le role de l'utilisateur.");
       }
     },
-    [authToken, clearSessionAndRedirectToLogin, currentUser, refreshTeamSummary],
+    [authToken, clearSessionAndRedirectToLogin, currentUser, refreshTeamSummary, teamMembers],
   );
 
   const handleTeamUserActiveToggle = useCallback(
@@ -1311,8 +1321,12 @@ function App() {
       if (!authToken) {
         return 'Authentification requise.';
       }
-      if (!currentUser || currentUser.role !== 'admin') {
+      if (!currentUser || !isAdminRole(currentUser.role)) {
         return 'Acces reserve aux admins.';
+      }
+      const targetUser = teamMembers.find((member) => member.id === userId);
+      if (targetUser?.role === 'super_admin' && nextIsActive === false) {
+        return 'Le super administrateur ne peut pas etre desactive.';
       }
       if (userId === currentUser.id && nextIsActive === false) {
         return 'Vous ne pouvez pas vous desactiver vous-meme.';
@@ -1330,7 +1344,7 @@ function App() {
         return formatAppError(error, "Impossible de modifier le statut de l'utilisateur.");
       }
     },
-    [authToken, clearSessionAndRedirectToLogin, currentUser, refreshTeamSummary],
+    [authToken, clearSessionAndRedirectToLogin, currentUser, refreshTeamSummary, teamMembers],
   );
 
   const handleDeleteInvitation = useCallback(
@@ -1338,7 +1352,7 @@ function App() {
       if (!authToken) {
         return 'Authentification requise.';
       }
-      if (!currentUser || currentUser.role !== 'admin') {
+      if (!currentUser || !isAdminRole(currentUser.role)) {
         return 'Acces reserve aux admins.';
       }
 
@@ -1403,13 +1417,13 @@ function App() {
   }, [applyRoute, authToken, currentUser, isAuthBootstrapComplete, navigateTo]);
 
   useEffect(() => {
-    if (!currentUser || currentUser.role === 'admin') return;
+    if (!currentUser || isAdminRole(currentUser.role)) return;
     if (!isTeamMembersPage || teamMembersSubPage === 'overview') return;
     navigateTo('/team-members', { replace: true });
   }, [currentUser, isTeamMembersPage, navigateTo, teamMembersSubPage]);
 
   useEffect(() => {
-    if (!authToken || !currentUser || currentUser.role !== 'admin') return;
+    if (!authToken || !currentUser || !isAdminRole(currentUser.role)) return;
     if (!isTeamMembersPage) return;
     void refreshTeamSummary(authToken, currentUser.role);
   }, [authToken, currentUser, isTeamMembersPage, teamMembersSubPage, refreshTeamSummary]);

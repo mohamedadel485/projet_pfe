@@ -1,5 +1,7 @@
 import { ArrowLeft, Mail, MoreVertical, Plus, Shield, Trash2, UserRoundCheck, UserRoundX } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
+import { type EditableUserRole, type UserRole } from '../../lib/api';
+import { getUserRoleLabel } from '../../lib/roles';
 import './TeamMembersManagePage.css';
 
 interface TeamMembersManagePageProps {
@@ -7,7 +9,7 @@ interface TeamMembersManagePageProps {
     id: string;
     name: string;
     email: string;
-    role: 'admin' | 'user';
+    role: UserRole;
     isActive: boolean;
   }>;
   invitations?: Array<{
@@ -21,7 +23,7 @@ interface TeamMembersManagePageProps {
   onBack?: () => void;
   onInviteTeam?: () => void;
   onDeleteUser?: (userId: string) => Promise<string | null>;
-  onChangeUserRole?: (userId: string, nextRole: 'admin' | 'user') => Promise<string | null>;
+  onChangeUserRole?: (userId: string, nextRole: EditableUserRole) => Promise<string | null>;
   onToggleUserActive?: (userId: string, nextIsActive: boolean) => Promise<string | null>;
   onDeleteInvitation?: (invitationId: string) => Promise<string | null>;
 }
@@ -93,7 +95,7 @@ function TeamMembersManagePage({
     setPendingUserId(null);
   };
 
-  const handleChangeUserRole = async (userId: string, nextRole: 'admin' | 'user') => {
+  const handleChangeUserRole = async (userId: string, nextRole: EditableUserRole) => {
     if (!onChangeUserRole || pendingUserId || pendingInvitationId) return;
 
     setActionError(null);
@@ -181,84 +183,94 @@ function TeamMembersManagePage({
                   <span>Status</span>
                   <span>Actions</span>
                 </div>
-                {sortedUsers.map((user) => (
+                {sortedUsers.map((user) => {
+                  const isProtectedSuperAdmin = user.role === 'super_admin';
+                  return (
                   <div className="team-members-manage-row" key={user.id}>
                     <span>{user.name}</span>
                     <span>{user.email}</span>
-                    <span>{user.role === 'admin' ? 'Admin' : 'Member'}</span>
+                    <span>{getUserRoleLabel(user.role)}</span>
                     <span className={user.isActive ? 'status-active' : 'status-inactive'}>
                       {user.isActive ? 'Active' : 'Inactive'}
                     </span>
                     <span className="team-members-manage-actions">
-                      <div className="team-members-user-menu-wrap">
-                        <button
-                          type="button"
-                          className="team-members-user-menu-trigger"
-                          onClick={() => {
-                            if (pendingUserId || pendingInvitationId) return;
-                            setOpenUserMenuId((current) => (current === user.id ? null : user.id));
-                          }}
-                          disabled={pendingUserId !== null || pendingInvitationId !== null}
-                          aria-label="User actions"
-                          aria-haspopup="menu"
-                          aria-expanded={openUserMenuId === user.id}
-                        >
-                          <MoreVertical size={15} />
-                        </button>
+                      {isProtectedSuperAdmin ? (
+                        <span className="team-members-protected-badge">
+                          <Shield size={12} />
+                          Protected
+                        </span>
+                      ) : (
+                        <div className="team-members-user-menu-wrap">
+                          <button
+                            type="button"
+                            className="team-members-user-menu-trigger"
+                            onClick={() => {
+                              if (pendingUserId || pendingInvitationId) return;
+                              setOpenUserMenuId((current) => (current === user.id ? null : user.id));
+                            }}
+                            disabled={pendingUserId !== null || pendingInvitationId !== null}
+                            aria-label="User actions"
+                            aria-haspopup="menu"
+                            aria-expanded={openUserMenuId === user.id}
+                          >
+                            <MoreVertical size={15} />
+                          </button>
 
-                        {openUserMenuId === user.id ? (
-                          <div className="team-members-user-menu" role="menu">
-                            <button
-                              type="button"
-                              role="menuitem"
-                              className="team-members-user-menu-item"
-                              onClick={() =>
-                                void handleChangeUserRole(user.id, user.role === 'admin' ? 'user' : 'admin')
-                              }
-                              disabled={user.id === currentUserId || pendingUserId === user.id}
-                              title={
-                                user.id === currentUserId
-                                  ? 'Vous ne pouvez pas modifier votre propre role'
-                                  : 'Changer le role'
-                              }
-                            >
-                              <Shield size={14} />
-                              {user.role === 'admin' ? 'Passer Member' : 'Passer Admin'}
-                            </button>
+                          {openUserMenuId === user.id ? (
+                            <div className="team-members-user-menu" role="menu">
+                              <button
+                                type="button"
+                                role="menuitem"
+                                className="team-members-user-menu-item"
+                                onClick={() =>
+                                  void handleChangeUserRole(user.id, user.role === 'admin' ? 'user' : 'admin')
+                                }
+                                disabled={user.id === currentUserId || pendingUserId === user.id}
+                                title={
+                                  user.id === currentUserId
+                                    ? 'Vous ne pouvez pas modifier votre propre role'
+                                    : 'Changer le role'
+                                }
+                              >
+                                <Shield size={14} />
+                                {user.role === 'admin' ? 'Passer Member' : 'Passer Admin'}
+                              </button>
 
-                            <button
-                              type="button"
-                              role="menuitem"
-                              className="team-members-user-menu-item"
-                              onClick={() => void handleToggleUserActive(user.id, !user.isActive)}
-                              disabled={pendingUserId === user.id || (user.id === currentUserId && user.isActive)}
-                              title={
-                                user.id === currentUserId && user.isActive
-                                  ? 'Vous ne pouvez pas vous desactiver'
-                                  : 'Changer le statut'
-                              }
-                            >
-                              {user.isActive ? <UserRoundX size={14} /> : <UserRoundCheck size={14} />}
-                              {user.isActive ? 'Desactiver' : 'Activer'}
-                            </button>
+                              <button
+                                type="button"
+                                role="menuitem"
+                                className="team-members-user-menu-item"
+                                onClick={() => void handleToggleUserActive(user.id, !user.isActive)}
+                                disabled={pendingUserId === user.id || (user.id === currentUserId && user.isActive)}
+                                title={
+                                  user.id === currentUserId && user.isActive
+                                    ? 'Vous ne pouvez pas vous desactiver'
+                                    : 'Changer le statut'
+                                }
+                              >
+                                {user.isActive ? <UserRoundX size={14} /> : <UserRoundCheck size={14} />}
+                                {user.isActive ? 'Desactiver' : 'Activer'}
+                              </button>
 
-                            <button
-                              type="button"
-                              role="menuitem"
-                              className="team-members-user-menu-item danger"
-                              onClick={() => void handleDeleteUser(user.id)}
-                              disabled={user.id === currentUserId || pendingUserId === user.id}
-                              title={user.id === currentUserId ? 'Vous ne pouvez pas supprimer votre compte' : 'Delete user'}
-                            >
-                              <Trash2 size={14} />
-                              {pendingUserId === user.id ? 'Suppression...' : 'Supprimer user'}
-                            </button>
-                          </div>
-                        ) : null}
-                      </div>
+                              <button
+                                type="button"
+                                role="menuitem"
+                                className="team-members-user-menu-item danger"
+                                onClick={() => void handleDeleteUser(user.id)}
+                                disabled={user.id === currentUserId || pendingUserId === user.id}
+                                title={user.id === currentUserId ? 'Vous ne pouvez pas supprimer votre compte' : 'Delete user'}
+                              >
+                                <Trash2 size={14} />
+                                {pendingUserId === user.id ? 'Suppression...' : 'Supprimer user'}
+                              </button>
+                            </div>
+                          ) : null}
+                        </div>
+                      )}
                     </span>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </article>

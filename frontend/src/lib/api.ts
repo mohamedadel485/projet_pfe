@@ -31,7 +31,8 @@ const AUTH_SESSION_STORAGE_KEY = "uptimewarden_auth_session_token";
 export const COOKIE_AUTH_SENTINEL = "__uptimewarden_cookie_session__";
 const DEFAULT_REQUEST_TIMEOUT_MS = 5000;
 
-export type UserRole = "admin" | "user";
+export type UserRole = "super_admin" | "admin" | "user";
+export type EditableUserRole = Exclude<UserRole, "super_admin">;
 
 export interface AuthUser {
   id: string;
@@ -953,7 +954,7 @@ export const deleteUser = (
 export const updateUser = (
   userId: string,
   payload: Partial<{
-    role: UserRole;
+    role: EditableUserRole;
     isActive: boolean;
     name: string;
     email: string;

@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import User, { IUser } from '../models/User';
 import { getAuthCookieName } from '../config/auth';
+import { isAdminRole } from '../utils/roles';
 
 export interface AuthRequest extends Request {
   user?: IUser;
@@ -67,7 +68,7 @@ export const isAdmin = (
   res: Response,
   next: NextFunction
 ): void => {
-  if (!req.user || req.user.role !== 'admin') {
+  if (!req.user || !isAdminRole(req.user.role)) {
     res.status(403).json({ error: 'Accès refusé. Droits administrateur requis.' });
     return;
   }

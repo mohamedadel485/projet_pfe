@@ -34,7 +34,7 @@ const parseRememberMe = (value: unknown): boolean => {
 
 /**
  * POST /api/auth/register
- * Inscription (premier admin uniquement)
+ * Inscription (premier super admin uniquement)
  */
 router.post(
   '/register',
@@ -70,9 +70,9 @@ router.post(
         return;
       }
 
-      // Vérifier si c'est le premier utilisateur (sera admin)
+      // Verifier si c'est le premier utilisateur (sera super admin)
       const userCount = await User.countDocuments();
-      const role = userCount === 0 ? 'admin' : 'user';
+      const role = userCount === 0 ? 'super_admin' : 'user';
 
       // Si ce n'est pas le premier utilisateur, refuser (seules les invitations sont autorisées)
       if (role === 'user') {
@@ -105,7 +105,7 @@ router.post(
       res.cookie(cookieName, token, buildAuthCookieOptions({ rememberMe }));
 
       res.status(201).json({
-        message: 'Compte administrateur créé avec succès',
+        message: 'Compte super administrateur cree avec succes',
         token,
         user: {
           id: user._id,
