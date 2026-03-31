@@ -316,6 +316,10 @@
   background: #3b82f6;
 }
 
+.mini-history-bar.down {
+  background: #dd4f4f;
+}
+
 .mini-history-bar.warning {
   background: #f0a35c;
 }
