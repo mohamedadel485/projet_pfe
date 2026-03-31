@@ -1,9 +1,12 @@
 import {
   Bot,
   ChevronLeft,
+  Download,
   Image as ImageIcon,
   LoaderCircle,
   Mic,
+  Maximize2,
+  Minimize2,
   MoreHorizontal,
   Paperclip,
   Send,
@@ -11,7 +14,7 @@ import {
   MessageSquareText,
   X,
 } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import './AssistantChatbot.css';
 
 type ChatRole = 'user' | 'assistant';
@@ -29,6 +32,58 @@ interface MonitorDraft {
   url: string;
 }
 
+type DraftAttachmentKind = 'file' | 'image';
+
+interface DraftAttachment {
+  id: string;
+  file: File;
+  kind: DraftAttachmentKind;
+}
+
+interface SpeechRecognitionAlternativeLike {
+  transcript: string;
+}
+
+interface SpeechRecognitionResultLike {
+  readonly [index: number]: SpeechRecognitionAlternativeLike;
+  isFinal: boolean;
+  length: number;
+}
+
+interface SpeechRecognitionEventLike extends Event {
+  resultIndex: number;
+  results: ArrayLike<SpeechRecognitionResultLike>;
+}
+
+interface SpeechRecognitionErrorEventLike extends Event {
+  error?: string;
+  message?: string;
+}
+
+interface SpeechRecognitionLike {
+  lang: string;
+  continuous: boolean;
+  interimResults: boolean;
+  start: () => void;
+  stop: () => void;
+  abort: () => void;
+  onstart: ((event: Event) => void) | null;
+  onresult: ((event: SpeechRecognitionEventLike) => void) | null;
+  onerror: ((event: SpeechRecognitionErrorEventLike) => void) | null;
+  onend: ((event: Event) => void) | null;
+}
+
+interface SpeechRecognitionConstructor {
+  new (): SpeechRecognitionLike;
+}
+
+declare global {
+  interface Window {
+    SpeechRecognition?: SpeechRecognitionConstructor;
+    webkitSpeechRecognition?: SpeechRecognitionConstructor;
+  }
+}
+
 interface AssistantChatbotProps {
   enabled: boolean;
   userName?: string | null;
@@ -39,6 +94,7 @@ const CHAT_API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefin
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
 const DEFAULT_SYSTEM_PROMPT =
   "Tu es un assistant utile, clair et sympathique. Reponds en francais sauf si l'utilisateur demande une autre langue.";
+const EMOJI_OPTIONS = ['😀', '😄', '😊', '😉', '🤖', '✨', '✅', '📎', '🖼️', '🎤', '⚡', '💡'];
 
 const createMessageId = (prefix: string): string =>
   `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
@@ -80,6 +136,56 @@ const buildWelcomeMessage = (userName?: string | null): string =>
   userName
     ? `Hi ${userName}! I'm ready to help with Uptime Warden.`
     : "Hi there! I'm ready to help with Uptime Warden.";
+
+const buildAttachmentSummary = (attachments: DraftAttachment[]): string => {
+  if (attachments.length === 0) {
+    return '';
+  }
+
+  return [
+    'Pièces jointes:',
+    ...attachments.map((attachment) => {
+      const label = attachment.kind === 'image' ? 'Image' : 'Fichier';
+      const sizeLabel = formatFileSize(attachment.file.size);
+      return `- ${label}: ${attachment.file.name} (${sizeLabel})`;
+    }),
+  ].join('\n');
+};
+
+const buildConversationTranscript = (messages: ChatMessageEntry[]): string => {
+  const exportedAt = new Date().toLocaleString('fr-FR');
+  const formattedMessages = messages.map((message, index) => {
+    const speaker = message.role === 'user' ? 'User' : 'Assistant';
+    const contentLines = message.content.split(/\r?\n/);
+    const firstLine = contentLines[0] ?? '';
+    const extraLines = contentLines.slice(1).map((line) => `   ${line}`);
+
+    return [`${index + 1}. ${speaker}: ${firstLine}`, ...extraLines].join('\n');
+  });
+
+  return ['Conversation Uptime Warden', `Exportee le: ${exportedAt}`, '', ...formattedMessages].join('\n');
+};
+
+const createConversationFileName = (date = new Date()): string =>
+  `conversation-uptime-warden-${date.toISOString().replace(/\.\d{3}Z$/, 'Z').replace(/:/g, '-')}.txt`;
+
+const formatFileSize = (value: number): string => {
+  if (!Number.isFinite(value) || value < 0) {
+    return '0 B';
+  }
+
+  if (value < 1024) {
+    return `${value} B`;
+  }
+
+  if (value < 1024 * 1024) {
+    const kilobytes = value / 1024;
+    return `${kilobytes >= 10 ? kilobytes.toFixed(0) : kilobytes.toFixed(1)} KB`;
+  }
+
+  const megabytes = value / (1024 * 1024);
+  return `${megabytes >= 10 ? megabytes.toFixed(0) : megabytes.toFixed(1)} MB`;
+};
 
 const URL_CANDIDATE_PATTERN = /((?:(?:https?|wss?)?:\/\/)?(?:www\.)?[a-z0-9-]+(?:\.[a-z0-9-]+)+(?:\/[^\s]*)?)/i;
 
@@ -130,6 +236,12 @@ const looksLikeMonitorCreationRequest = (rawText: string): boolean => {
 function AssistantChatbot({ enabled, userName, onOpenMonitorCreator }: AssistantChatbotProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [draft, setDraft] = useState('');
+  const [draftAttachments, setDraftAttachments] = useState<DraftAttachment[]>([]);
+  const [isEmojiPickerOpen, setIsEmojiPickerOpen] = useState(false);
+  const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
+  const [isPanelExpanded, setIsPanelExpanded] = useState(false);
+  const [isListening, setIsListening] = useState(false);
+  const [composerNotice, setComposerNotice] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessageEntry[]>(() => [
     {
       id: createMessageId('welcome'),
@@ -140,6 +252,13 @@ function AssistantChatbot({ enabled, userName, onOpenMonitorCreator }: Assistant
   const [isSending, setIsSending] = useState(false);
   const bodyRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
+  const composerShellRef = useRef<HTMLDivElement | null>(null);
+  const headerActionsRef = useRef<HTMLDivElement | null>(null);
+  const attachmentInputRef = useRef<HTMLInputElement | null>(null);
+  const imageInputRef = useRef<HTMLInputElement | null>(null);
+  const speechRecognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  const speechDraftRef = useRef('');
+  const emojiPanelRef = useRef<HTMLDivElement | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
@@ -148,6 +267,15 @@ function AssistantChatbot({ enabled, userName, onOpenMonitorCreator }: Assistant
       abortControllerRef.current?.abort();
       abortControllerRef.current = null;
       setIsSending(false);
+      setIsEmojiPickerOpen(false);
+      setIsMoreMenuOpen(false);
+      setIsPanelExpanded(false);
+      setIsListening(false);
+      setComposerNotice(null);
+      setDraftAttachments([]);
+      speechDraftRef.current = '';
+      speechRecognitionRef.current?.abort();
+      speechRecognitionRef.current = null;
       setDraft('');
     }
   }, [enabled]);
@@ -159,13 +287,23 @@ function AssistantChatbot({ enabled, userName, onOpenMonitorCreator }: Assistant
 
     const handleEscape = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
+        if (isMoreMenuOpen) {
+          setIsMoreMenuOpen(false);
+          return;
+        }
+
+        if (isEmojiPickerOpen) {
+          setIsEmojiPickerOpen(false);
+          return;
+        }
+
         setIsOpen(false);
       }
     };
 
     window.addEventListener('keydown', handleEscape);
     return () => window.removeEventListener('keydown', handleEscape);
-  }, [enabled, isOpen]);
+  }, [enabled, isEmojiPickerOpen, isMoreMenuOpen, isOpen]);
 
   useEffect(() => {
     if (enabled && isOpen) {
@@ -197,6 +335,291 @@ function AssistantChatbot({ enabled, userName, onOpenMonitorCreator }: Assistant
     };
   }, []);
 
+  useEffect(() => {
+    if (!enabled) {
+      setIsOpen(false);
+      abortControllerRef.current?.abort();
+      abortControllerRef.current = null;
+      setIsSending(false);
+      setIsEmojiPickerOpen(false);
+      setIsListening(false);
+      setComposerNotice(null);
+      setDraftAttachments([]);
+      speechDraftRef.current = '';
+      speechRecognitionRef.current?.abort();
+      speechRecognitionRef.current = null;
+      setDraft('');
+    }
+  }, [enabled]);
+
+  useEffect(() => {
+    if (!isEmojiPickerOpen) {
+      return;
+    }
+
+    const handleDocumentMouseDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (composerShellRef.current && !composerShellRef.current.contains(target)) {
+        setIsEmojiPickerOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleDocumentMouseDown);
+    return () => document.removeEventListener('mousedown', handleDocumentMouseDown);
+  }, [isEmojiPickerOpen]);
+
+  useEffect(() => {
+    if (!isSending) {
+      return;
+    }
+
+    setIsEmojiPickerOpen(false);
+    setIsMoreMenuOpen(false);
+  }, [isSending]);
+
+  useEffect(() => {
+    if (!isMoreMenuOpen) {
+      return;
+    }
+
+    const handleDocumentMouseDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (headerActionsRef.current && !headerActionsRef.current.contains(target)) {
+        setIsMoreMenuOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleDocumentMouseDown);
+    return () => document.removeEventListener('mousedown', handleDocumentMouseDown);
+  }, [isMoreMenuOpen]);
+
+  useEffect(() => {
+    if (isListening) {
+      speechDraftRef.current = draft;
+    }
+  }, [draft, isListening]);
+
+  const isSpeechRecognitionSupported = (): boolean => {
+    if (typeof window === 'undefined') {
+      return false;
+    }
+
+    const candidateWindow = window as Window;
+    return Boolean(candidateWindow.SpeechRecognition || candidateWindow.webkitSpeechRecognition);
+  };
+
+  const stopSpeechRecognition = (): void => {
+    const recognition = speechRecognitionRef.current;
+    if (!recognition) {
+      setIsListening(false);
+      return;
+    }
+
+    try {
+      recognition.stop();
+    } catch {
+      recognition.abort();
+    }
+
+    speechRecognitionRef.current = null;
+    setIsListening(false);
+  };
+
+  const resetComposerState = (options?: { preserveDraft?: boolean }): void => {
+    stopSpeechRecognition();
+    setIsEmojiPickerOpen(false);
+    setIsMoreMenuOpen(false);
+    setComposerNotice(null);
+    setDraftAttachments([]);
+    speechDraftRef.current = '';
+    if (!options?.preserveDraft) {
+      setDraft('');
+    }
+  };
+
+  const insertTextIntoDraft = (snippet: string): void => {
+    const textarea = inputRef.current;
+    if (!textarea) {
+      setDraft((current) => `${current}${snippet}`);
+      return;
+    }
+
+    const start = textarea.selectionStart ?? draft.length;
+    const end = textarea.selectionEnd ?? start;
+
+    setDraft((current) => {
+      const safeStart = Math.max(0, Math.min(start, current.length));
+      const safeEnd = Math.max(safeStart, Math.min(end, current.length));
+      return `${current.slice(0, safeStart)}${snippet}${current.slice(safeEnd)}`;
+    });
+
+    window.requestAnimationFrame(() => {
+      textarea.focus();
+      const nextCursor = start + snippet.length;
+      textarea.setSelectionRange(nextCursor, nextCursor);
+    });
+  };
+
+  const appendAttachments = (files: File[], kind: DraftAttachmentKind): void => {
+    if (files.length === 0) {
+      return;
+    }
+
+    setDraftAttachments((current) => [
+      ...current,
+      ...files.map((file) => ({
+        id: createMessageId(kind),
+        file,
+        kind,
+      })),
+    ]);
+    inputRef.current?.focus();
+  };
+
+  const handleAttachmentSelection = (
+    event: ChangeEvent<HTMLInputElement>,
+    kind: DraftAttachmentKind,
+  ): void => {
+    const files = Array.from(event.target.files ?? []);
+    event.target.value = '';
+    appendAttachments(files, kind);
+  };
+
+  const handleRemoveAttachment = (attachmentId: string): void => {
+    setDraftAttachments((current) => current.filter((attachment) => attachment.id !== attachmentId));
+  };
+
+  const openAttachmentPicker = (): void => {
+    setIsMoreMenuOpen(false);
+    setIsEmojiPickerOpen(false);
+    attachmentInputRef.current?.click();
+  };
+
+  const openImagePicker = (): void => {
+    setIsMoreMenuOpen(false);
+    setIsEmojiPickerOpen(false);
+    imageInputRef.current?.click();
+  };
+
+  const toggleEmojiPicker = (): void => {
+    setIsMoreMenuOpen(false);
+    setIsEmojiPickerOpen((current) => !current);
+  };
+
+  const handleEmojiSelect = (emoji: string): void => {
+    insertTextIntoDraft(emoji);
+    setIsEmojiPickerOpen(false);
+    setIsMoreMenuOpen(false);
+  };
+
+  const startOrStopVoiceInput = (): void => {
+    setIsMoreMenuOpen(false);
+    if (isListening) {
+      stopSpeechRecognition();
+      setComposerNotice(null);
+      return;
+    }
+
+    if (!isSpeechRecognitionSupported()) {
+      setComposerNotice('La dictée vocale n\'est pas supportée par ce navigateur.');
+      return;
+    }
+
+    const candidateWindow = window as Window;
+    const RecognitionCtor = candidateWindow.SpeechRecognition ?? candidateWindow.webkitSpeechRecognition;
+    if (!RecognitionCtor) {
+      setComposerNotice('La dictée vocale n\'est pas supportée par ce navigateur.');
+      return;
+    }
+
+    const recognition = new RecognitionCtor();
+    speechDraftRef.current = draft;
+    recognition.lang = 'fr-FR';
+    recognition.continuous = false;
+    recognition.interimResults = true;
+    recognition.onstart = () => {
+      setIsListening(true);
+      setComposerNotice('Dictée vocale active. Parle maintenant.');
+    };
+    recognition.onresult = (event) => {
+      let transcript = '';
+      for (let index = event.resultIndex; index < event.results.length; index += 1) {
+        const result = event.results[index];
+        const segment = result[0]?.transcript ?? '';
+        transcript += segment;
+      }
+
+      const trimmedTranscript = transcript.trim();
+      if (!trimmedTranscript) {
+        return;
+      }
+
+      const base = speechDraftRef.current.trimEnd();
+      const nextValue = base ? `${base} ${trimmedTranscript}` : trimmedTranscript;
+      setDraft(nextValue);
+      speechDraftRef.current = nextValue;
+
+      window.requestAnimationFrame(() => {
+        const textarea = inputRef.current;
+        if (!textarea) {
+          return;
+        }
+
+        textarea.focus();
+        textarea.setSelectionRange(nextValue.length, nextValue.length);
+      });
+    };
+    recognition.onerror = (event) => {
+      setIsListening(false);
+      speechRecognitionRef.current = null;
+      setComposerNotice(
+        event.error ? `Dictée vocale indisponible: ${event.error}.` : 'La dictée vocale a rencontré une erreur.',
+      );
+    };
+    recognition.onend = () => {
+      setIsListening(false);
+      speechRecognitionRef.current = null;
+      if (composerNotice?.startsWith('Dictée vocale active')) {
+        setComposerNotice(null);
+      }
+    };
+
+    speechRecognitionRef.current = recognition;
+    try {
+      recognition.start();
+    } catch {
+      speechRecognitionRef.current = null;
+      setIsListening(false);
+      setComposerNotice('Impossible de démarrer la dictée vocale.');
+    }
+  };
+
+  const toggleMoreMenu = (): void => {
+    setIsEmojiPickerOpen(false);
+    setIsMoreMenuOpen((current) => !current);
+  };
+
+  const togglePanelExpansion = (): void => {
+    setIsEmojiPickerOpen(false);
+    setIsMoreMenuOpen(false);
+    setIsPanelExpanded((current) => !current);
+  };
+
+  const downloadConversation = (): void => {
+    const transcript = buildConversationTranscript(messages);
+    const blob = new Blob([transcript], { type: 'text/plain;charset=utf-8' });
+    const objectUrl = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = objectUrl;
+    anchor.download = createConversationFileName();
+    anchor.rel = 'noopener';
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+    setIsMoreMenuOpen(false);
+  };
+
   const updateMessageContent = (
     messageId: string,
     updater: (message: ChatMessageEntry) => ChatMessageEntry,
@@ -207,13 +630,17 @@ function AssistantChatbot({ enabled, userName, onOpenMonitorCreator }: Assistant
   const closeChat = (): void => {
     abortControllerRef.current?.abort();
     abortControllerRef.current = null;
+    resetComposerState({ preserveDraft: true });
+    setIsPanelExpanded(false);
     setIsOpen(false);
     setIsSending(false);
   };
 
   const submitMessage = async (rawMessage: string): Promise<void> => {
     const content = rawMessage.trim();
-    if (content === '' || isSending) {
+    const attachmentSummary = buildAttachmentSummary(draftAttachments);
+    const outgoingContent = [content, attachmentSummary].filter((part) => part !== '').join('\n\n');
+    if (outgoingContent === '' || isSending) {
       return;
     }
 
@@ -223,7 +650,7 @@ function AssistantChatbot({ enabled, userName, onOpenMonitorCreator }: Assistant
       {
         id: createMessageId('user'),
         role: 'user',
-        content,
+        content: outgoingContent,
       },
     ];
 
@@ -236,8 +663,9 @@ function AssistantChatbot({ enabled, userName, onOpenMonitorCreator }: Assistant
           content: `I opened the monitor form with ${monitorDraft.url} prefilled.`,
         },
       ]);
-      setDraft('');
+      resetComposerState();
       onOpenMonitorCreator(monitorDraft);
+      setIsPanelExpanded(false);
       setIsOpen(false);
       return;
     }
@@ -252,7 +680,7 @@ function AssistantChatbot({ enabled, userName, onOpenMonitorCreator }: Assistant
         content: '',
       },
     ]);
-    setDraft('');
+    resetComposerState();
     setIsSending(true);
 
     const controller = new AbortController();
@@ -364,7 +792,11 @@ function AssistantChatbot({ enabled, userName, onOpenMonitorCreator }: Assistant
       ) : null}
 
       {isOpen ? (
-        <section className="assistant-panel" role="dialog" aria-label="Uptime Warden assistant">
+        <section
+          className={`assistant-panel ${isPanelExpanded ? 'is-expanded' : ''}`}
+          role="dialog"
+          aria-label="Uptime Warden assistant"
+        >
           <header className="assistant-header">
             <button type="button" className="assistant-header-back" onClick={closeChat} aria-label="Back">
               <ChevronLeft size={16} />
@@ -380,10 +812,50 @@ function AssistantChatbot({ enabled, userName, onOpenMonitorCreator }: Assistant
               </div>
             </div>
 
-            <div className="assistant-header-actions">
-              <button type="button" className="assistant-header-action" aria-label="More options">
-                <MoreHorizontal size={16} />
-              </button>
+            <div className="assistant-header-actions" ref={headerActionsRef}>
+              <div className="assistant-header-menu-anchor">
+                <button
+                  type="button"
+                  className={`assistant-header-action ${isMoreMenuOpen ? 'is-active' : ''}`}
+                  onClick={toggleMoreMenu}
+                  aria-label="Options supplementaires"
+                  aria-haspopup="menu"
+                  aria-expanded={isMoreMenuOpen}
+                >
+                  <MoreHorizontal size={16} />
+                </button>
+
+                {isMoreMenuOpen ? (
+                  <div className="assistant-header-menu" role="menu" aria-label="Options du chatbot">
+                    <button
+                      type="button"
+                      className="assistant-header-menu-item"
+                      onClick={togglePanelExpansion}
+                      role="menuitem"
+                    >
+                      <span className="assistant-header-menu-item-icon" aria-hidden="true">
+                        {isPanelExpanded ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+                      </span>
+                      <span className="assistant-header-menu-item-text">
+                        {isPanelExpanded ? 'Reduire la fenetre' : 'Agrandir la fenetre'}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      className="assistant-header-menu-item"
+                      onClick={downloadConversation}
+                      aria-label="Telecharger la conversation"
+                      role="menuitem"
+                    >
+                      <span className="assistant-header-menu-item-icon" aria-hidden="true">
+                        <Download size={14} />
+                      </span>
+                      <span className="assistant-header-menu-item-text">Telecharger la conversation</span>
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+
               <button type="button" className="assistant-header-action" onClick={closeChat} aria-label="Close">
                 <X size={16} />
               </button>
@@ -416,7 +888,47 @@ function AssistantChatbot({ enabled, userName, onOpenMonitorCreator }: Assistant
           </div>
 
           <footer className="assistant-footer">
-            <div className="assistant-input-shell">
+            <div className="assistant-input-shell" ref={composerShellRef}>
+              <input
+                ref={attachmentInputRef}
+                className="assistant-file-input"
+                type="file"
+                multiple
+                onChange={(event) => handleAttachmentSelection(event, 'file')}
+              />
+              <input
+                ref={imageInputRef}
+                className="assistant-file-input"
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={(event) => handleAttachmentSelection(event, 'image')}
+              />
+
+              {draftAttachments.length > 0 ? (
+                <div className="assistant-attachment-list" aria-label="Selected attachments">
+                  {draftAttachments.map((attachment) => (
+                    <div key={attachment.id} className="assistant-attachment-chip">
+                      <span className="assistant-attachment-chip-icon" aria-hidden="true">
+                        {attachment.kind === 'image' ? <ImageIcon size={12} /> : <Paperclip size={12} />}
+                      </span>
+                      <span className="assistant-attachment-chip-text">
+                        <span className="assistant-attachment-chip-name">{attachment.file.name}</span>
+                        <span className="assistant-attachment-chip-size">{formatFileSize(attachment.file.size)}</span>
+                      </span>
+                      <button
+                        type="button"
+                        className="assistant-attachment-remove"
+                        onClick={() => handleRemoveAttachment(attachment.id)}
+                        aria-label={`Remove ${attachment.file.name}`}
+                      >
+                        <X size={12} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+
               <textarea
                 ref={inputRef}
                 value={draft}
@@ -432,18 +944,67 @@ function AssistantChatbot({ enabled, userName, onOpenMonitorCreator }: Assistant
                 disabled={isSending}
               />
 
+              {isEmojiPickerOpen ? (
+                <div className="assistant-emoji-popover" ref={emojiPanelRef} role="dialog" aria-label="Emoji picker">
+                  <div className="assistant-emoji-grid">
+                    {EMOJI_OPTIONS.map((emoji) => (
+                      <button
+                        key={emoji}
+                        type="button"
+                        className="assistant-emoji-option"
+                        onClick={() => handleEmojiSelect(emoji)}
+                        aria-label={`Insert ${emoji}`}
+                      >
+                        {emoji}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
               <div className="assistant-input-toolbar">
-                <div className="assistant-input-tools" aria-hidden="true">
-                  <button type="button" className="assistant-input-tool" tabIndex={-1} disabled>
+                <div className="assistant-input-tools">
+                  <button
+                    type="button"
+                    className="assistant-input-tool"
+                    onClick={openAttachmentPicker}
+                    disabled={isSending}
+                    aria-label="Add a file"
+                    title="Add a file"
+                  >
                     <Paperclip size={14} />
                   </button>
-                  <button type="button" className="assistant-input-tool" tabIndex={-1} disabled>
+                  <button
+                    type="button"
+                    className={`assistant-input-tool ${isEmojiPickerOpen ? 'is-active' : ''}`}
+                    onClick={toggleEmojiPicker}
+                    disabled={isSending}
+                    aria-label="Add emoji"
+                    aria-expanded={isEmojiPickerOpen}
+                    aria-haspopup="dialog"
+                    title="Add emoji"
+                  >
                     <Smile size={14} />
                   </button>
-                  <button type="button" className="assistant-input-tool" tabIndex={-1} disabled>
+                  <button
+                    type="button"
+                    className="assistant-input-tool"
+                    onClick={openImagePicker}
+                    disabled={isSending}
+                    aria-label="Add an image"
+                    title="Add an image"
+                  >
                     <ImageIcon size={14} />
                   </button>
-                  <button type="button" className="assistant-input-tool" tabIndex={-1} disabled>
+                  <button
+                    type="button"
+                    className={`assistant-input-tool ${isListening ? 'is-active' : ''}`}
+                    onClick={startOrStopVoiceInput}
+                    disabled={isSending}
+                    aria-label={isListening ? 'Stop voice input' : 'Start voice input'}
+                    aria-pressed={isListening}
+                    title={isListening ? 'Stop voice input' : 'Start voice input'}
+                  >
                     <Mic size={14} />
                   </button>
                 </div>
@@ -451,12 +1012,18 @@ function AssistantChatbot({ enabled, userName, onOpenMonitorCreator }: Assistant
                   type="button"
                   className="assistant-send-button"
                   onClick={() => void submitMessage(draft)}
-                  disabled={isSending || draft.trim() === ''}
+                  disabled={isSending || (draft.trim() === '' && draftAttachments.length === 0)}
                   aria-label="Send message"
                 >
                   {isSending ? <LoaderCircle size={16} className="assistant-send-spinning" /> : <Send size={16} />}
                 </button>
               </div>
+
+              {composerNotice ? (
+                <p className="assistant-composer-notice" aria-live="polite">
+                  {composerNotice}
+                </p>
+              ) : null}
             </div>
 
             <p className="assistant-footer-hint">Powered by Uptime Warden</p>

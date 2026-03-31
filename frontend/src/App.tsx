@@ -581,7 +581,7 @@ function App() {
   const isChatbotPage = activeMenuLabel === 'Chatbot';
   const showAssistantChatbot =
     isAuthBootstrapComplete && Boolean(authToken) && authRoute === null && !isStatusPagePublicView && !isChatbotPage;
-  const isCurrentUserAdmin = isAdminRole(currentUser?.role);
+  const isCurrentUserAdmin = Boolean(isAuthBootstrapComplete && isAdminRole(currentUser?.role));
   const canCurrentUserInviteTeam = Boolean(authToken && isCurrentUserAdmin);
   const userInitials = useMemo(() => {
     const label = currentUser?.name ?? currentUser?.email ?? '';
@@ -593,7 +593,7 @@ function App() {
       .map((value) => value.charAt(0).toUpperCase())
       .join('');
   }, [currentUser]);
-  const isUserLoading = Boolean(authToken) && !currentUser && !isAuthBootstrapComplete;
+  const isUserLoading = Boolean(authToken) && !isAuthBootstrapComplete;
   const profileName = isUserLoading ? 'Loading...' : currentUser?.name || currentUser?.email || '';
   const profileEmail =
     !isUserLoading && currentUser?.email && currentUser?.name ? currentUser.email : null;
@@ -1048,8 +1048,9 @@ function App() {
         }
 
         await refreshMonitors(authToken);
-        if (isAdminRole(currentUser?.role)) {
-          await refreshTeamSummary(authToken, currentUser.role);
+        const currentRole = currentUser?.role;
+        if (isCurrentUserAdmin && currentRole) {
+          await refreshTeamSummary(authToken, currentRole);
         }
         navigateTo('/monitoring');
         return null;
@@ -1148,7 +1149,7 @@ function App() {
       if (!token) {
         return { error: 'Authentification requise.' };
       }
-      if (!adminUser || !isAdminRole(adminUser.role)) {
+      if (!adminUser || !isCurrentUserAdmin) {
         return { error: 'Acces reserve aux admins.' };
       }
 
@@ -1173,7 +1174,7 @@ function App() {
         return { error: formatAppError(error, "Impossible d'envoyer l'invitation.") };
       }
     },
-    [appendInvitationLinkNotice, authToken, clearSessionAndRedirectToLogin, currentUser, refreshTeamSummary],
+    [appendInvitationLinkNotice, authToken, clearSessionAndRedirectToLogin, currentUser, isCurrentUserAdmin, refreshTeamSummary],
   );
 
   const handleGrantMonitorAccess = useCallback(
@@ -1184,7 +1185,7 @@ function App() {
       if (!token) {
         return { error: 'Authentification requise.' };
       }
-      if (!adminUser || !isAdminRole(adminUser.role)) {
+      if (!adminUser || !isCurrentUserAdmin) {
         return { error: 'Acces reserve aux admins.' };
       }
 
@@ -1243,6 +1244,7 @@ function App() {
       authToken,
       clearSessionAndRedirectToLogin,
       currentUser,
+      isCurrentUserAdmin,
       monitorRows,
       refreshMonitors,
       refreshTeamSummary,
@@ -1255,7 +1257,7 @@ function App() {
       if (!authToken) {
         return 'Authentification requise.';
       }
-      if (!currentUser || !isAdminRole(currentUser.role)) {
+      if (!currentUser || !isCurrentUserAdmin) {
         return 'Acces reserve aux admins.';
       }
 
@@ -1272,7 +1274,7 @@ function App() {
         return formatAppError(error, "Impossible de retirer l'acces a ce monitor.");
       }
     },
-    [authToken, clearSessionAndRedirectToLogin, currentUser, refreshMonitors, refreshTeamSummary],
+    [authToken, clearSessionAndRedirectToLogin, currentUser, isCurrentUserAdmin, refreshMonitors, refreshTeamSummary],
   );
 
   const handleDeleteTeamUser = useCallback(
@@ -1280,7 +1282,7 @@ function App() {
       if (!authToken) {
         return 'Authentification requise.';
       }
-      if (!currentUser || !isAdminRole(currentUser.role)) {
+      if (!currentUser || !isCurrentUserAdmin) {
         return 'Acces reserve aux admins.';
       }
       const targetUser = teamMembers.find((member) => member.id === userId);
@@ -1303,7 +1305,7 @@ function App() {
         return formatAppError(error, "Impossible de supprimer l'utilisateur.");
       }
     },
-    [authToken, clearSessionAndRedirectToLogin, currentUser, refreshTeamSummary, teamMembers],
+    [authToken, clearSessionAndRedirectToLogin, currentUser, isCurrentUserAdmin, refreshTeamSummary, teamMembers],
   );
 
   const handleTeamUserRoleChange = useCallback(
@@ -1311,7 +1313,7 @@ function App() {
       if (!authToken) {
         return 'Authentification requise.';
       }
-      if (!currentUser || !isAdminRole(currentUser.role)) {
+      if (!currentUser || !isCurrentUserAdmin) {
         return 'Acces reserve aux admins.';
       }
       const targetUser = teamMembers.find((member) => member.id === userId);
@@ -1334,7 +1336,7 @@ function App() {
         return formatAppError(error, "Impossible de modifier le role de l'utilisateur.");
       }
     },
-    [authToken, clearSessionAndRedirectToLogin, currentUser, refreshTeamSummary, teamMembers],
+    [authToken, clearSessionAndRedirectToLogin, currentUser, isCurrentUserAdmin, refreshTeamSummary, teamMembers],
   );
 
   const handleTeamUserActiveToggle = useCallback(
@@ -1342,7 +1344,7 @@ function App() {
       if (!authToken) {
         return 'Authentification requise.';
       }
-      if (!currentUser || !isAdminRole(currentUser.role)) {
+      if (!currentUser || !isCurrentUserAdmin) {
         return 'Acces reserve aux admins.';
       }
       const targetUser = teamMembers.find((member) => member.id === userId);
@@ -1373,7 +1375,7 @@ function App() {
       if (!authToken) {
         return 'Authentification requise.';
       }
-      if (!currentUser || !isAdminRole(currentUser.role)) {
+      if (!currentUser || !isCurrentUserAdmin) {
         return 'Acces reserve aux admins.';
       }
 
@@ -1389,7 +1391,7 @@ function App() {
         return formatAppError(error, "Impossible de supprimer l'invitation.");
       }
     },
-    [authToken, clearSessionAndRedirectToLogin, currentUser, refreshTeamSummary],
+    [authToken, clearSessionAndRedirectToLogin, currentUser, isCurrentUserAdmin, refreshTeamSummary],
   );
 
   useEffect(() => {
@@ -1438,16 +1440,16 @@ function App() {
   }, [applyRoute, authToken, currentUser, isAuthBootstrapComplete, navigateTo]);
 
   useEffect(() => {
-    if (!currentUser || isAdminRole(currentUser.role)) return;
+    if (!currentUser || isCurrentUserAdmin) return;
     if (!isTeamMembersPage || teamMembersSubPage === 'overview') return;
     navigateTo('/team-members', { replace: true });
-  }, [currentUser, isTeamMembersPage, navigateTo, teamMembersSubPage]);
+  }, [currentUser, isCurrentUserAdmin, isTeamMembersPage, navigateTo, teamMembersSubPage]);
 
   useEffect(() => {
-    if (!authToken || !currentUser || !isAdminRole(currentUser.role)) return;
+    if (!authToken || !currentUser || !isCurrentUserAdmin) return;
     if (!isTeamMembersPage) return;
     void refreshTeamSummary(authToken, currentUser.role);
-  }, [authToken, currentUser, isTeamMembersPage, teamMembersSubPage, refreshTeamSummary]);
+  }, [authToken, currentUser, isCurrentUserAdmin, isTeamMembersPage, teamMembersSubPage, refreshTeamSummary]);
 
   useEffect(() => {
     if (!authToken) {
@@ -1476,17 +1478,10 @@ function App() {
           !meResponse.user ||
           !meResponse.user.role
         ) {
-          const cachedUser = readCachedUser();
-          if (!cachedUser) {
-            if (isAuthPath) {
-              clearLocalSession();
-              return;
-            }
+          clearLocalSession();
+          if (!isAuthPath) {
             clearSessionAndRedirectToLogin();
-            return;
           }
-          setCurrentUser(cachedUser);
-          setIsAuthBootstrapComplete(true);
           return;
         }
         setCurrentUser(meResponse.user);
@@ -1506,8 +1501,11 @@ function App() {
           clearSessionAndRedirectToLogin();
           return;
         }
+        clearLocalSession();
         setMonitorLoadError(formatAppError(error, 'Impossible de charger la session.'));
-        setIsAuthBootstrapComplete(true);
+        if (!isAuthPath) {
+          clearSessionAndRedirectToLogin();
+        }
       }
     };
 
@@ -1879,7 +1877,7 @@ function App() {
           key={`edit-${teamMonitor.id}-integrations`}
           monitor={teamMonitor}
           initialSection="integrations"
-          currentUserRole={currentUser?.role}
+          currentUserRole={isCurrentUserAdmin ? currentUser?.role : undefined}
           teamMembers={teamMembers}
           invitations={teamInvitations}
           onBack={() => {
@@ -1909,7 +1907,7 @@ function App() {
           key={`edit-${editingMonitor.id}-details`}
           monitor={editingMonitor}
           initialSection="details"
-          currentUserRole={currentUser?.role}
+          currentUserRole={isCurrentUserAdmin ? currentUser?.role : undefined}
           teamMembers={teamMembers}
           invitations={teamInvitations}
           onBack={() => {
