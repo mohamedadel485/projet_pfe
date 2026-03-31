@@ -274,37 +274,13 @@ interface MessageResponse {
   details?: string;
 }
 
-export interface AssistantChatMessage {
-  role: "user" | "assistant";
-  content: string;
-}
-
-export interface AssistantChatOptions {
-  mode?: "assistant" | "generic";
-  model?: string;
-  temperature?: number;
-  systemInstruction?: string;
-}
-
-export interface AssistantChatAction {
-  kind: "navigate" | "prompt" | "reply";
-  label: string;
-  description: string;
-  value: string;
-}
-
-export interface AssistantChatResponse {
-  intent: "answer" | "create_monitor" | "clarify";
-  reply: string;
-  missingFields: string[];
-  createdMonitor: BackendMonitor | null;
-  actions: AssistantChatAction[];
-}
-
 export interface BackendHealthResponse {
+  ok?: boolean;
   status: string;
   timestamp: string;
   uptime: number;
+  apiKeyConfigured?: boolean;
+  model?: string;
 }
 
 interface UserMutationResponse {
@@ -473,7 +449,6 @@ const request = async <T>(
   const isMaintenancePath = path.startsWith("/maintenances");
   const isAuthPath = path.startsWith("/auth/");
   const isAuthRegisterPath = path.startsWith("/auth/register");
-  const isAssistantPath = path.startsWith("/assistant/");
   const isRelativeApiBase = !isHttpUrl(API_BASE_URL);
   const directBackendTargets = LOCAL_DIRECT_BACKEND_FALLBACKS.filter(
     (target) => buildDirectBackendEndpoint(target, path) !== endpoint,
@@ -557,7 +532,6 @@ const request = async <T>(
         response.status === 405 ||
         (isMaintenancePath && response.status === 404) ||
         (isAuthPath && response.status === 404) ||
-        (isAssistantPath && response.status === 404) ||
         (isAuthRegisterPath && response.status === 403));
 
     if (shouldRetryWithDirectBackend) {
@@ -734,18 +708,6 @@ export const createMonitor = (
     method: "POST",
     token,
     body: monitor,
-  });
-
-export const sendAssistantChat = (
-  messages: AssistantChatMessage[],
-  token?: string | null,
-  options?: AssistantChatOptions,
-): Promise<AssistantChatResponse> =>
-  request<AssistantChatResponse>("/assistant/chat", {
-    method: "POST",
-    token: token ?? undefined,
-    body: { messages, ...options },
-    timeoutMs: 20000,
   });
 
 export const fetchBackendHealth = (): Promise<BackendHealthResponse> =>

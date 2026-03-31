@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CiSliderHorizontal } from 'react-icons/ci';
-import { Bot } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import ExclamationHexagonIcon from './ExclamationHexagonIcon';
 import monitoringMenuIcon from './images/m1.png';
+import AssistantChatbot from './components/assistant-chat/AssistantChatbot';
 import ChatbotPage from './pages/chatbot/ChatbotPage';
 import EditMonitorPage from './pages/edit-monitor/EditMonitorPage';
 import IncidentsPage from './pages/incidents/IncidentsPage';
@@ -17,7 +17,6 @@ import MonitorDetailsPage from './pages/monitor-details/MonitorDetailsPage';
 import NewMonitorPage from './pages/new-monitor/NewMonitorPage';
 import MonitorWizardPage, { type MonitorWizardSubmission } from './pages/monitor-wizard/MonitorWizardPage';
 import BulkUploadPage, { type BulkUploadSubmission } from './pages/bulk-upload/BulkUploadPage';
-import AssistantChatbot from './components/assistant-chat/AssistantChatbot';
 import StatusPageInfoPage from './pages/status/StatusPageInfoPage';
 import StatusPageMonitorsPage from './pages/status/StatusPageMonitorsPage';
 import StatusPagePublicPage from './pages/status/StatusPagePublicPage';
@@ -147,6 +146,11 @@ type StatusPageEditorView = 'settings' | 'monitors';
 type AuthRoute = 'login' | 'confirmation-code' | 'forgot-password' | 'accept-invitation' | null;
 type PasswordResetContext = { email: string; newPassword: string } | null;
 type NewMonitorOption = 'single' | 'wizard' | 'bulk';
+type MonitorDraft = {
+  name: string;
+  protocol: 'http' | 'https' | 'ws' | 'wss';
+  url: string;
+};
 type MonitorFilterStatus = 'none' | 'up' | 'down' | 'paused';
 type MonitorSortOption = 'down-first' | 'up-first' | 'paused-first' | 'a-z' | 'newest-first';
 type BulkActionOption = 'start' | 'pause' | 'resume' | 'delete';
@@ -188,7 +192,6 @@ const menuItems: MenuItem[] = [
   { label: 'Maintenance', icon: Wrench },
   { label: 'Team members', icon: Users },
   { label: 'Integrations & API', materialIcon: 'graph_1' },
-  { label: 'Chatbot', icon: Bot },
 ];
 
 const routeByMenuLabel: Record<MenuLabel, string> = {
@@ -392,6 +395,7 @@ function App() {
   const [isStatusPagePublicView, setIsStatusPagePublicView] = useState(false);
   const [statusPageEditorView, setStatusPageEditorView] = useState<StatusPageEditorView>('settings');
   const [isCreatingMonitor, setIsCreatingMonitor] = useState(false);
+  const [newMonitorDraft, setNewMonitorDraft] = useState<MonitorDraft | null>(null);
   const [isMonitorWizardOpen, setIsMonitorWizardOpen] = useState(false);
   const [isBulkUploadOpen, setIsBulkUploadOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -575,6 +579,8 @@ function App() {
   const isStatusPagesPage = activeMenuLabel === 'Status pages';
   const isTeamMembersPage = activeMenuLabel === 'Team members';
   const isChatbotPage = activeMenuLabel === 'Chatbot';
+  const showAssistantChatbot =
+    isAuthBootstrapComplete && Boolean(authToken) && authRoute === null && !isStatusPagePublicView && !isChatbotPage;
   const isCurrentUserAdmin = isAdminRole(currentUser?.role);
   const canCurrentUserInviteTeam = Boolean(authToken && isCurrentUserAdmin);
   const userInitials = useMemo(() => {
@@ -1519,6 +1525,12 @@ function App() {
   }, [monitorRows]);
 
   useEffect(() => {
+    if (!isCreatingMonitor) {
+      setNewMonitorDraft(null);
+    }
+  }, [isCreatingMonitor]);
+
+  useEffect(() => {
     const handleDocumentMouseDown = (event: MouseEvent) => {
       const target = event.target as Node;
 
@@ -1567,11 +1579,19 @@ function App() {
     }, 300);
   };
 
+  const openNewMonitorPage = useCallback(
+    (draft?: MonitorDraft | null) => {
+      setNewMonitorDraft(draft ?? null);
+      navigateTo('/monitoring/new');
+    },
+    [navigateTo],
+  );
+
   const handleNewMonitorOptionSelect = (option: NewMonitorOption) => {
     setNewMonitorMenuOpen(false);
 
     if (option === 'single') {
-      navigateTo('/monitoring/new');
+      openNewMonitorPage();
       return;
     }
 
@@ -1697,21 +1717,6 @@ function App() {
   const toggleAllMonitorSelections = () => {
     setSelectedMonitorIds(areAllMonitorsSelected ? [] : monitorRows.map((monitor) => monitor.id));
   };
-
-  const handleAssistantMonitorCreated = useCallback(
-    async (_monitor: BackendMonitor) => {
-      if (!authToken) {
-        return;
-      }
-
-      await refreshMonitors(authToken);
-    },
-    [authToken, refreshMonitors],
-  );
-
-  const showAssistant = Boolean(
-    currentUser && isAuthBootstrapComplete && !authRoute && !isStatusPagePublicView && !isChatbotPage,
-  );
 
   if (authRoute === 'login') {
     return (
@@ -1861,6 +1866,14 @@ function App() {
 
       <div className={`sidebar-overlay ${mobileMenuOpen ? 'show' : ''}`} onClick={() => setMobileMenuOpen(false)} />
 
+      <AssistantChatbot
+        enabled={showAssistantChatbot}
+        userName={currentUser?.name}
+        onOpenMonitorCreator={(draft) => {
+          openNewMonitorPage(draft);
+        }}
+      />
+
       {integrationsSubPage === 'team' && teamMonitor ? (
         <EditMonitorPage
           key={`edit-${teamMonitor.id}-integrations`}
@@ -1972,10 +1985,18 @@ function App() {
         />
       ) : isCreatingMonitor ? (
         <NewMonitorPage
+          key={
+            newMonitorDraft
+              ? `prefill-${newMonitorDraft.protocol}-${newMonitorDraft.url}-${newMonitorDraft.name}`
+              : 'prefill-default'
+          }
           onBack={() => {
             navigateTo('/monitoring');
           }}
           onCreateMonitor={handleCreateMonitor}
+          initialName={newMonitorDraft?.name}
+          initialUrl={newMonitorDraft?.url}
+          initialProtocol={newMonitorDraft?.protocol}
         />
       ) : isIncidentsPage ? (
         <div className="panel-main">
@@ -2009,7 +2030,7 @@ function App() {
               navigateTo(`/status-pages/${selectedStatusPageId}`);
             }}
             onCreateMonitor={() => {
-              navigateTo('/monitoring/new');
+              openNewMonitorPage();
             }}
           />
         ) : (
@@ -2097,7 +2118,7 @@ function App() {
       ) : isMaintenancePage ? (
         <MaintenancePage
           onCreateMonitor={() => {
-            navigateTo('/monitoring/new');
+            openNewMonitorPage();
           }}
           onOpenMaintenanceWindows={() => {
             navigateTo('/maintenance/windows');
@@ -2109,7 +2130,7 @@ function App() {
         />
       ) : isChatbotPage ? (
         <div className="panel-main chatbot-page-shell">
-          <ChatbotPage authToken={authToken} userName={currentUser?.name} />
+          <ChatbotPage userName={currentUser?.name} />
         </div>
       ) : (
         <>
@@ -2125,7 +2146,7 @@ function App() {
                   type="button"
                   onClick={() => {
                     setNewMonitorMenuOpen(false);
-                    navigateTo('/monitoring/new');
+                    openNewMonitorPage();
                   }}
                 >
                   <Plus size={14} />
@@ -2519,15 +2540,6 @@ function App() {
         </>
       )}
 
-      <AssistantChatbot
-        enabled={showAssistant}
-        userName={currentUser?.name}
-        authToken={authToken}
-        onOpenManualCreatePage={() => {
-          navigateTo('/monitoring/new');
-        }}
-        onMonitorCreated={handleAssistantMonitorCreated}
-      />
     </div>
   );
 }

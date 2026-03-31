@@ -1,12 +1,6 @@
 import { Bot, LoaderCircle, RefreshCcw, Send, Sparkles, Trash2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import {
-  fetchBackendHealth,
-  isApiError,
-  sendAssistantChat,
-  type AssistantChatMessage,
-  type BackendHealthResponse,
-} from '../../lib/api';
+import { fetchBackendHealth, type BackendHealthResponse } from '../../lib/api';
 import './ChatbotPage.css';
 
 type ChatRole = 'user' | 'assistant';
@@ -25,18 +19,21 @@ interface ChatbotSettings {
 }
 
 interface ChatbotPageProps {
-  authToken?: string | null;
   userName?: string | null;
 }
 
 interface HealthState {
   status: 'checking' | 'ready' | 'offline';
   detail: string;
+  apiKeyConfigured: boolean;
+  model: string;
 }
 
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
 const DEFAULT_SYSTEM_PROMPT =
   "Tu es un assistant utile, clair et sympathique. Reponds en francais sauf si l'utilisateur demande une autre langue.";
+
+const CHAT_API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim() || '/api';
 
 const STORAGE_KEYS = {
   settings: 'uptimewarden-chatbot-settings',
@@ -51,6 +48,39 @@ const QUICK_PROMPTS = [
 
 const createMessageId = (prefix: string): string =>
   `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+
+const buildChatEndpoint = (path: string): string => {
+  const base = CHAT_API_BASE_URL.replace(/\/+$/, '');
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+  return `${base}${normalizedPath}`;
+};
+
+const readErrorMessage = async (response: Response): Promise<string> => {
+  const rawBody = (await response.text()).trim();
+  if (rawBody === '') {
+    return `Requete echouee (${response.status})`;
+  }
+
+  const contentType = response.headers.get('content-type') ?? '';
+  if (contentType.includes('application/json')) {
+    try {
+      const payload = JSON.parse(rawBody) as Record<string, unknown>;
+      const directError =
+        typeof payload.error === 'string'
+          ? payload.error
+          : typeof payload.message === 'string'
+            ? payload.message
+            : '';
+      if (directError !== '') {
+        return directError;
+      }
+    } catch {
+      // Fall back to the raw text below.
+    }
+  }
+
+  return rawBody;
+};
 
 const formatUptime = (uptimeSeconds: number): string => {
   if (!Number.isFinite(uptimeSeconds) || uptimeSeconds <= 0) {
@@ -139,15 +169,20 @@ const loadMessages = (): ChatMessageEntry[] => {
 const buildWelcomeText = (userName?: string | null): string =>
   userName ? `Salut ${userName} ! Je suis pret a discuter. Utilise le panneau de gauche pour ajuster le modele et le ton.` : 'Salut ! Je suis pret a discuter. Utilise le panneau de gauche pour ajuster le modele et le ton.';
 
-function ChatbotPage({ authToken, userName }: ChatbotPageProps) {
+function ChatbotPage({ userName }: ChatbotPageProps) {
   const [settings, setSettings] = useState<ChatbotSettings>(() => loadSettings());
   const [messages, setMessages] = useState<ChatMessageEntry[]>(() => loadMessages());
   const [draft, setDraft] = useState('');
   const [isSending, setIsSending] = useState(false);
-  const [lastError, setLastError] = useState<string | null>(null);
-  const [health, setHealth] = useState<HealthState>({ status: 'checking', detail: 'Verification du backend...' });
+  const [health, setHealth] = useState<HealthState>({
+    status: 'checking',
+    detail: 'Verification du backend...',
+    apiKeyConfigured: false,
+    model: DEFAULT_MODEL,
+  });
   const messagesRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -176,8 +211,12 @@ function ChatbotPage({ authToken, userName }: ChatbotPageProps) {
         }
 
         setHealth({
-          status: response.status === 'OK' ? 'ready' : 'offline',
-          detail: `Backend ${response.status} · uptime ${formatUptime(response.uptime)}`,
+          status: response.ok || response.status === 'OK' ? 'ready' : 'offline',
+          detail: response.apiKeyConfigured
+            ? `Backend ${response.status} - uptime ${formatUptime(response.uptime)}`
+            : 'Backend online, ajoute GEMINI_API_KEY dans Backend/.env',
+          apiKeyConfigured: Boolean(response.apiKeyConfigured),
+          model: response.model || DEFAULT_MODEL,
         });
       } catch {
         if (!isMounted) {
@@ -187,6 +226,8 @@ function ChatbotPage({ authToken, userName }: ChatbotPageProps) {
         setHealth({
           status: 'offline',
           detail: 'Backend indisponible pour le moment',
+          apiKeyConfigured: false,
+          model: DEFAULT_MODEL,
         });
       }
     })();
@@ -214,6 +255,12 @@ function ChatbotPage({ authToken, userName }: ChatbotPageProps) {
     inputRef.current?.focus();
   }, []);
 
+  useEffect(() => {
+    return () => {
+      abortControllerRef.current?.abort();
+    };
+  }, []);
+
   const persistSettings = (nextSettings: ChatbotSettings): void => {
     setSettings(nextSettings);
   };
@@ -227,18 +274,39 @@ function ChatbotPage({ authToken, userName }: ChatbotPageProps) {
   };
 
   const resetChat = (): void => {
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = null;
     setMessages([]);
     setDraft('');
-    setLastError(null);
   };
 
-  const appendMessage = (message: ChatMessageEntry): void => {
-    setMessages((current) => [...current, message]);
+  const updateMessageContent = (
+    messageId: string,
+    updater: (message: ChatMessageEntry) => ChatMessageEntry,
+  ): void => {
+    setMessages((current) =>
+      current.map((message) => (message.id === messageId ? updater(message) : message)),
+    );
   };
 
   const sendMessage = async (rawMessage: string): Promise<void> => {
     const content = rawMessage.trim();
-    if (content === '' || isSending) {
+    if (content === '') {
+      return;
+    }
+
+    const normalizedCommand = content.toLowerCase();
+    if (normalizedCommand === '/reset') {
+      resetChat();
+      return;
+    }
+
+    if (normalizedCommand === '/quit' || normalizedCommand === '/exit') {
+      setDraft('');
+      return;
+    }
+
+    if (isSending) {
       return;
     }
 
@@ -250,46 +318,101 @@ function ChatbotPage({ authToken, userName }: ChatbotPageProps) {
         content,
       },
     ];
+    const assistantMessageId = createMessageId('assistant');
 
-    setMessages(nextMessages);
+    setMessages([
+      ...nextMessages,
+      {
+        id: assistantMessageId,
+        role: 'assistant',
+        content: '',
+      },
+    ]);
     setDraft('');
-    setLastError(null);
     setIsSending(true);
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
 
     try {
-      const response = await sendAssistantChat(
-        nextMessages.map((message): AssistantChatMessage => ({
-          role: message.role,
-          content: message.content,
-        })),
-        authToken,
-        {
-          mode: 'generic',
+      const response = await fetch(buildChatEndpoint('/chat'), {
+        method: 'POST',
+        cache: 'no-store',
+        credentials: 'include',
+        signal: controller.signal,
+        headers: {
+          'Content-Type': 'application/json; charset=utf-8',
+          'Cache-Control': 'no-store',
+        },
+        body: JSON.stringify({
+          messages: nextMessages.map((message) => ({
+            role: message.role,
+            content: message.content,
+          })),
           model: settings.model,
           temperature: settings.temperature,
           systemInstruction: settings.systemPrompt,
-        },
-      );
-
-      appendMessage({
-        id: createMessageId('assistant'),
-        role: 'assistant',
-        content: response.reply || 'Je n ai pas obtenu de reponse textuelle. Reessaie dans un instant.',
+        }),
       });
+
+      if (!response.ok) {
+        const errorMessage = await readErrorMessage(response);
+        throw new Error(errorMessage);
+      }
+
+      const fallbackReply = 'Je n ai pas obtenu de reponse textuelle. Reessaie dans un instant.';
+
+      if (!response.body) {
+        const text = (await response.text()).trim();
+        updateMessageContent(assistantMessageId, (message) => ({
+          ...message,
+          content: text || fallbackReply,
+          isError: false,
+        }));
+        return;
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder('utf-8');
+      let assistantText = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) {
+          break;
+        }
+
+        assistantText += decoder.decode(value, { stream: true });
+        updateMessageContent(assistantMessageId, (message) => ({
+          ...message,
+          content: assistantText,
+          isError: false,
+        }));
+      }
+
+      assistantText += decoder.decode();
+      const finalReply = assistantText.trim() || fallbackReply;
+      updateMessageContent(assistantMessageId, (message) => ({
+        ...message,
+        content: finalReply,
+        isError: false,
+      }));
     } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        return;
+      }
+
       const fallbackReply =
-        isApiError(error) && error.status === 401
-          ? 'Ta session a expire. Recharge la page ou reconnecte-toi.'
+        error instanceof Error && error.message.trim() !== ''
+          ? error.message
           : "Je n'arrive pas a joindre le chatbot pour le moment. Reessaie dans un instant.";
 
-      setLastError(fallbackReply);
-      appendMessage({
-        id: createMessageId('error'),
-        role: 'assistant',
+      updateMessageContent(assistantMessageId, (message) => ({
+        ...message,
         content: fallbackReply,
         isError: true,
-      });
+      }));
     } finally {
+      abortControllerRef.current = null;
       setIsSending(false);
     }
   };
@@ -328,8 +451,17 @@ function ChatbotPage({ authToken, userName }: ChatbotPageProps) {
             <span className="chatbot-status__dot" aria-hidden="true" />
             <div>
               <p className="chatbot-status__label">Etat du backend</p>
-              <strong>{health.status === 'ready' ? 'Connecte' : health.status === 'offline' ? 'Hors ligne' : 'Verification...'}</strong>
+              <strong>
+                {health.status === 'ready'
+                  ? health.apiKeyConfigured
+                    ? 'Key ok'
+                    : 'Key missing'
+                  : health.status === 'offline'
+                    ? 'Hors ligne'
+                    : 'Verification...'}
+              </strong>
               <span>{health.detail}</span>
+              <span>Model: {health.model}</span>
             </div>
           </div>
 
@@ -471,7 +603,6 @@ function ChatbotPage({ authToken, userName }: ChatbotPageProps) {
               </div>
             ) : null}
 
-            {lastError ? <p className="chatbot-inline-error">{lastError}</p> : null}
           </div>
 
           <form

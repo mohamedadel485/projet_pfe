@@ -15,6 +15,9 @@ interface NewMonitorPageProps {
     domainExpiryMode?: 'enabled' | 'disabled';
     sslExpiryMode?: 'enabled' | 'disabled';
   }) => Promise<string | null>;
+  initialName?: string;
+  initialUrl?: string;
+  initialProtocol?: 'http' | 'https' | 'ws' | 'wss';
 }
 
 const intervalOptions = ['30s', '1m', '5m', '30m', '1h', '12h', '12h', '24h'];
@@ -100,12 +103,19 @@ const mapHttpMethod = (method: string): 'GET' | 'POST' | 'PUT' | 'DELETE' | 'HEA
   return 'HEAD';
 };
 
-function NewMonitorPage({ onBack, onCreateMonitor }: NewMonitorPageProps) {
+function NewMonitorPage({
+  onBack,
+  onCreateMonitor,
+  initialName,
+  initialUrl,
+  initialProtocol,
+}: NewMonitorPageProps) {
+  const initialMonitorUrl = initialUrl ?? protocolPrefixes[initialProtocol ?? 'https'];
   const [selectedIntervalIndex, setSelectedIntervalIndex] = useState(2);
   const [selectedTimeoutIndex, setSelectedTimeoutIndex] = useState(2);
-  const [selectedProtocol, setSelectedProtocol] = useState<MonitorProtocol>('https');
-  const [monitorName, setMonitorName] = useState('');
-  const [monitorUrl, setMonitorUrl] = useState('https://');
+  const [selectedProtocol, setSelectedProtocol] = useState<MonitorProtocol>(initialProtocol ?? 'https');
+  const [monitorName, setMonitorName] = useState(initialName ?? '');
+  const [monitorUrl, setMonitorUrl] = useState(initialMonitorUrl);
   const [isProtocolMenuOpen, setIsProtocolMenuOpen] = useState(false);
   const [isSslDomainOpen, setIsSslDomainOpen] = useState(false);
   const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);

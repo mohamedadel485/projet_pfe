@@ -162,6 +162,8 @@
 }
 
 .chatbot-status span {
+  display: block;
+  margin-top: 2px;
   color: #8ea1bf;
   font-size: 0.8rem;
   line-height: 1.45;
