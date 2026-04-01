@@ -26,6 +26,8 @@ router.post(
     body('expectedStatusCode').optional().isInt({ min: 100, max: 599 }),
     body('domainExpiryMode').optional().isIn(['enabled', 'disabled']),
     body('sslExpiryMode').optional().isIn(['enabled', 'disabled']),
+    body('body').optional().isString(),
+    body('headers').optional().isObject(),
   ],
   async (req: AuthRequest, res: Response): Promise<void> => {
     try {
@@ -144,8 +146,11 @@ router.put(
     body('type').optional().isIn(['http', 'https', 'ws', 'wss']),
     body('interval').optional().isInt({ min: 1 }),
     body('timeout').optional().isInt({ min: 5, max: 300 }),
+    body('httpMethod').optional().isIn(['GET', 'POST', 'PUT', 'DELETE', 'HEAD']),
     body('domainExpiryMode').optional().isIn(['enabled', 'disabled']),
     body('sslExpiryMode').optional().isIn(['enabled', 'disabled']),
+    body('body').optional().isString(),
+    body('headers').optional().isObject(),
   ],
   async (req: AuthRequest, res: Response): Promise<void> => {
     try {
