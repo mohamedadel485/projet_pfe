@@ -68,6 +68,7 @@ function LoginPage({ onSignIn, onForgotPassword }: LoginPageProps) {
             <label htmlFor="login-email">Email</label>
             <input
               id="login-email"
+              name="email"
               type="email"
               autoComplete="email"
               placeholder="username@gmail.com"
@@ -80,6 +81,7 @@ function LoginPage({ onSignIn, onForgotPassword }: LoginPageProps) {
             <div className="login-password-wrap">
               <input
                 id="login-password"
+                name="password"
                 type={showPassword ? 'text' : 'password'}
                 autoComplete="current-password"
                 placeholder="XXXXXXXXXX"
@@ -101,6 +103,8 @@ function LoginPage({ onSignIn, onForgotPassword }: LoginPageProps) {
             <div className="login-meta-row">
               <label className="login-remember">
                 <input
+                  id="login-remember-me"
+                  name="rememberMe"
                   className="login-remember-checkbox"
                   type="checkbox"
                   checked={rememberMe}

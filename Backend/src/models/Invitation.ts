@@ -1,12 +1,14 @@
 import mongoose, { Document, Schema } from 'mongoose';
 
+export type InvitationRole = 'admin' | 'user';
+
 export interface IInvitation extends Document {
   name?: string;
   email: string;
   token: string;
   invitedBy: mongoose.Types.ObjectId;
   monitorIds: mongoose.Types.ObjectId[];
-  role: 'user';
+  role?: InvitationRole;
   status: 'pending' | 'accepted' | 'expired';
   expiresAt: Date;
   createdAt: Date;
@@ -43,6 +45,7 @@ const invitationSchema = new Schema<IInvitation>(
     ],
     role: {
       type: String,
+      enum: ['admin', 'user'],
       default: 'user',
     },
     status: {

@@ -252,6 +252,9 @@
 
 .invite-team-feedback.success {
   color: #2a7a42;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.45;
 }
 
 @media (max-width: 1000px) {

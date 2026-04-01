@@ -2,12 +2,25 @@ import { Router, Response } from 'express';
 import { body, validationResult } from 'express-validator';
 import crypto from 'crypto';
 import User from '../models/User';
-import Invitation from '../models/Invitation';
+import Invitation, { type InvitationRole } from '../models/Invitation';
 import Monitor from '../models/Monitor';
 import emailService from '../services/emailService';
 import { authenticate, isAdmin, AuthRequest } from '../middleware/auth';
 
 const router = Router();
+
+const normalizeInvitationRole = (value: unknown): InvitationRole => {
+  if (typeof value !== 'string') {
+    return 'user';
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'admin') {
+    return 'admin';
+  }
+
+  return 'user';
+};
 
 /**
  * POST /api/invitations
@@ -22,6 +35,10 @@ router.post(
     body('email').isEmail().normalizeEmail(),
     body('monitorIds').optional().isArray().withMessage('monitorIds doit etre une liste'),
     body('monitorIds.*').optional().isMongoId().withMessage('Un monitorId est invalide'),
+    body('role')
+      .optional()
+      .isIn(['admin', 'member', 'user'])
+      .withMessage('Le role doit etre admin, member ou user'),
   ],
   async (req: AuthRequest, res: Response): Promise<void> => {
     let createdInvitationId: string | null = null;
@@ -37,6 +54,7 @@ router.post(
         email: string;
         monitorIds?: string[];
       };
+      const role = normalizeInvitationRole(req.body.role);
 
       const uniqueMonitorIds = Array.isArray(monitorIds)
         ? Array.from(new Set(monitorIds.map((monitorId) => String(monitorId).trim()).filter(Boolean)))
@@ -83,6 +101,7 @@ router.post(
         token,
         invitedBy: req.user!._id,
         monitorIds: uniqueMonitorIds,
+        role,
         expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 jours
       });
 
@@ -105,6 +124,7 @@ router.post(
             name: invitation.name,
             email: invitation.email,
             monitorIds: invitation.monitorIds ?? [],
+            role: invitation.role ?? 'user',
             status: invitation.status,
             expiresAt: invitation.expiresAt,
             createdAt: invitation.createdAt,
@@ -122,6 +142,7 @@ router.post(
           name: invitation.name,
           email: invitation.email,
           monitorIds: invitation.monitorIds ?? [],
+          role: invitation.role ?? 'user',
           status: invitation.status,
           expiresAt: invitation.expiresAt,
           createdAt: invitation.createdAt,
@@ -210,6 +231,7 @@ router.get(
           name: invitation.name,
           email: invitation.email,
           monitorIds: invitation.monitorIds ?? [],
+          role: invitation.role ?? 'user',
           invitedBy: invitation.invitedBy,
           expiresAt: invitation.expiresAt,
         },
@@ -303,6 +325,7 @@ router.post(
             name: invitation.name,
             email: invitation.email,
             monitorIds: invitation.monitorIds ?? [],
+            role: invitation.role ?? 'user',
             status: invitation.status,
             expiresAt: invitation.expiresAt,
           },
@@ -319,6 +342,7 @@ router.post(
           name: invitation.name,
           email: invitation.email,
           monitorIds: invitation.monitorIds ?? [],
+          role: invitation.role ?? 'user',
           status: invitation.status,
           expiresAt: invitation.expiresAt,
         },

@@ -400,7 +400,7 @@ router.post(
         email: invitation.email,
         password,
         name: invitedName,
-        role: invitation.role,
+        role: invitation.role ?? 'user',
         invitedBy: invitation.invitedBy,
       });
 

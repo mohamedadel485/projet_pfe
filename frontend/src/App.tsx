@@ -1116,26 +1116,22 @@ function App() {
   );
 
   const appendInvitationLinkNotice = useCallback(async (baseNotice: string, invitationUrl?: string): Promise<string> => {
-    if (!invitationUrl) {
-      return baseNotice;
-    }
-
-    if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+    if (invitationUrl && typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
       try {
         await navigator.clipboard.writeText(invitationUrl);
-        return `${baseNotice} Le lien d'invitation a ete copie dans le presse-papiers.`;
       } catch {
-        return `${baseNotice} Lien: ${invitationUrl}`;
+        // Keep the success message minimal even if the clipboard copy fails.
       }
     }
 
-    return `${baseNotice} Lien: ${invitationUrl}`;
+    return baseNotice;
   }, []);
 
   const handleInviteTeamMember = useCallback(
     async ({
       name,
       email,
+      role,
       monitorIds,
     }: {
       name: string;
@@ -1154,7 +1150,7 @@ function App() {
       }
 
       try {
-        const response = await createInvitation(name, email, monitorIds, token);
+        const response = await createInvitation(name, email, monitorIds, token, role);
         const appliedMonitorIds = response.invitation.monitorIds ?? [];
         if (monitorIds.length > 0 && appliedMonitorIds.length === 0) {
           return {
@@ -1162,7 +1158,7 @@ function App() {
           };
         }
 
-        const successBase = response.warning ?? 'Invitation envoyee avec succes.';
+        const successBase = 'Invitation envoyee avec succes.';
         const notice = await appendInvitationLinkNotice(successBase, response.invitationUrl);
         await refreshTeamSummary(token, adminUser.role);
         return { error: null, notice };
@@ -1225,7 +1221,7 @@ function App() {
             };
           }
 
-          const successBase = response.warning ?? 'Invitation envoyee avec succes.';
+          const successBase = 'Invitation envoyee avec succes.';
           const notice = await appendInvitationLinkNotice(successBase, response.invitationUrl);
           await refreshMonitors(token);
           await refreshTeamSummary(token, adminUser.role);

@@ -74,6 +74,7 @@ function AcceptInvitationPage({ token, onAcceptInvitation, onBackToLogin }: Acce
             <div className="accept-invitation-password-wrap">
               <input
                 id="accept-invite-password"
+                name="password"
                 type={showPassword ? 'text' : 'password'}
                 placeholder="At least 6 characters"
                 value={password}
@@ -95,6 +96,7 @@ function AcceptInvitationPage({ token, onAcceptInvitation, onBackToLogin }: Acce
             <div className="accept-invitation-password-wrap">
               <input
                 id="accept-invite-confirm-password"
+                name="confirmPassword"
                 type={showConfirmPassword ? 'text' : 'password'}
                 placeholder="Repeat password"
                 value={confirmPassword}
@@ -114,6 +116,8 @@ function AcceptInvitationPage({ token, onAcceptInvitation, onBackToLogin }: Acce
 
             <label className="accept-invitation-remember">
               <input
+                id="accept-invite-remember-me"
+                name="rememberMe"
                 type="checkbox"
                 checked={rememberMe}
                 onChange={(event) => setRememberMe(event.target.checked)}

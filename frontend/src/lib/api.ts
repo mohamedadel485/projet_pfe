@@ -233,6 +233,7 @@ interface InvitationListResponse {
     name?: string;
     email: string;
     monitorIds?: string[];
+    role?: EditableUserRole;
     status: "pending" | "accepted" | "expired";
     expiresAt: string;
     createdAt: string;
@@ -249,6 +250,7 @@ interface InvitationCreateResponse {
     name: string;
     email: string;
     monitorIds?: string[];
+    role?: EditableUserRole;
     status: "pending" | "accepted" | "expired";
     expiresAt: string;
     createdAt: string;
@@ -259,6 +261,7 @@ interface InvitationByTokenResponse {
   invitation: {
     name?: string;
     email: string;
+    role?: EditableUserRole;
     expiresAt: string;
     invitedBy?: unknown;
   };
@@ -914,11 +917,15 @@ export const createInvitation = (
   email: string,
   monitorIds: string[] = [],
   token?: string,
+  role?: "admin" | "member",
 ): Promise<InvitationCreateResponse> =>
   request<InvitationCreateResponse>("/invitations", {
     method: "POST",
     token,
-    body: { name, email, monitorIds },
+    body:
+      role && role.trim() !== ""
+        ? { name, email, monitorIds, role: role === "admin" ? "admin" : "user" }
+        : { name, email, monitorIds },
   });
 
 export const deleteUser = (

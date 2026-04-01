@@ -18,7 +18,21 @@ const applyDevelopmentEnvDefaults = (): void => {
   const isProduction = (process.env.NODE_ENV ?? 'development') === 'production';
 
   if (!process.env.FRONTEND_URL || process.env.FRONTEND_URL.trim() === '') {
-    process.env.FRONTEND_URL = DEFAULT_DEVELOPMENT_FRONTEND_URL;
+    if (!isProduction) {
+      process.env.FRONTEND_URL = DEFAULT_DEVELOPMENT_FRONTEND_URL;
+    } else {
+      const fallbackFrontendUrl = resolveFirstConfiguredOrigin(process.env.CORS_ORIGIN);
+      if (fallbackFrontendUrl) {
+        process.env.FRONTEND_URL = fallbackFrontendUrl;
+        console.warn(
+          `FRONTEND_URL absent dans ${envPath}. Utilisation de CORS_ORIGIN pour les liens: ${fallbackFrontendUrl}`
+        );
+      } else {
+        console.warn(
+          `FRONTEND_URL absent dans ${envPath}. Pensez a configurer l'URL publique du frontend en production.`
+        );
+      }
+    }
   }
 
   if (!isProduction && (!process.env.JWT_SECRET || process.env.JWT_SECRET.trim() === '')) {
@@ -72,6 +86,33 @@ const parseAllowedOrigins = (rawValue?: string): string[] => {
     .filter(Boolean);
 };
 
+function resolveOrigin(rawValue?: string): string | null {
+  if (!rawValue || rawValue.trim() === '') {
+    return null;
+  }
+
+  try {
+    return new URL(rawValue.trim()).origin;
+  } catch {
+    return null;
+  }
+}
+
+function resolveFirstConfiguredOrigin(rawValue?: string): string | null {
+  if (!rawValue || rawValue.trim() === '') {
+    return null;
+  }
+
+  for (const candidate of rawValue.split(',')) {
+    const resolved = resolveOrigin(candidate);
+    if (resolved) {
+      return resolved;
+    }
+  }
+
+  return null;
+}
+
 const isSmtpConfigured = (): boolean => {
   const required = ['EMAIL_HOST', 'EMAIL_PORT', 'EMAIL_USER', 'EMAIL_PASSWORD', 'EMAIL_FROM'];
   return required.every((key) => {
@@ -121,7 +162,13 @@ const listenWithRetry = async (
 };
 
 // Middlewares
-const allowedOrigins = parseAllowedOrigins(process.env.CORS_ORIGIN);
+const configuredFrontendOrigin = resolveOrigin(process.env.FRONTEND_URL);
+const allowedOrigins = Array.from(
+  new Set([
+    ...parseAllowedOrigins(process.env.CORS_ORIGIN),
+    ...(configuredFrontendOrigin ? [configuredFrontendOrigin] : []),
+  ]),
+);
 const allowAnyLocalhostOrigin = !process.env.CORS_ORIGIN || process.env.CORS_ORIGIN.trim() === '';
 const isDevelopmentLike = (process.env.NODE_ENV ?? 'development') !== 'production';
 

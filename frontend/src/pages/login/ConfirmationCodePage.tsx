@@ -134,6 +134,8 @@ function ConfirmationCodePage({
               {digits.map((digit, index) => (
                 <input
                   key={index}
+                  id={`confirmation-code-${index + 1}`}
+                  name={`confirmation-code-${index + 1}`}
                   ref={(element) => {
                     inputRefs.current[index] = element;
                   }}
