@@ -32,6 +32,7 @@ import {
   createInvitation,
   createIntegration,
   createMonitor,
+  fetchMonitorLogs,
   logout,
   updateMonitor,
   deleteInvitation,
@@ -55,10 +56,18 @@ import {
   type CreateIntegrationInput,
   type CreateMonitorInput,
   type BackendMonitor,
+  type BackendMonitorLog,
   type AuthUser,
   type EditableUserRole,
   type UserRole,
 } from './lib/api';
+import {
+  HISTORY_BAR_COUNT,
+  MINUTES_PER_HISTORY_BAR,
+  buildMonitorHistoryBars,
+  parseUptimePercent,
+  type HistoryBarState as SharedHistoryBarState,
+} from './lib/monitorHistory';
 import { isAdminRole, isUserRole } from './lib/roles';
 import {
   ArrowUpDown,
@@ -81,7 +90,7 @@ import {
   X,
 } from 'lucide-react';
 
-type HistoryState = 'up' | 'warning' | 'down';
+type HistoryState = SharedHistoryBarState;
 type MenuLabel =
   | 'Monitoring'
   | 'Incidents'
@@ -285,16 +294,6 @@ const formatIntervalLabel = (minutes: number): string => {
   return `${minutes} min`;
 };
 
-const HISTORY_BAR_COUNT = 28;
-const HISTORY_WINDOW_MINUTES = 24 * 60;
-const MINUTES_PER_HISTORY_BAR = HISTORY_WINDOW_MINUTES / HISTORY_BAR_COUNT;
-
-const parseUptimePercent = (value: string): number => {
-  const parsed = Number(value.replace('%', ''));
-  if (!Number.isFinite(parsed)) return 0;
-  return Math.min(100, Math.max(0, parsed));
-};
-
 const formatHoursAndMinutes = (minutes: number): string => {
   if (!Number.isFinite(minutes) || minutes < 0) return '0h, 0m';
   const roundedMinutes = Math.round(minutes);
@@ -303,47 +302,7 @@ const formatHoursAndMinutes = (minutes: number): string => {
   return `${hours}h, ${mins}m`;
 };
 
-const buildHistoryFromUptime = (
-  uptime: number,
-  status: BackendMonitor['status']
-): HistoryState[] => {
-  if (status === 'down') {
-    return Array.from({ length: HISTORY_BAR_COUNT }, () => 'down');
-  }
-
-  if (status === 'paused' || status === 'pending') {
-    return Array.from({ length: HISTORY_BAR_COUNT }, () => 'warning');
-  }
-
-  const safeUptime = Number.isFinite(uptime) ? Math.min(100, Math.max(0, uptime)) : 0;
-  const downtime = 100 - safeUptime;
-
-  let downBars = Math.round((downtime / 100) * HISTORY_BAR_COUNT);
-  if (downtime > 0 && downBars === 0) {
-    downBars = 1;
-  }
-  downBars = Math.min(HISTORY_BAR_COUNT, downBars);
-
-  const history = Array.from({ length: HISTORY_BAR_COUNT }, () => 'up' as HistoryState);
-
-  if (downBars === 0) {
-    return history;
-  }
-
-  // Distribute down bars across the timeline while preserving the exact count.
-  let downPlaced = 0;
-  for (let index = 0; index < HISTORY_BAR_COUNT; index += 1) {
-    const expectedDownPlaced = Math.round(((index + 1) * downBars) / HISTORY_BAR_COUNT);
-    if (expectedDownPlaced > downPlaced) {
-      history[index] = 'down';
-      downPlaced += 1;
-    }
-  }
-
-  return history;
-};
-
-const mapBackendMonitorToRow = (monitor: BackendMonitor): MonitorRow => {
+const mapBackendMonitorToRow = (monitor: BackendMonitor, logsNewestFirst: BackendMonitorLog[] = []): MonitorRow => {
   const state: MonitorRow['state'] = monitor.status;
   const statusLabel =
     monitor.status === 'up'
@@ -376,7 +335,12 @@ const mapBackendMonitorToRow = (monitor: BackendMonitor): MonitorRow => {
     interval: formatIntervalLabel(monitor.interval),
     uptime: `${uptimeValue.toFixed(3)}%`,
     state,
-    history: buildHistoryFromUptime(uptimeValue, monitor.status),
+    history: buildMonitorHistoryBars({
+      uptime: uptimeValue,
+      status: monitor.status,
+      logsNewestFirst,
+      barCount: HISTORY_BAR_COUNT,
+    }),
     detailsEnabled: true,
   };
 };
@@ -768,7 +732,24 @@ function App() {
 
       try {
         const response = await fetchMonitors(token);
-        setMonitorRows(response.monitors.map(mapBackendMonitorToRow));
+        const logsResults = await Promise.allSettled(
+          response.monitors.map(async (monitor) => {
+            const logsResponse = await fetchMonitorLogs(monitor._id, token, { limit: HISTORY_BAR_COUNT });
+            return [monitor._id, logsResponse.logs] as const;
+          }),
+        );
+
+        const logsByMonitorId = new Map<string, BackendMonitorLog[]>();
+        logsResults.forEach((result) => {
+          if (result.status === 'fulfilled') {
+            const [monitorId, logs] = result.value;
+            logsByMonitorId.set(monitorId, logs);
+          }
+        });
+
+        setMonitorRows(
+          response.monitors.map((monitor) => mapBackendMonitorToRow(monitor, logsByMonitorId.get(monitor._id) ?? [])),
+        );
       } catch (error) {
         if (isApiError(error) && error.status === 401) {
           clearSessionAndRedirectToLogin();

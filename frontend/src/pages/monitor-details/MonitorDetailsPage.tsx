@@ -22,6 +22,12 @@ import {
   type BackendMaintenance,
   type BackendMonitorLog,
 } from '../../lib/api';
+import {
+  HISTORY_BAR_COUNT,
+  buildMonitorHistoryBars,
+  parseUptimePercent,
+  type HistoryBarState,
+} from '../../lib/monitorHistory';
 import './MonitorDetailsPage.css';
 
 interface MonitorDetails {
@@ -59,14 +65,12 @@ interface MonitorDetailsPageProps {
   isActionPending?: boolean;
 }
 
-type HistoryBarState = 'up' | 'down' | 'warning';
 type ResponseStats = {
   average: number | null;
   minimum: number | null;
   maximum: number | null;
 };
 
-const HISTORY_BAR_COUNT = 32;
 const RESPONSE_POINT_COUNT = 16;
 const RESPONSE_CHART_WIDTH = 620;
 const RESPONSE_CHART_HEIGHT = 120;
@@ -300,19 +304,14 @@ function MonitorDetailsPage({
   }, [monitorLogs]);
 
   const last24HistoryBars = useMemo<HistoryBarState[]>(() => {
-    const fallbackState: HistoryBarState =
-      monitor.state === 'down' ? 'down' : monitor.state === 'up' ? 'up' : 'warning';
-    const bars = Array.from({ length: HISTORY_BAR_COUNT }, () => fallbackState);
     const sourceLogs = logsLast24.length > 0 ? logsLast24 : monitorLogs;
-    const recentLogs = sourceLogs.slice(-HISTORY_BAR_COUNT);
-    const startIndex = HISTORY_BAR_COUNT - recentLogs.length;
-
-    recentLogs.forEach((log, index) => {
-      bars[startIndex + index] = log.status === 'down' ? 'down' : 'up';
+    return buildMonitorHistoryBars({
+      uptime: parseUptimePercent(monitor.uptime),
+      status: monitor.state,
+      logsNewestFirst: [...sourceLogs].reverse(),
+      barCount: HISTORY_BAR_COUNT,
     });
-
-    return bars;
-  }, [logsLast24, monitorLogs, monitor.state]);
+  }, [logsLast24, monitor.state, monitor.uptime, monitorLogs]);
 
   const last24Summary = useMemo(() => {
     if (logsLast24.length === 0) {
