@@ -113,7 +113,7 @@ interface AssistantChatbotProps {
   onOpenMonitorCreator?: (draft: MonitorDraft) => void;
 }
 
-const DEFAULT_MODEL = 'gemini-3-flash-preview';
+const DEFAULT_MODEL = 'gemini-2.5-flash';
 const DEFAULT_SYSTEM_PROMPT =
   "Tu es un assistant utile, clair et sympathique. Reponds en francais sauf si l'utilisateur demande une autre langue.";
 const EMOJI_OPTIONS = ['😀', '😄', '😊', '😉', '🤖', '✨', '✅', '📎', '🖼️', '🎤', '⚡', '💡'];
