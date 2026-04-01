@@ -3,6 +3,10 @@ import { RiRepeatLine } from 'react-icons/ri';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import './NewMonitorPage.css';
 
+type MonitorAuthType = 'none' | 'basic' | 'bearer';
+type MonitorIpVersion = 'IPv4 / IPv6 (IPv4 Priority)' | 'IPv6 / IPv4 (IPv6 Priority)' | 'IPv4 only' | 'IPv6 only';
+type MonitorUpStatusCodeGroup = '2xx' | '3xx';
+
 interface NewMonitorPageProps {
   onBack: () => void;
   onCreateMonitor?: (payload: {
@@ -14,18 +18,47 @@ interface NewMonitorPageProps {
     httpMethod: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'HEAD';
     domainExpiryMode?: 'enabled' | 'disabled';
     sslExpiryMode?: 'enabled' | 'disabled';
+    body?: string;
+    headers?: Record<string, string>;
   }) => Promise<string | null>;
   initialName?: string;
   initialUrl?: string;
   initialProtocol?: 'http' | 'https' | 'ws' | 'wss';
+  initialIntervalSeconds?: number;
+  initialTimeoutSeconds?: number;
+  initialHttpMethod?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'HEAD';
+  initialDomainExpiryMode?: 'enabled' | 'disabled';
+  initialSslExpiryMode?: 'enabled' | 'disabled';
+  initialSslCheckMode?: 'enabled' | 'disabled';
+  initialTagsText?: string;
+  initialSlowResponseAlert?: boolean;
+  initialSlowResponseThresholdMs?: number;
+  initialIpVersion?: MonitorIpVersion;
+  initialFollowRedirections?: boolean;
+  initialAuthType?: MonitorAuthType;
+  initialAuthUsername?: string;
+  initialAuthPassword?: string;
+  initialRequestBody?: string;
+  initialSendAsJson?: boolean;
+  initialHeaderKey?: string;
+  initialHeaderValue?: string;
+  initialUpStatusCodeGroups?: MonitorUpStatusCodeGroup[];
 }
 
 const intervalOptions = ['30s', '1m', '5m', '30m', '1h', '12h', '12h', '24h'];
 const timeoutOptions = ['1s', '15s', '30s', '45s', '60s'];
 const httpMethods = ['HEAD', 'GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'];
-const ipVersionOptions = ['IPv4 / IPv6 (IPv4 Priority)', 'IPv6 / IPv4 (IPv6 Priority)', 'IPv4 only', 'IPv6 only'];
+const ipVersionOptions: MonitorIpVersion[] = [
+  'IPv4 / IPv6 (IPv4 Priority)',
+  'IPv6 / IPv4 (IPv6 Priority)',
+  'IPv4 only',
+  'IPv6 only',
+];
+const DEFAULT_REQUEST_BODY_TEMPLATE = '{ "key": "value" }';
+const DEFAULT_UP_STATUS_CODE_GROUPS: MonitorUpStatusCodeGroup[] = ['2xx', '3xx'];
 
 type MonitorProtocol = 'http' | 'https' | 'ws' | 'wss';
+type MonitorExpiryMode = 'enabled' | 'disabled';
 type NewMonitorSideSection = 'details' | 'integrations' | 'maintenance';
 
 interface ProtocolOption {
@@ -89,10 +122,49 @@ const parseIntervalToMinutes = (label: string): number => {
   return numericValue;
 };
 
+const parseIntervalToSeconds = (label: string): number => {
+  const numericValue = Number.parseInt(label, 10);
+  if (!Number.isFinite(numericValue) || numericValue <= 0) return 5 * 60;
+
+  if (label.endsWith('s')) {
+    return numericValue;
+  }
+
+  if (label.endsWith('h')) {
+    return numericValue * 60 * 60;
+  }
+
+  return numericValue * 60;
+};
+
 const parseTimeoutToSeconds = (label: string): number => {
   const numericValue = Number.parseInt(label, 10);
   if (!Number.isFinite(numericValue) || numericValue <= 0) return 30;
   return numericValue;
+};
+
+const findClosestOptionIndex = (
+  options: string[],
+  targetValue: number | undefined,
+  parser: (label: string) => number,
+  fallbackIndex: number,
+): number => {
+  if (!Number.isFinite(targetValue)) {
+    return fallbackIndex;
+  }
+
+  let bestIndex = fallbackIndex;
+  let bestDistance = Number.POSITIVE_INFINITY;
+
+  for (const [index, option] of options.entries()) {
+    const distance = Math.abs(parser(option) - Number(targetValue));
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      bestIndex = index;
+    }
+  }
+
+  return bestIndex;
 };
 
 const mapHttpMethod = (method: string): 'GET' | 'POST' | 'PUT' | 'DELETE' | 'HEAD' => {
@@ -103,37 +175,140 @@ const mapHttpMethod = (method: string): 'GET' | 'POST' | 'PUT' | 'DELETE' | 'HEA
   return 'HEAD';
 };
 
+const normalizeIpVersionOption = (value?: string): MonitorIpVersion =>
+  ipVersionOptions.find((option) => option === value) ?? ipVersionOptions[0];
+
+const hasInitialAdvancedPrefill = (input: {
+  timeoutSeconds?: number;
+  slowResponseAlert?: boolean;
+  slowResponseThresholdMs?: number;
+  ipVersion?: MonitorIpVersion;
+  followRedirections?: boolean;
+  httpMethod?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'HEAD';
+  authType?: MonitorAuthType;
+  authUsername?: string;
+  authPassword?: string;
+  requestBody?: string;
+  sendAsJson?: boolean;
+  headerKey?: string;
+  headerValue?: string;
+  upStatusCodeGroups?: MonitorUpStatusCodeGroup[];
+}): boolean =>
+  Boolean(
+    input.timeoutSeconds !== undefined ||
+      input.slowResponseAlert ||
+      input.slowResponseThresholdMs !== undefined ||
+      (input.ipVersion && input.ipVersion !== ipVersionOptions[0]) ||
+      input.followRedirections === false ||
+      (input.httpMethod && input.httpMethod !== 'HEAD') ||
+      (input.authType && input.authType !== 'none') ||
+      input.authUsername ||
+      input.authPassword ||
+      input.requestBody ||
+      input.sendAsJson ||
+      input.headerKey ||
+      input.headerValue ||
+      (input.upStatusCodeGroups &&
+        (input.upStatusCodeGroups.length !== DEFAULT_UP_STATUS_CODE_GROUPS.length ||
+          input.upStatusCodeGroups.some((group, index) => group !== DEFAULT_UP_STATUS_CODE_GROUPS[index]))),
+  );
+
+const encodeBase64 = (value: string): string => {
+  if (typeof window !== 'undefined' && typeof window.btoa === 'function') {
+    return window.btoa(value);
+  }
+
+  return btoa(value);
+};
+
 function NewMonitorPage({
   onBack,
   onCreateMonitor,
   initialName,
   initialUrl,
   initialProtocol,
+  initialIntervalSeconds,
+  initialTimeoutSeconds,
+  initialHttpMethod,
+  initialDomainExpiryMode,
+  initialSslExpiryMode,
+  initialSslCheckMode,
+  initialTagsText,
+  initialSlowResponseAlert,
+  initialSlowResponseThresholdMs,
+  initialIpVersion,
+  initialFollowRedirections,
+  initialAuthType,
+  initialAuthUsername,
+  initialAuthPassword,
+  initialRequestBody,
+  initialSendAsJson,
+  initialHeaderKey,
+  initialHeaderValue,
+  initialUpStatusCodeGroups,
 }: NewMonitorPageProps) {
   const initialMonitorUrl = initialUrl ?? protocolPrefixes[initialProtocol ?? 'https'];
-  const [selectedIntervalIndex, setSelectedIntervalIndex] = useState(2);
-  const [selectedTimeoutIndex, setSelectedTimeoutIndex] = useState(2);
+  const [selectedIntervalIndex, setSelectedIntervalIndex] = useState(() =>
+    findClosestOptionIndex(intervalOptions, initialIntervalSeconds, parseIntervalToSeconds, 2),
+  );
+  const [selectedTimeoutIndex, setSelectedTimeoutIndex] = useState(() =>
+    findClosestOptionIndex(timeoutOptions, initialTimeoutSeconds, parseTimeoutToSeconds, 2),
+  );
   const [selectedProtocol, setSelectedProtocol] = useState<MonitorProtocol>(initialProtocol ?? 'https');
   const [monitorName, setMonitorName] = useState(initialName ?? '');
   const [monitorUrl, setMonitorUrl] = useState(initialMonitorUrl);
   const [isProtocolMenuOpen, setIsProtocolMenuOpen] = useState(false);
-  const [isSslDomainOpen, setIsSslDomainOpen] = useState(false);
-  const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
-  const [sslCheckMode, setSslCheckMode] = useState('disabled');
-  const [sslExpiryMode, setSslExpiryMode] = useState('disabled');
-  const [domainExpiryMode, setDomainExpiryMode] = useState('disabled');
-  const [slowResponseAlert, setSlowResponseAlert] = useState(false);
-  const [slowResponseThreshold, setSlowResponseThreshold] = useState('1000');
-  const [selectedIpVersion, setSelectedIpVersion] = useState(ipVersionOptions[0]);
-  const [followRedirections, setFollowRedirections] = useState(true);
-  const [selectedHttpMethod, setSelectedHttpMethod] = useState('HEAD');
-  const [sendAsJson, setSendAsJson] = useState(false);
-  const [authType, setAuthType] = useState('none');
-  const [authUsername, setAuthUsername] = useState('');
-  const [authPassword, setAuthPassword] = useState('');
-  const [requestBody, setRequestBody] = useState('{ "key": "value" }');
-  const [headerKey, setHeaderKey] = useState('');
-  const [headerValue, setHeaderValue] = useState('');
+  const [isSslDomainOpen, setIsSslDomainOpen] = useState(
+    () =>
+      initialSslCheckMode === 'enabled' ||
+      initialSslExpiryMode === 'enabled' ||
+      initialDomainExpiryMode === 'enabled',
+  );
+  const [isAdvancedOpen, setIsAdvancedOpen] = useState(() =>
+    hasInitialAdvancedPrefill({
+      timeoutSeconds: initialTimeoutSeconds,
+      slowResponseAlert: initialSlowResponseAlert,
+      slowResponseThresholdMs: initialSlowResponseThresholdMs,
+      ipVersion: initialIpVersion,
+      followRedirections: initialFollowRedirections,
+      httpMethod: initialHttpMethod,
+      authType: initialAuthType,
+      authUsername: initialAuthUsername,
+      authPassword: initialAuthPassword,
+      requestBody: initialRequestBody,
+      sendAsJson: initialSendAsJson,
+      headerKey: initialHeaderKey,
+      headerValue: initialHeaderValue,
+      upStatusCodeGroups: initialUpStatusCodeGroups,
+    }),
+  );
+  const [sslCheckMode, setSslCheckMode] = useState<MonitorExpiryMode>(initialSslCheckMode ?? 'disabled');
+  const [sslExpiryMode, setSslExpiryMode] = useState<MonitorExpiryMode>(initialSslExpiryMode ?? 'disabled');
+  const [domainExpiryMode, setDomainExpiryMode] = useState<MonitorExpiryMode>(initialDomainExpiryMode ?? 'disabled');
+  const [slowResponseAlert, setSlowResponseAlert] = useState(
+    Boolean(initialSlowResponseAlert ?? (initialSlowResponseThresholdMs !== undefined)),
+  );
+  const [slowResponseThreshold, setSlowResponseThreshold] = useState(
+    initialSlowResponseThresholdMs !== undefined ? String(initialSlowResponseThresholdMs) : '1000',
+  );
+  const [selectedIpVersion, setSelectedIpVersion] = useState<MonitorIpVersion>(() =>
+    normalizeIpVersionOption(initialIpVersion),
+  );
+  const [followRedirections, setFollowRedirections] = useState(initialFollowRedirections ?? true);
+  const [selectedHttpMethod, setSelectedHttpMethod] = useState<string>(initialHttpMethod ?? 'HEAD');
+  const [sendAsJson, setSendAsJson] = useState(initialSendAsJson ?? false);
+  const [authType, setAuthType] = useState<MonitorAuthType>(initialAuthType ?? 'none');
+  const [authUsername, setAuthUsername] = useState(initialAuthUsername ?? '');
+  const [authPassword, setAuthPassword] = useState(initialAuthPassword ?? '');
+  const [requestBody, setRequestBody] = useState(initialRequestBody ?? DEFAULT_REQUEST_BODY_TEMPLATE);
+  const [headerKey, setHeaderKey] = useState(initialHeaderKey ?? '');
+  const [headerValue, setHeaderValue] = useState(initialHeaderValue ?? '');
+  const [selectedUpStatusCodeGroups, setSelectedUpStatusCodeGroups] = useState<MonitorUpStatusCodeGroup[]>(
+    initialUpStatusCodeGroups && initialUpStatusCodeGroups.length > 0
+      ? initialUpStatusCodeGroups
+      : DEFAULT_UP_STATUS_CODE_GROUPS,
+  );
+  const [tagsText, setTagsText] = useState(initialTagsText ?? '');
   const [createError, setCreateError] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [activeSideSection, setActiveSideSection] = useState<NewMonitorSideSection>('details');
@@ -160,6 +335,12 @@ function NewMonitorPage({
 
   const toggleProtocolMenu = () => {
     setIsProtocolMenuOpen((prev) => !prev);
+  };
+
+  const toggleUpStatusCodeGroup = (group: MonitorUpStatusCodeGroup) => {
+    setSelectedUpStatusCodeGroups((current) =>
+      current.includes(group) ? current.filter((candidate) => candidate !== group) : [...current, group],
+    );
   };
 
   const updateUrlForProtocol = (nextProtocol: MonitorProtocol) => {
@@ -204,6 +385,37 @@ function NewMonitorPage({
 
     const selectedInterval = intervalOptions[selectedIntervalIndex] ?? intervalOptions[2];
     const selectedTimeout = timeoutOptions[selectedTimeoutIndex] ?? timeoutOptions[2];
+    const httpMethod = mapHttpMethod(selectedHttpMethod);
+    const resolvedHeaders: Record<string, string> = {};
+    const cleanedHeaderKey = headerKey.trim();
+    const cleanedHeaderValue = headerValue.trim();
+    const cleanedUsername = authUsername.trim();
+    const cleanedPassword = authPassword.trim();
+    const cleanedRequestBody = requestBody.trim();
+
+    if (cleanedHeaderKey !== '') {
+      resolvedHeaders[cleanedHeaderKey] = cleanedHeaderValue;
+    }
+
+    if (sendAsJson && !Object.keys(resolvedHeaders).some((key) => key.toLowerCase() === 'content-type')) {
+      resolvedHeaders['Content-Type'] = 'application/json';
+    }
+
+    if (authType === 'basic' && (cleanedUsername !== '' || cleanedPassword !== '')) {
+      resolvedHeaders.Authorization = `Basic ${encodeBase64(`${cleanedUsername}:${cleanedPassword}`)}`;
+    }
+
+    if (authType === 'bearer') {
+      const token = cleanedPassword !== '' ? cleanedPassword : cleanedUsername;
+      if (token !== '') {
+        resolvedHeaders.Authorization = `Bearer ${token}`;
+      }
+    }
+
+    const shouldSendBody =
+      (httpMethod === 'POST' || httpMethod === 'PUT') &&
+      cleanedRequestBody !== '' &&
+      (cleanedRequestBody !== DEFAULT_REQUEST_BODY_TEMPLATE || initialRequestBody !== undefined);
 
     const error = await onCreateMonitor({
       name: monitorName.trim(),
@@ -211,9 +423,11 @@ function NewMonitorPage({
       type: selectedProtocol,
       interval: parseIntervalToMinutes(selectedInterval),
       timeout: parseTimeoutToSeconds(selectedTimeout),
-      httpMethod: mapHttpMethod(selectedHttpMethod),
+      httpMethod,
       domainExpiryMode: domainExpiryMode === 'enabled' ? 'enabled' : 'disabled',
       sslExpiryMode: sslExpiryMode === 'enabled' ? 'enabled' : 'disabled',
+      body: shouldSendBody ? requestBody : undefined,
+      headers: Object.keys(resolvedHeaders).length > 0 ? resolvedHeaders : undefined,
     });
 
     if (error) {
@@ -491,7 +705,7 @@ function NewMonitorPage({
                         id="ssl-check-mode"
                         className="ssl-select"
                         value={sslCheckMode}
-                        onChange={(event) => setSslCheckMode(event.target.value)}
+                        onChange={(event) => setSslCheckMode(event.target.value === 'enabled' ? 'enabled' : 'disabled')}
                       >
                         <option value="disabled">Disabled</option>
                         <option value="enabled">Enabled</option>
@@ -509,7 +723,7 @@ function NewMonitorPage({
                         id="ssl-expiry-mode"
                         className="ssl-select"
                         value={sslExpiryMode}
-                        onChange={(event) => setSslExpiryMode(event.target.value)}
+                        onChange={(event) => setSslExpiryMode(event.target.value === 'enabled' ? 'enabled' : 'disabled')}
                       >
                         <option value="disabled">Disabled</option>
                         <option value="enabled">Enabled</option>
@@ -527,7 +741,9 @@ function NewMonitorPage({
                         id="domain-expiry-mode"
                         className="ssl-select"
                         value={domainExpiryMode}
-                        onChange={(event) => setDomainExpiryMode(event.target.value)}
+                        onChange={(event) =>
+                          setDomainExpiryMode(event.target.value === 'enabled' ? 'enabled' : 'disabled')
+                        }
                       >
                         <option value="disabled">Disabled</option>
                         <option value="enabled">Enabled</option>
@@ -617,7 +833,7 @@ function NewMonitorPage({
                     <select
                       className="advanced-select"
                       value={selectedIpVersion}
-                      onChange={(event) => setSelectedIpVersion(event.target.value)}
+                      onChange={(event) => setSelectedIpVersion(normalizeIpVersionOption(event.target.value))}
                     >
                       {ipVersionOptions.map((ipVersion) => (
                         <option key={ipVersion} value={ipVersion}>
@@ -655,11 +871,21 @@ function NewMonitorPage({
                     We will create incident when we receive HTTP status code other than defined below.
                   </p>
                   <div className="advanced-status-codes-box">
-                    <button type="button" className="status-code-chip success">
+                    <button
+                      type="button"
+                      className={`status-code-chip success ${selectedUpStatusCodeGroups.includes('2xx') ? 'is-selected' : 'is-unselected'}`}
+                      aria-pressed={selectedUpStatusCodeGroups.includes('2xx')}
+                      onClick={() => toggleUpStatusCodeGroup('2xx')}
+                    >
                       <span>2xx</span>
                       <X size={12} />
                     </button>
-                    <button type="button" className="status-code-chip info">
+                    <button
+                      type="button"
+                      className={`status-code-chip info ${selectedUpStatusCodeGroups.includes('3xx') ? 'is-selected' : 'is-unselected'}`}
+                      aria-pressed={selectedUpStatusCodeGroups.includes('3xx')}
+                      onClick={() => toggleUpStatusCodeGroup('3xx')}
+                    >
                       <span>3xx</span>
                       <X size={12} />
                     </button>
@@ -678,7 +904,15 @@ function NewMonitorPage({
                       <select
                         className="advanced-select"
                         value={authType}
-                        onChange={(event) => setAuthType(event.target.value)}
+                        onChange={(event) =>
+                          setAuthType(
+                            event.target.value === 'basic'
+                              ? 'basic'
+                              : event.target.value === 'bearer'
+                                ? 'bearer'
+                                : 'none',
+                          )
+                        }
                       >
                         <option value="none">None</option>
                         <option value="basic">Basic</option>
@@ -791,7 +1025,14 @@ function NewMonitorPage({
                 Optional. We use this to group monitors, so you are able to easily manage them in bulk or organize on
                 status pages.
               </p>
-              <input id="new-monitor-tags" className="new-monitor-input" type="text" placeholder="Add tag ..." />
+              <input
+                id="new-monitor-tags"
+                className="new-monitor-input"
+                type="text"
+                placeholder="Add tag ..."
+                value={tagsText}
+                onChange={(event) => setTagsText(event.target.value)}
+              />
             </div>
           </section>
 

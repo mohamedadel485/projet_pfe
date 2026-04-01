@@ -159,6 +159,25 @@ type MonitorDraft = {
   name: string;
   protocol: 'http' | 'https' | 'ws' | 'wss';
   url: string;
+  intervalSeconds?: number;
+  timeoutSeconds?: number;
+  httpMethod?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'HEAD';
+  domainExpiryMode?: 'enabled' | 'disabled';
+  sslExpiryMode?: 'enabled' | 'disabled';
+  sslCheckMode?: 'enabled' | 'disabled';
+  tagsText?: string;
+  slowResponseAlert?: boolean;
+  slowResponseThresholdMs?: number;
+  ipVersion?: 'IPv4 / IPv6 (IPv4 Priority)' | 'IPv6 / IPv4 (IPv6 Priority)' | 'IPv4 only' | 'IPv6 only';
+  followRedirections?: boolean;
+  authType?: 'none' | 'basic' | 'bearer';
+  authUsername?: string;
+  authPassword?: string;
+  requestBody?: string;
+  sendAsJson?: boolean;
+  headerKey?: string;
+  headerValue?: string;
+  upStatusCodeGroups?: Array<'2xx' | '3xx'>;
 };
 type MonitorFilterStatus = 'none' | 'up' | 'down' | 'paused';
 type MonitorSortOption = 'down-first' | 'up-first' | 'paused-first' | 'a-z' | 'newest-first';
@@ -974,6 +993,8 @@ function App() {
       httpMethod: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'HEAD';
       domainExpiryMode?: 'enabled' | 'disabled';
       sslExpiryMode?: 'enabled' | 'disabled';
+      body?: string;
+      headers?: Record<string, string>;
     }) => {
       if (!authToken) {
         return 'Authentification requise.';
@@ -1960,11 +1981,7 @@ function App() {
         />
       ) : isCreatingMonitor ? (
         <NewMonitorPage
-          key={
-            newMonitorDraft
-              ? `prefill-${newMonitorDraft.protocol}-${newMonitorDraft.url}-${newMonitorDraft.name}`
-              : 'prefill-default'
-          }
+          key={newMonitorDraft ? `prefill-${JSON.stringify(newMonitorDraft)}` : 'prefill-default'}
           onBack={() => {
             navigateTo('/monitoring');
           }}
@@ -1972,6 +1989,25 @@ function App() {
           initialName={newMonitorDraft?.name}
           initialUrl={newMonitorDraft?.url}
           initialProtocol={newMonitorDraft?.protocol}
+          initialIntervalSeconds={newMonitorDraft?.intervalSeconds}
+          initialTimeoutSeconds={newMonitorDraft?.timeoutSeconds}
+          initialHttpMethod={newMonitorDraft?.httpMethod}
+          initialDomainExpiryMode={newMonitorDraft?.domainExpiryMode}
+          initialSslExpiryMode={newMonitorDraft?.sslExpiryMode}
+          initialSslCheckMode={newMonitorDraft?.sslCheckMode}
+          initialTagsText={newMonitorDraft?.tagsText}
+          initialSlowResponseAlert={newMonitorDraft?.slowResponseAlert}
+          initialSlowResponseThresholdMs={newMonitorDraft?.slowResponseThresholdMs}
+          initialIpVersion={newMonitorDraft?.ipVersion}
+          initialFollowRedirections={newMonitorDraft?.followRedirections}
+          initialAuthType={newMonitorDraft?.authType}
+          initialAuthUsername={newMonitorDraft?.authUsername}
+          initialAuthPassword={newMonitorDraft?.authPassword}
+          initialRequestBody={newMonitorDraft?.requestBody}
+          initialSendAsJson={newMonitorDraft?.sendAsJson}
+          initialHeaderKey={newMonitorDraft?.headerKey}
+          initialHeaderValue={newMonitorDraft?.headerValue}
+          initialUpStatusCodeGroups={newMonitorDraft?.upStatusCodeGroups}
         />
       ) : isIncidentsPage ? (
         <div className="panel-main">

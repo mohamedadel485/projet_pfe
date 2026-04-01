@@ -11,14 +11,6 @@ const LOCAL_DIRECT_BACKEND_FALLBACKS = Array.from(
   new Set(
     [
       BACKEND_PROXY_TARGET,
-      "http://localhost:3001",
-      "http://127.0.0.1:3001",
-      "http://localhost:3002",
-      "http://127.0.0.1:3002",
-      "http://localhost:3003",
-      "http://127.0.0.1:3003",
-      "http://localhost:3004",
-      "http://127.0.0.1:3004",
     ].filter((target) => target.trim() !== ""),
   ),
 );
@@ -187,6 +179,8 @@ export interface CreateMonitorInput {
   httpMethod?: "GET" | "POST" | "PUT" | "DELETE" | "HEAD";
   domainExpiryMode?: "enabled" | "disabled";
   sslExpiryMode?: "enabled" | "disabled";
+  body?: string;
+  headers?: Record<string, string>;
 }
 
 export interface UpdateMonitorInput {
@@ -198,6 +192,8 @@ export interface UpdateMonitorInput {
   httpMethod?: "GET" | "POST" | "PUT" | "DELETE" | "HEAD";
   domainExpiryMode?: "enabled" | "disabled";
   sslExpiryMode?: "enabled" | "disabled";
+  body?: string;
+  headers?: Record<string, string>;
 }
 
 export interface CreateIntegrationInput {
@@ -379,15 +375,16 @@ const normalizeList = <T>(payload: unknown, key: string): T[] => {
 };
 
 const buildEndpoint = (path: string): string => {
-  const sanitizedBase = API_BASE_URL.replace(/\/+$/, "");
+  let sanitizedBase = API_BASE_URL.replace(/\/+$/, "");
+  sanitizedBase = !sanitizedBase.startsWith("/") ? sanitizedBase : sanitizedBase.slice(1);
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
-  return `${sanitizedBase}${normalizedPath}`;
+  return `${BACKEND_PROXY_TARGET}${sanitizedBase}${normalizedPath}`;
 };
 
 const buildDirectBackendEndpoint = (target: string, path: string): string => {
   const sanitizedTarget = target.replace(/\/+$/, "");
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
-  const apiPath = normalizedPath.startsWith("/api/")
+  const apiPath = normalizedPath.startsWith("api/")
     ? normalizedPath
     : `/api${normalizedPath}`;
   return `${sanitizedTarget}${apiPath}`;

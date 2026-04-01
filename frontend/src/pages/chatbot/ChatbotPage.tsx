@@ -1,5 +1,6 @@
 import { Bot, LoaderCircle, RefreshCcw, Send, Sparkles, Trash2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import { fetchChatResponse } from '../../lib/chatApi';
 import { fetchBackendHealth, type BackendHealthResponse } from '../../lib/api';
 import './ChatbotPage.css';
 
@@ -33,8 +34,6 @@ const DEFAULT_MODEL = 'gemini-3-flash-preview';
 const DEFAULT_SYSTEM_PROMPT =
   "Tu es un assistant utile, clair et sympathique. Reponds en francais sauf si l'utilisateur demande une autre langue.";
 
-const CHAT_API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim() || '/api';
-
 const STORAGE_KEYS = {
   settings: 'uptimewarden-chatbot-settings',
   messages: 'uptimewarden-chatbot-messages',
@@ -48,12 +47,6 @@ const QUICK_PROMPTS = [
 
 const createMessageId = (prefix: string): string =>
   `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
-
-const buildChatEndpoint = (path: string): string => {
-  const base = CHAT_API_BASE_URL.replace(/\/+$/, '');
-  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
-  return `${base}${normalizedPath}`;
-};
 
 const readErrorMessage = async (response: Response): Promise<string> => {
   const rawBody = (await response.text()).trim();
@@ -334,7 +327,7 @@ function ChatbotPage({ userName }: ChatbotPageProps) {
     abortControllerRef.current = controller;
 
     try {
-      const response = await fetch(buildChatEndpoint('/chat'), {
+      const response = await fetchChatResponse('/chat', {
         method: 'POST',
         cache: 'no-store',
         credentials: 'include',

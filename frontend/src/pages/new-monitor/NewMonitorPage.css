@@ -913,6 +913,15 @@
   color: #476ea8;
 }
 
+.status-code-chip.is-unselected {
+  background: #edf3fc;
+  color: #7b8cab;
+}
+
+.status-code-chip.is-unselected svg {
+  opacity: 0.5;
+}
+
 .status-code-chip svg {
   width: 14px;
   height: 14px;
