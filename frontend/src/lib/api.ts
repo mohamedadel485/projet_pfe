@@ -11,6 +11,14 @@ const LOCAL_DIRECT_BACKEND_FALLBACKS = Array.from(
   new Set(
     [
       BACKEND_PROXY_TARGET,
+      //"http://localhost:3001",
+      //"http://127.0.0.1:3001",
+      //"http://localhost:3002",
+      //"http://127.0.0.1:3002",
+      //"http://localhost:3003",
+      //"http://127.0.0.1:3003",
+      //"http://localhost:3004",
+      //"http://127.0.0.1:3004",
     ].filter((target) => target.trim() !== ""),
   ),
 );
