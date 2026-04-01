@@ -247,7 +247,7 @@ app.get('/api/health', (_req: Request, res: Response) => {
     ok: true,
     status: 'OK',
     apiKeyConfigured: Boolean(getGeminiApiKey()),
-    model: process.env.GEMINI_MODEL?.trim() || 'gemini-3-flash-preview',
+    model: process.env.GEMINI_MODEL?.trim() || 'gemini-2.5-flash',
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
   });
