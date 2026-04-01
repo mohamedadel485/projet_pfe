@@ -10,12 +10,24 @@ const BACKEND_PROXY_TARGET = rawBackendProxyTarget || 'http://localhost:3001';
 const DEFAULT_REQUEST_TIMEOUT_MS = 15000;
 
 const isHttpUrl = (value: string): boolean => /^https?:\/\//i.test(value);
+const LOCALHOST_HOSTNAME_PATTERN = /^(localhost|127(?:\.\d{1,3}){3})$/i;
+const PRIVATE_NETWORK_HOSTNAME_PATTERN =
+  /^(10(?:\.\d{1,3}){3}|192\.168(?:\.\d{1,3}){2}|172\.(?:1[6-9]|2\d|3[0-1])(?:\.\d{1,3}){2})$/i;
 const ensureLeadingSlash = (value: string): string => (value.startsWith('/') ? value : `/${value}`);
 const ensureApiPath = (path: string): string => {
   const normalizedPath = ensureLeadingSlash(path);
   return normalizedPath.startsWith('/api/') || normalizedPath === '/api'
     ? normalizedPath
     : `/api${normalizedPath}`;
+};
+
+const isLocalBrowserContext = (): boolean => {
+  if (typeof window === 'undefined') {
+    return true;
+  }
+
+  const hostname = window.location.hostname.trim().toLowerCase();
+  return LOCALHOST_HOSTNAME_PATTERN.test(hostname) || PRIVATE_NETWORK_HOSTNAME_PATTERN.test(hostname);
 };
 
 const buildEndpointFromBase = (base: string, path: string): string => {
@@ -90,15 +102,16 @@ const buildDirectBackendEndpoint = (target: string, path: string): string => bui
 
 const buildRequestCandidates = (path: string): string[] => {
   const candidates = [buildConfiguredEndpoint(path)];
+  const includeLocalhostFallbacks = isLocalBrowserContext();
+  const extraFallbackTargets = includeLocalhostFallbacks
+    ? ['http://localhost:3001', 'http://127.0.0.1:3001', 'http://localhost:3002', 'http://127.0.0.1:3002']
+    : [];
 
   const directTargets = Array.from(
     new Set(
       [
         BACKEND_PROXY_TARGET,
-        'http://localhost:3001',
-        'http://127.0.0.1:3001',
-        'http://localhost:3002',
-        'http://127.0.0.1:3002',
+        ...extraFallbackTargets,
       ].filter((target) => target.trim() !== ''),
     ),
   );
@@ -123,6 +136,7 @@ export const fetchChatResponse = async (
 ): Promise<Response> => {
   const candidates = buildRequestCandidates(path);
   let lastError: unknown = null;
+  let lastRetryableResponse: Response | null = null;
 
   for (let index = 0; index < candidates.length; index += 1) {
     const endpoint = candidates[index];
@@ -135,6 +149,7 @@ export const fetchChatResponse = async (
 
       const hasAnotherCandidate = index < candidates.length - 1;
       if (hasAnotherCandidate && shouldRetryWithNextCandidate(response)) {
+        lastRetryableResponse = response;
         continue;
       }
 
@@ -145,6 +160,10 @@ export const fetchChatResponse = async (
         break;
       }
     }
+  }
+
+  if (lastRetryableResponse) {
+    return lastRetryableResponse;
   }
 
   if (lastError instanceof DOMException && lastError.name === 'AbortError') {
