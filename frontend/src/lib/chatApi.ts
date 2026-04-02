@@ -10,6 +10,56 @@ const BACKEND_PROXY_TARGET = rawBackendProxyTarget || 'http://localhost:3001';
 const DEFAULT_REQUEST_TIMEOUT_MS = 15000;
 
 const isHttpUrl = (value: string): boolean => /^https?:\/\//i.test(value);
+const LOCALHOST_HOSTNAME_PATTERN = /^(localhost|127(?:\.\d{1,3}){3})$/i;
+const PRIVATE_NETWORK_HOSTNAME_PATTERN =
+  /^(10(?:\.\d{1,3}){3}|192\.168(?:\.\d{1,3}){2}|172\.(?:1[6-9]|2\d|3[0-1])(?:\.\d{1,3}){2})$/i;
+const ensureLeadingSlash = (value: string): string => (value.startsWith('/') ? value : `/${value}`);
+const ensureApiPath = (path: string): string => {
+  const normalizedPath = ensureLeadingSlash(path);
+  return normalizedPath.startsWith('/api/') || normalizedPath === '/api'
+    ? normalizedPath
+    : `/api${normalizedPath}`;
+};
+
+const isLocalBrowserContext = (): boolean => {
+  if (typeof window === 'undefined') {
+    return true;
+  }
+
+  const hostname = window.location.hostname.trim().toLowerCase();
+  return LOCALHOST_HOSTNAME_PATTERN.test(hostname) || PRIVATE_NETWORK_HOSTNAME_PATTERN.test(hostname);
+};
+
+const buildEndpointFromBase = (base: string, path: string): string => {
+  const trimmedBase = base.trim().replace(/\/+$/, '');
+  const normalizedPath = ensureLeadingSlash(path);
+
+  if (trimmedBase === '') {
+    return ensureApiPath(normalizedPath);
+  }
+
+  if (isHttpUrl(trimmedBase)) {
+    try {
+      const resolvedUrl = new URL(trimmedBase);
+      const currentPathname = resolvedUrl.pathname.replace(/\/+$/, '');
+      const nextPathname =
+        currentPathname === '/api' || currentPathname.endsWith('/api')
+          ? `${currentPathname}${normalizedPath}`
+          : `${currentPathname}${ensureApiPath(normalizedPath)}`;
+      resolvedUrl.pathname = nextPathname;
+      return resolvedUrl.toString();
+    } catch {
+      return `${trimmedBase}${ensureApiPath(normalizedPath)}`;
+    }
+  }
+
+  const normalizedBase = ensureLeadingSlash(trimmedBase);
+  if (normalizedBase === '/api' || normalizedBase.endsWith('/api')) {
+    return `${normalizedBase}${normalizedPath}`;
+  }
+
+  return `${normalizedBase}${ensureApiPath(normalizedPath)}`;
+};
 
 const fetchWithTimeout = async (
   input: RequestInfo | URL,
@@ -47,36 +97,21 @@ const fetchWithTimeout = async (
   }
 };
 
-const buildRelativeEndpoint = (path: string): string => {
-  const base = CHAT_API_BASE_URL.replace(/\/+$/, '');
-  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
-  return `${base}${normalizedPath}`;
-};
-
-const buildDirectBackendEndpoint = (target: string, path: string): string => {
-  const sanitizedTarget = target.replace(/\/+$/, '');
-  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
-  const apiPath = normalizedPath.startsWith('/api/') || normalizedPath === '/api'
-    ? normalizedPath
-    : `/api${normalizedPath}`;
-  return `${sanitizedTarget}${apiPath}`;
-};
+const buildConfiguredEndpoint = (path: string): string => buildEndpointFromBase(CHAT_API_BASE_URL, path);
+const buildDirectBackendEndpoint = (target: string, path: string): string => buildEndpointFromBase(target, path);
 
 const buildRequestCandidates = (path: string): string[] => {
-  const candidates = [buildRelativeEndpoint(path)];
-
-  if (isHttpUrl(CHAT_API_BASE_URL)) {
-    return candidates;
-  }
+  const candidates = [buildConfiguredEndpoint(path)];
+  const includeLocalhostFallbacks = isLocalBrowserContext();
+  const extraFallbackTargets = includeLocalhostFallbacks
+    ? ['http://localhost:3001', 'http://127.0.0.1:3001', 'http://localhost:3002', 'http://127.0.0.1:3002']
+    : [];
 
   const directTargets = Array.from(
     new Set(
       [
         BACKEND_PROXY_TARGET,
-        'http://localhost:3001',
-        'http://127.0.0.1:3001',
-        'http://localhost:3002',
-        'http://127.0.0.1:3002',
+        ...extraFallbackTargets,
       ].filter((target) => target.trim() !== ''),
     ),
   );
@@ -101,6 +136,7 @@ export const fetchChatResponse = async (
 ): Promise<Response> => {
   const candidates = buildRequestCandidates(path);
   let lastError: unknown = null;
+  let lastRetryableResponse: Response | null = null;
 
   for (let index = 0; index < candidates.length; index += 1) {
     const endpoint = candidates[index];
@@ -113,6 +149,7 @@ export const fetchChatResponse = async (
 
       const hasAnotherCandidate = index < candidates.length - 1;
       if (hasAnotherCandidate && shouldRetryWithNextCandidate(response)) {
+        lastRetryableResponse = response;
         continue;
       }
 
@@ -125,7 +162,21 @@ export const fetchChatResponse = async (
     }
   }
 
+  if (lastRetryableResponse) {
+    return lastRetryableResponse;
+  }
+
+  if (lastError instanceof DOMException && lastError.name === 'AbortError') {
+    throw new Error("Le chatbot ne repond pas a temps. Verifie l'URL backend ou le proxy en production.");
+  }
+
   if (lastError instanceof Error) {
+    if (/failed to fetch/i.test(lastError.message)) {
+      throw new Error(
+        "Impossible de joindre le service d'assistant. Verifie VITE_API_BASE_URL, l'URL backend, le proxy nginx et CORS en production.",
+      );
+    }
+
     throw lastError;
   }
 

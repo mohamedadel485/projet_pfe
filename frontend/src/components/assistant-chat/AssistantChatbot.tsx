@@ -113,7 +113,7 @@ interface AssistantChatbotProps {
   onOpenMonitorCreator?: (draft: MonitorDraft) => void;
 }
 
-const DEFAULT_MODEL = 'gemini-3-flash-preview';
+const DEFAULT_MODEL = 'gemini-2.5-flash';
 const DEFAULT_SYSTEM_PROMPT =
   "Tu es un assistant utile, clair et sympathique. Reponds en francais sauf si l'utilisateur demande une autre langue.";
 const EMOJI_OPTIONS = ['😀', '😄', '😊', '😉', '🤖', '✨', '✅', '📎', '🖼️', '🎤', '⚡', '💡'];
@@ -128,6 +128,10 @@ const readErrorMessage = async (response: Response): Promise<string> => {
   }
 
   const contentType = response.headers.get('content-type') ?? '';
+  if (contentType.includes('text/html') || /^<!doctype html>|^<html[\s>]/i.test(rawBody)) {
+    return `Le chatbot a recu une page HTML (${response.status}) au lieu de l'API. Verifie le proxy nginx ou VITE_API_BASE_URL en production.`;
+  }
+
   if (contentType.includes('application/json')) {
     try {
       const payload = JSON.parse(rawBody) as Record<string, unknown>;

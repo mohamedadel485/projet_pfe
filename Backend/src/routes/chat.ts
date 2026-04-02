@@ -3,7 +3,7 @@ import { Router, type Request, type Response } from 'express';
 
 const router = Router();
 
-const DEFAULT_MODEL = process.env.GEMINI_MODEL?.trim() || 'gemini-3-flash-preview';
+const DEFAULT_MODEL = process.env.GEMINI_MODEL?.trim() || 'gemini-2.5-flash';
 const DEFAULT_SYSTEM_INSTRUCTION =
   "Tu es un assistant conversationnel utile, clair et sympathique. Reponds en francais sauf si l'utilisateur demande une autre langue.";
 
