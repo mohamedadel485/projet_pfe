@@ -995,29 +995,43 @@ export class MonitorService {
 
       console.log(`Vérification de ${monitors.length} monitors...`);
 
-      for (const monitor of monitors) {
-        try {
-          const result = await this.checkMonitor(monitor);
-          await this.logCheckResult(monitor, result);
+      const concurrency = 5;
+      let currentIndex = 0;
+
+      const runNext = async (): Promise<void> => {
+        while (true) {
+          const monitor = monitors[currentIndex];
+          currentIndex += 1;
+          if (!monitor) {
+            return;
+          }
+
           try {
-            await this.refreshSecurityChecks(monitor);
+            const result = await this.checkMonitor(monitor);
+            await this.logCheckResult(monitor, result);
+            try {
+              await this.refreshSecurityChecks(monitor);
+            } catch (error) {
+              console.warn(
+                `Erreur verification SSL/WHOIS pour ${monitor.name}:`,
+                error,
+              );
+            }
+
+            console.log(
+              `Monitor "${monitor.name}" - Status: ${result.status}, Response: ${result.responseTime}ms`,
+            );
           } catch (error) {
-            console.warn(
-              `Erreur verification SSL/WHOIS pour ${monitor.name}:`,
+            console.error(
+              `Erreur lors de la vérification du monitor ${monitor.name}:`,
               error,
             );
           }
-
-          console.log(
-            `Monitor "${monitor.name}" - Status: ${result.status}, Response: ${result.responseTime}ms`,
-          );
-        } catch (error) {
-          console.error(
-            `Erreur lors de la vérification du monitor ${monitor.name}:`,
-            error,
-          );
         }
-      }
+      };
+
+      const workerCount = Math.max(1, Math.min(concurrency, monitors.length));
+      await Promise.all(Array.from({ length: workerCount }, () => runNext()));
     } catch (error) {
       console.error("Erreur lors de la vérification des monitors:", error);
     }

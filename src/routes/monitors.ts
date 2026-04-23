@@ -122,6 +122,15 @@ router.post(
       const monitor = new Monitor(monitorData);
       await monitor.save();
 
+      // Execute a first check immediately so new monitors do not stay pending
+      // while waiting for the next scheduler cycle.
+      try {
+        const firstResult = await monitorService.checkMonitor(monitor);
+        await monitorService.logCheckResult(monitor, firstResult);
+      } catch (error) {
+        console.warn("Erreur verification immediate (creation monitor):", error);
+      }
+
       if (
         monitor.domainExpiryMode === "enabled" ||
         monitor.sslExpiryMode === "enabled"
@@ -472,6 +481,14 @@ router.post(
       monitor.status = "pending";
       monitor.pausedByMaintenance = false;
       await monitor.save();
+
+      // Trigger an immediate check on resume to refresh status right away.
+      try {
+        const resumeResult = await monitorService.checkMonitor(monitor);
+        await monitorService.logCheckResult(monitor, resumeResult);
+      } catch (error) {
+        console.warn("Erreur verification immediate (resume monitor):", error);
+      }
 
       res.json({
         message: "Monitor repris",
