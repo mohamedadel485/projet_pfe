@@ -184,7 +184,7 @@ router.post(
 
       const user = await User.findOne({ email });
       if (!user) {
-        res.status(401).json({ error: "Email ou mot de passe incorrect" });
+        res.status(401).json({ error: "Email introuvable" });
         return;
       }
 
@@ -198,7 +198,7 @@ router.post(
 
       const isMatch = await user.comparePassword(password);
       if (!isMatch) {
-        res.status(401).json({ error: "Email ou mot de passe incorrect" });
+        res.status(401).json({ error: "Mot de passe incorrect" });
         return;
       }
 
@@ -807,11 +807,9 @@ router.get(
     try {
       // Vérifier que l'utilisateur est super admin
       if (req.user!.role !== "super_admin") {
-        res
-          .status(403)
-          .json({
-            error: "Accès refusé. Seul le super admin peut voir les demandes.",
-          });
+        res.status(403).json({
+          error: "Accès refusé. Seul le super admin peut voir les demandes.",
+        });
         return;
       }
 
@@ -866,12 +864,10 @@ router.post(
 
       // Vérifier que l'utilisateur est super admin
       if (req.user!.role !== "super_admin") {
-        res
-          .status(403)
-          .json({
-            error:
-              "Accès refusé. Seul le super admin peut approuver les demandes.",
-          });
+        res.status(403).json({
+          error:
+            "Accès refusé. Seul le super admin peut approuver les demandes.",
+        });
         return;
       }
 
@@ -1009,12 +1005,9 @@ router.post(
 
       // Vérifier que l'utilisateur est super admin
       if (req.user!.role !== "super_admin") {
-        res
-          .status(403)
-          .json({
-            error:
-              "Accès refusé. Seul le super admin peut rejeter les demandes.",
-          });
+        res.status(403).json({
+          error: "Accès refusé. Seul le super admin peut rejeter les demandes.",
+        });
         return;
       }
 
@@ -1067,12 +1060,10 @@ router.delete(
 
       // Vérifier que l'utilisateur est super admin
       if (req.user!.role !== "super_admin") {
-        res
-          .status(403)
-          .json({
-            error:
-              "Accès refusé. Seul le super admin peut supprimer les demandes.",
-          });
+        res.status(403).json({
+          error:
+            "Accès refusé. Seul le super admin peut supprimer les demandes.",
+        });
         return;
       }
 
