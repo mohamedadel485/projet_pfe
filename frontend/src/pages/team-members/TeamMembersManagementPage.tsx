@@ -86,6 +86,7 @@ function TeamMembersManagementPage({
   const [editingIsActive, setEditingIsActive] = useState(true);
   const [editError, setEditError] = useState<string | null>(null);
   const [editSaving, setEditSaving] = useState(false);
+  const [editingImmutableContact, setEditingImmutableContact] = useState(false);
   const pendingRequests = accountRequests.filter((r) => r.status === "pending");
   const showInlineAccountRequests = false;
   const isCurrentUserSuperAdmin = currentUserRole === "super_admin";
@@ -129,6 +130,14 @@ function TeamMembersManagementPage({
     );
     setEditingIsActive(user.isActive);
     setEditError(null);
+    const normalizedRole = String(user.role ?? "").toLowerCase();
+    const isTargetSuperAdmin =
+      normalizedRole === "super" ||
+      normalizedRole === "superadmin" ||
+      normalizedRole === "super_admin" ||
+      user.name?.toLowerCase().includes("super_admin");
+    const isTargetAdmin = normalizedRole === "admin";
+    setEditingImmutableContact(isTargetSuperAdmin || isTargetAdmin);
   };
 
   const closeEditUserModal = () => {
@@ -281,6 +290,20 @@ function TeamMembersManagementPage({
                         >
                           <MoreVertical size={16} />
                         </button>
+                        <button
+                          type="button"
+                          className="btn-icon btn-icon-delete"
+                          onClick={() => {
+                            // confirmation before delete
+                            // eslint-disable-next-line no-restricted-globals
+                            if (window.confirm("Supprimer cet utilisateur ?")) {
+                              onDeleteUser(user.id);
+                            }
+                          }}
+                          title="Supprimer l'utilisateur"
+                        >
+                          <Trash2 size={14} />
+                        </button>
                       </div>
                     )}
                   </span>
@@ -309,31 +332,37 @@ function TeamMembersManagementPage({
             </div>
 
             <div className="modal-body">
-              <div className="form-section">
-                <label className="form-label" htmlFor="team-user-name">
-                  Nom
-                </label>
-                <input
-                  id="team-user-name"
-                  className="form-input"
-                  type="text"
-                  value={editingName}
-                  onChange={(event) => setEditingName(event.target.value)}
-                />
-              </div>
+              {!editingImmutableContact ? (
+                <>
+                  <div className="form-section">
+                    <label className="form-label" htmlFor="team-user-name">
+                      Nom
+                    </label>
+                    <input
+                      id="team-user-name"
+                      className="form-input"
+                      type="text"
+                      value={editingName}
+                      onChange={(event) => setEditingName(event.target.value)}
+                    />
+                  </div>
 
-              <div className="form-section">
-                <label className="form-label" htmlFor="team-user-email">
-                  Email
-                </label>
-                <input
-                  id="team-user-email"
-                  className="form-input"
-                  type="email"
-                  value={editingEmail}
-                  onChange={(event) => setEditingEmail(event.target.value)}
-                />
-              </div>
+                  <div className="form-section">
+                    <label className="form-label" htmlFor="team-user-email">
+                      Email
+                    </label>
+                    <input
+                      id="team-user-email"
+                      className="form-input"
+                      type="email"
+                      value={editingEmail}
+                      onChange={(event) => setEditingEmail(event.target.value)}
+                    />
+                  </div>
+                </>
+              ) : (
+                <p className="form-note">Le nom et l'email ne peuvent pas être modifiés pour les administrateurs.</p>
+              )}
 
               <div className="form-section">
                 <label className="form-label">Rôle</label>
@@ -384,20 +413,7 @@ function TeamMembersManagementPage({
                 >
                   Annuler
                 </button>
-                <button
-                  type="button"
-                  className="btn-delete-sm"
-                  onClick={() => {
-                    if (editingUserId) {
-                      onDeleteUser(editingUserId);
-                      closeEditUserModal();
-                    }
-                  }}
-                  disabled={editSaving}
-                >
-                  <Trash2 size={14} />
-                  Supprimer
-                </button>
+                
                 <button
                   type="button"
                   className="btn-primary"

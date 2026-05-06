@@ -1430,6 +1430,29 @@
   cursor: not-allowed;
 }
 
+/* Small red icon button for inline delete near the action menu */
+.btn-icon-delete {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: #fff0f1;
+  color: #c4303b;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+.btn-icon-delete:hover {
+  background: #ffe6e9;
+  color: #a3222a;
+}
+.btn-icon-delete:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* Requests Section */
 .requests-section {
   scroll-margin-top: 24px;
