@@ -1,0 +1,471 @@
+import { Router, Response } from "express";
+import { body, validationResult } from "express-validator";
+import crypto from "crypto";
+import User from "../models/User";
+import Invitation, { type InvitationRole } from "../models/Invitation";
+import Monitor from "../models/Monitor";
+import emailService from "../services/emailService";
+import { authenticate, isAdmin, AuthRequest } from "../middleware/auth";
+
+const router = Router();
+
+const parseBooleanEnv = (rawValue: string | undefined): boolean | null => {
+  if (rawValue === undefined) return null;
+  const normalized = rawValue.trim().toLowerCase();
+  if (normalized === "true") return true;
+  if (normalized === "false") return false;
+  return null;
+};
+
+const allowInvitationWithoutEmailFallback = (): boolean => {
+  const explicit = parseBooleanEnv(process.env.INVITATION_ALLOW_WITHOUT_EMAIL);
+  if (explicit !== null) return explicit;
+  return process.env.NODE_ENV !== "production";
+};
+
+const normalizeInvitationRole = (value: unknown): InvitationRole => {
+  if (typeof value !== "string") {
+    return "user";
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "admin") {
+    return "admin";
+  }
+
+  return "user";
+};
+
+/**
+ * POST /api/invitations
+ * Créer une invitation (admin uniquement)
+ */
+router.post(
+  "/",
+  authenticate,
+  isAdmin,
+  [
+    body("name").notEmpty().withMessage("Le nom est requis").trim(),
+    body("email").isEmail().normalizeEmail(),
+    body("monitorIds")
+      .optional()
+      .isArray()
+      .withMessage("monitorIds doit etre une liste"),
+    body("monitorIds.*")
+      .optional()
+      .isMongoId()
+      .withMessage("Un monitorId est invalide"),
+    body("role")
+      .optional()
+      .isIn(["admin", "member", "user"])
+      .withMessage("Le role doit etre admin, member ou user"),
+  ],
+  async (req: AuthRequest, res: Response): Promise<void> => {
+    let createdInvitationId: string | null = null;
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        res.status(400).json({ errors: errors.array() });
+        return;
+      }
+
+      const { name, email, monitorIds } = req.body as {
+        name: string;
+        email: string;
+        monitorIds?: string[];
+      };
+      const role = normalizeInvitationRole(req.body.role);
+
+      if (role === "admin" && req.user!.role !== "super_admin") {
+        res.status(403).json({
+          error:
+            "Acces refuse. Seul le super administrateur peut inviter un administrateur.",
+        });
+        return;
+      }
+
+      const uniqueMonitorIds = Array.isArray(monitorIds)
+        ? Array.from(
+            new Set(
+              monitorIds
+                .map((monitorId) => String(monitorId).trim())
+                .filter(Boolean),
+            ),
+          )
+        : [];
+
+      if (uniqueMonitorIds.length > 0) {
+        const allowedMonitorCount = await Monitor.countDocuments({
+          _id: { $in: uniqueMonitorIds },
+          owner: req.user!._id,
+        });
+
+        if (allowedMonitorCount !== uniqueMonitorIds.length) {
+          res
+            .status(400)
+            .json({
+              error: "Un ou plusieurs monitors selectionnes sont invalides",
+            });
+          return;
+        }
+      }
+
+      // Vérifier si l'utilisateur existe déjà
+      const existingUser = await User.findOne({ email });
+      if (existingUser) {
+        res
+          .status(400)
+          .json({ error: "Un utilisateur avec cet email existe déjà" });
+        return;
+      }
+
+      // Vérifier si une invitation est déjà en attente
+      const existingInvitation = await Invitation.findOne({
+        email,
+        status: "pending",
+        expiresAt: { $gt: new Date() },
+      });
+
+      if (existingInvitation) {
+        res
+          .status(400)
+          .json({ error: "Une invitation est déjà en attente pour cet email" });
+        return;
+      }
+
+      // Générer un token unique
+      const token = crypto.randomBytes(32).toString("hex");
+
+      // Créer l'invitation
+      const invitation = new Invitation({
+        name: name.trim(),
+        email,
+        token,
+        invitedBy: req.user!._id,
+        monitorIds: uniqueMonitorIds,
+        role,
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 jours
+      });
+
+      await invitation.save();
+      createdInvitationId = String(invitation._id);
+
+      // Envoyer l'email d'invitation.
+      // En cas d'echec SMTP, l'invitation reste creee et on renvoie un succes avec avertissement.
+      try {
+        await emailService.sendInvitation(email, token, req.user!.name);
+      } catch (mailError) {
+        console.error("Envoi email invitation échoué:", mailError);
+        const canFallbackToManualLink = allowInvitationWithoutEmailFallback();
+
+        if (!canFallbackToManualLink) {
+          if (createdInvitationId) {
+            await Invitation.findByIdAndDelete(createdInvitationId);
+            createdInvitationId = null;
+          }
+
+          res.status(502).json({
+            error:
+              "L'invitation n'a pas pu etre envoyee par email. Verifiez la configuration SMTP ou utilisez un autre compte d'envoi.",
+            details:
+              process.env.NODE_ENV === "development"
+                ? "SMTP a refuse le message. Aucune invitation n a ete conservee."
+                : undefined,
+          });
+          return;
+        }
+
+        res.status(201).json({
+          message: "Invitation créée avec succès (email non envoye).",
+          delivery: "manual-link",
+          warning:
+            "SMTP indisponible: l'invitation a ete creee sans envoi d'email.",
+          invitationUrl: emailService.getInvitationLink(token),
+          invitation: {
+            id: invitation._id,
+            name: invitation.name,
+            email: invitation.email,
+            monitorIds: invitation.monitorIds ?? [],
+            role: invitation.role ?? "user",
+            status: invitation.status,
+            expiresAt: invitation.expiresAt,
+            createdAt: invitation.createdAt,
+          },
+        });
+        return;
+      }
+
+      res.status(201).json({
+        delivery: "smtp",
+        message: "Invitation envoyée avec succès",
+        invitationUrl: emailService.getInvitationLink(token),
+        invitation: {
+          id: invitation._id,
+          name: invitation.name,
+          email: invitation.email,
+          monitorIds: invitation.monitorIds ?? [],
+          role: invitation.role ?? "user",
+          status: invitation.status,
+          expiresAt: invitation.expiresAt,
+          createdAt: invitation.createdAt,
+        },
+      });
+    } catch (error: any) {
+      if (createdInvitationId) {
+        try {
+          await Invitation.findByIdAndDelete(createdInvitationId);
+        } catch (cleanupError) {
+          console.error(
+            "Erreur nettoyage invitation après exception:",
+            cleanupError,
+          );
+        }
+      }
+      console.error("Erreur création invitation:", error);
+      res.status(500).json({
+        error: "Erreur lors de la création de l'invitation",
+        details:
+          process.env.NODE_ENV === "development" ? error?.message : undefined,
+      });
+    }
+  },
+);
+
+/**
+ * GET /api/invitations
+ * Lister toutes les invitations (admin uniquement)
+ */
+router.get(
+  "/",
+  authenticate,
+  isAdmin,
+  async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+      const { status } = req.query;
+
+      // Nettoyage défensif immédiat: supprime les invitations expirées
+      // avant d'envoyer la liste, même si le cron n'est pas encore passé.
+      await Invitation.deleteMany({
+        status: { $in: ["pending", "expired"] },
+        expiresAt: { $lte: new Date() },
+      });
+
+      const query: any = {};
+      if (status) {
+        query.status = status;
+      }
+
+      const invitations = await Invitation.find(query)
+        .populate("invitedBy", "name email")
+        .sort({ createdAt: -1 });
+
+      res.json({ invitations });
+    } catch (error: any) {
+      console.error("Erreur récupération invitations:", error);
+      res
+        .status(500)
+        .json({ error: "Erreur lors de la récupération des invitations" });
+    }
+  },
+);
+
+/**
+ * GET /api/invitations/:token
+ * Vérifier une invitation par token
+ */
+router.get(
+  "/:token",
+  async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+      const { token } = req.params;
+
+      const invitation = await Invitation.findOne({
+        token,
+        status: "pending",
+      }).populate("invitedBy", "name");
+
+      if (!invitation) {
+        res.status(404).json({ error: "Invitation non trouvée" });
+        return;
+      }
+
+      if (invitation.expiresAt < new Date()) {
+        res.status(400).json({ error: "Cette invitation a expiré" });
+        return;
+      }
+
+      res.json({
+        invitation: {
+          name: invitation.name,
+          email: invitation.email,
+          monitorIds: invitation.monitorIds ?? [],
+          role: invitation.role ?? "user",
+          invitedBy: invitation.invitedBy,
+          expiresAt: invitation.expiresAt,
+        },
+      });
+    } catch (error: any) {
+      console.error("Erreur vérification invitation:", error);
+      res
+        .status(500)
+        .json({ error: "Erreur lors de la vérification de l'invitation" });
+    }
+  },
+);
+
+/**
+ * DELETE /api/invitations/:id
+ * Supprimer une invitation (admin uniquement)
+ */
+router.delete(
+  "/:id",
+  authenticate,
+  isAdmin,
+  async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+      const { id } = req.params;
+
+      const invitation = await Invitation.findById(id);
+      if (!invitation) {
+        res.status(404).json({ error: "Invitation non trouvée" });
+        return;
+      }
+
+      if (invitation.role === "admin" && req.user!.role !== "super_admin") {
+        res.status(403).json({
+          error:
+            "Acces refuse. Seul le super administrateur peut supprimer une invitation administrateur.",
+        });
+        return;
+      }
+
+      await invitation.deleteOne();
+
+      res.json({ message: "Invitation supprimée avec succès" });
+    } catch (error: any) {
+      console.error("Erreur suppression invitation:", error);
+      res
+        .status(500)
+        .json({ error: "Erreur lors de la suppression de l'invitation" });
+    }
+  },
+);
+
+/**
+ * POST /api/invitations/:id/resend
+ * Renvoyer une invitation (admin uniquement)
+ */
+router.post(
+  "/:id/resend",
+  authenticate,
+  isAdmin,
+  async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+      const { id } = req.params;
+
+      if (!/^[a-fA-F0-9]{24}$/.test(id)) {
+        res.status(400).json({ error: "ID invitation invalide" });
+        return;
+      }
+
+      const invitation = await Invitation.findById(id);
+      if (!invitation) {
+        res.status(404).json({ error: "Invitation non trouvée" });
+        return;
+      }
+
+      if (invitation.role === "admin" && req.user!.role !== "super_admin") {
+        res.status(403).json({
+          error:
+            "Acces refuse. Seul le super administrateur peut renvoyer une invitation administrateur.",
+        });
+        return;
+      }
+
+      if (invitation.status === "accepted") {
+        res.status(400).json({ error: "Cette invitation a déjà été acceptée" });
+        return;
+      }
+
+      // Générer un nouveau token et prolonger l'expiration
+      const previousToken = invitation.token;
+      const previousExpiry = invitation.expiresAt;
+      const previousStatus = invitation.status;
+      invitation.token = crypto.randomBytes(32).toString("hex");
+      invitation.expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+      invitation.status = "pending";
+      await invitation.save();
+
+      // Renvoyer l'email.
+      // En cas d'echec SMTP, on conserve l'invitation mise a jour et on renvoie un succes avec avertissement.
+      try {
+        await emailService.sendInvitation(
+          invitation.email,
+          invitation.token,
+          req.user!.name,
+        );
+      } catch (mailError) {
+        console.error("Renvoi email invitation échoué:", mailError);
+        const canFallbackToManualLink = allowInvitationWithoutEmailFallback();
+
+        if (!canFallbackToManualLink) {
+          invitation.token = previousToken;
+          invitation.expiresAt = previousExpiry;
+          invitation.status = previousStatus;
+          await invitation.save();
+
+          res.status(502).json({
+            error: "Le renvoi de l'invitation a echoue (email non envoye).",
+            details:
+              process.env.NODE_ENV === "development"
+                ? "SMTP a refuse le message. L'ancienne invitation a ete restauree."
+                : undefined,
+          });
+          return;
+        }
+
+        res.status(200).json({
+          message: "Invitation renvoyée avec succès (email non envoye).",
+          delivery: "manual-link",
+          warning:
+            "SMTP indisponible: l'invitation a ete renvoyee sans envoi d'email.",
+          invitationUrl: emailService.getInvitationLink(invitation.token),
+          invitation: {
+            id: invitation._id,
+            name: invitation.name,
+            email: invitation.email,
+            monitorIds: invitation.monitorIds ?? [],
+            role: invitation.role ?? "user",
+            status: invitation.status,
+            expiresAt: invitation.expiresAt,
+          },
+        });
+        return;
+      }
+
+      res.json({
+        delivery: "smtp",
+        message: "Invitation renvoyée avec succès",
+        invitationUrl: emailService.getInvitationLink(invitation.token),
+        invitation: {
+          id: invitation._id,
+          name: invitation.name,
+          email: invitation.email,
+          monitorIds: invitation.monitorIds ?? [],
+          role: invitation.role ?? "user",
+          status: invitation.status,
+          expiresAt: invitation.expiresAt,
+        },
+      });
+    } catch (error: any) {
+      console.error("Erreur renvoi invitation:", error);
+      res.status(500).json({
+        error: "Erreur lors du renvoi de l'invitation",
+        details:
+          process.env.NODE_ENV === "development" ? error?.message : undefined,
+      });
+    }
+  },
+);
+
+export default router;

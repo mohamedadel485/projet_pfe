@@ -1,0 +1,437 @@
+import express, { Application, NextFunction, Request, Response } from "express";
+import dotenv from "dotenv";
+import cors from "cors";
+import { Server } from "http";
+import path from "path";
+import fs from "fs";
+import { connectDB } from "./config/database";
+import {
+  startCleanupScheduler,
+  startMonitorScheduler,
+} from "./config/scheduler";
+
+// Load environment variables before importing routes/services that may read them.
+const envPath = path.resolve(__dirname, "..", ".env");
+// Keep test-injected values intact so Jest can point the app at a dedicated DB.
+dotenv.config({
+  path: envPath,
+  override: (process.env.NODE_ENV ?? "development") !== "test",
+});
+
+const DEFAULT_DEVELOPMENT_FRONTEND_URL = "http://localhost:5173";
+const DEFAULT_DEVELOPMENT_JWT_SECRET = "uptimewarden-local-dev-secret";
+
+const applyDevelopmentEnvDefaults = (): void => {
+  const isProduction = (process.env.NODE_ENV ?? "development") === "production";
+
+  if (!process.env.FRONTEND_URL || process.env.FRONTEND_URL.trim() === "") {
+    if (!isProduction) {
+      process.env.FRONTEND_URL = DEFAULT_DEVELOPMENT_FRONTEND_URL;
+    } else {
+      const fallbackFrontendUrl = resolveFirstConfiguredOrigin(
+        process.env.CORS_ORIGIN,
+      );
+      if (fallbackFrontendUrl) {
+        process.env.FRONTEND_URL = fallbackFrontendUrl;
+        console.warn(
+          `FRONTEND_URL absent dans ${envPath}. Utilisation de CORS_ORIGIN pour les liens: ${fallbackFrontendUrl}`,
+        );
+      } else {
+        console.warn(
+          `FRONTEND_URL absent dans ${envPath}. Pensez a configurer l'URL publique du frontend en production.`,
+        );
+      }
+    }
+  }
+
+  if (
+    !isProduction &&
+    (!process.env.JWT_SECRET || process.env.JWT_SECRET.trim() === "")
+  ) {
+    process.env.JWT_SECRET = DEFAULT_DEVELOPMENT_JWT_SECRET;
+    console.warn(
+      `JWT_SECRET absent dans ${envPath}. Valeur de developpement temporaire utilisee.`,
+    );
+  }
+};
+
+applyDevelopmentEnvDefaults();
+
+import authRoutes from "./routes/auth";
+import userRoutes from "./routes/users";
+import monitorRoutes from "./routes/monitors";
+import invitationRoutes from "./routes/invitations";
+import incidentRoutes from "./routes/incidents";
+import maintenanceRoutes from "./routes/maintenances";
+import integrationRoutes from "./routes/integrations";
+import statusPageRoutes from "./routes/statusPages";
+import chatRoutes from "./routes/chat";
+
+const app: Application = express();
+app.set("etag", false);
+const DEFAULT_PORT = 3001;
+const MAX_PORT_RETRIES = 10;
+const DEFAULT_ALLOWED_ORIGINS = [
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
+];
+const LOCALHOST_ORIGIN_PATTERN =
+  /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i;
+const PRIVATE_NETWORK_ORIGIN_PATTERN =
+  /^https?:\/\/(?:10(?:\.\d{1,3}){3}|192\.168(?:\.\d{1,3}){2}|172\.(?:1[6-9]|2\d|3[0-1])(?:\.\d{1,3}){2})(:\d+)?$/i;
+
+const parsePort = (rawPort: string): number => {
+  const parsed = Number(rawPort);
+  if (!Number.isInteger(parsed) || parsed < 1 || parsed > 65535) {
+    throw new Error(`PORT invalide: ${rawPort}`);
+  }
+  return parsed;
+};
+
+const parseAllowedOrigins = (rawValue?: string): string[] => {
+  if (!rawValue || rawValue.trim() === "") {
+    return DEFAULT_ALLOWED_ORIGINS;
+  }
+
+  if (rawValue.trim() === "*") {
+    return ["*"];
+  }
+
+  return rawValue
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+};
+
+function resolveOrigin(rawValue?: string): string | null {
+  if (!rawValue || rawValue.trim() === "") {
+    return null;
+  }
+
+  try {
+    return new URL(rawValue.trim()).origin;
+  } catch {
+    return null;
+  }
+}
+
+function resolveFirstConfiguredOrigin(rawValue?: string): string | null {
+  if (!rawValue || rawValue.trim() === "") {
+    return null;
+  }
+
+  for (const candidate of rawValue.split(",")) {
+    const resolved = resolveOrigin(candidate);
+    if (resolved) {
+      return resolved;
+    }
+  }
+
+  return null;
+}
+
+const isSmtpConfigured = (): boolean => {
+  const required = [
+    "EMAIL_HOST",
+    "EMAIL_PORT",
+    "EMAIL_USER",
+    "EMAIL_PASSWORD",
+    "EMAIL_FROM",
+  ];
+  return required.every((key) => {
+    const value = String(process.env[key] ?? "").trim();
+    if (value === "") return false;
+    if (
+      key === "EMAIL_PASSWORD" &&
+      value === "REPLACE_WITH_GOOGLE_APP_PASSWORD"
+    )
+      return false;
+    return true;
+  });
+};
+
+const getGeminiApiKey = (): string =>
+  process.env.GEMINI_API_KEY?.trim() ||
+  process.env.GOOGLE_API_KEY?.trim() ||
+  process.env.API_KEY?.trim() ||
+  "";
+
+const listenWithRetry = async (
+  expressApp: Application,
+  port: number,
+  retriesLeft: number,
+  canRetry: boolean,
+): Promise<{ server: Server; port: number }> => {
+  try {
+    const server = await new Promise<Server>((resolve, reject) => {
+      const instance = expressApp.listen(port);
+
+      instance.once("listening", () => {
+        resolve(instance);
+      });
+
+      instance.once("error", (error: NodeJS.ErrnoException) => {
+        instance.removeAllListeners("listening");
+        reject(error);
+      });
+    });
+
+    return { server, port };
+  } catch (error) {
+    const err = error as NodeJS.ErrnoException;
+    if (canRetry && err.code === "EADDRINUSE" && retriesLeft > 0) {
+      const nextPort = port + 1;
+      console.warn(
+        `Port ${port} occupe. Nouvelle tentative sur ${nextPort}...`,
+      );
+      return listenWithRetry(expressApp, nextPort, retriesLeft - 1, canRetry);
+    }
+    throw err;
+  }
+};
+
+// Middlewares
+const configuredFrontendOrigin = resolveOrigin(process.env.FRONTEND_URL);
+const allowedOrigins = Array.from(
+  new Set([
+    ...parseAllowedOrigins(process.env.CORS_ORIGIN),
+    ...(configuredFrontendOrigin ? [configuredFrontendOrigin] : []),
+  ]),
+);
+
+// Normalize allowed origins to canonical origin strings when possible.
+const normalizedAllowedOrigins = Array.from(
+  new Set(
+    allowedOrigins.map((o) => resolveOrigin(o) || o.trim()).filter(Boolean),
+  ),
+);
+const allowAnyLocalhostOrigin =
+  !process.env.CORS_ORIGIN || process.env.CORS_ORIGIN.trim() === "";
+const isDevelopmentLike =
+  (process.env.NODE_ENV ?? "development") !== "production";
+
+console.log("CORS configuration:", {
+  allowedOrigins,
+  configuredFrontendOrigin,
+  allowAnyLocalhostOrigin,
+  isDevelopmentLike,
+});
+
+app.use((req: Request, _res: Response, next: NextFunction) => {
+  const originHeader =
+    (req.headers.origin as string) || (req.headers.referer as string) || "none";
+  console.log(
+    `${new Date().toISOString()} - PRE-CORS ${req.method} ${req.path} - origin: ${originHeader}`,
+  );
+  next();
+});
+app.use(
+  cors({
+    credentials: true,
+    origin: (origin, callback) => {
+      try {
+        const incoming = origin ? resolveOrigin(origin) || origin : "";
+
+        const allowed =
+          !origin ||
+          normalizedAllowedOrigins.includes("*") ||
+          normalizedAllowedOrigins.includes(incoming) ||
+          normalizedAllowedOrigins.includes(origin) ||
+          ((allowAnyLocalhostOrigin || isDevelopmentLike) &&
+            (origin ? LOCALHOST_ORIGIN_PATTERN.test(origin) : false)) ||
+          (isDevelopmentLike && origin
+            ? PRIVATE_NETWORK_ORIGIN_PATTERN.test(origin)
+            : false);
+
+        if (allowed) {
+          callback(null, true);
+          return;
+        }
+
+        console.warn(
+          `CORS rejected origin: '${origin}' (normalized: '${incoming}')`,
+        );
+        callback(new Error(`CORS refuse pour l'origine: ${origin}`));
+      } catch (e) {
+        console.error("Erreur lors de la verification CORS:", e);
+        callback(new Error("CORS verification error"));
+      }
+    },
+  }),
+);
+app.use((req: Request, res: Response, next: NextFunction) => {
+  res.setHeader(
+    "Cache-Control",
+    "no-store, no-cache, must-revalidate, proxy-revalidate",
+  );
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
+  res.setHeader("Surrogate-Control", "no-store");
+  next();
+});
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// Serve uploaded files (avatars, etc.) from /uploads
+const uploadsDir = path.resolve(__dirname, "..", "uploads");
+if (!fs.existsSync(uploadsDir)) {
+  try {
+    fs.mkdirSync(uploadsDir, { recursive: true });
+  } catch {}
+}
+app.use("/uploads", express.static(uploadsDir));
+
+app.use((req: Request, _res: Response, next: NextFunction) => {
+  const origin =
+    (req.headers.origin as string) || (req.headers.referer as string) || "none";
+  console.log(
+    `${new Date().toISOString()} - ${req.method} ${req.path} - origin: ${origin}`,
+  );
+  next();
+});
+
+// Routes
+app.use("/api/auth", authRoutes);
+app.use("/api/users", userRoutes);
+app.use("/api/monitors", monitorRoutes);
+app.use("/api/invitations", invitationRoutes);
+app.use("/api/incidents", incidentRoutes);
+app.use("/api/maintenances", maintenanceRoutes);
+app.use("/api/integrations", integrationRoutes);
+app.use("/api/status-pages", statusPageRoutes);
+app.use("/api", chatRoutes);
+
+app.get("/", (_req: Request, res: Response) => {
+  res.json({
+    message: "API Uptime Monitor",
+    version: "1.0.0",
+    status: "active",
+    endpoints: {
+      auth: "/api/auth",
+      users: "/api/users",
+      monitors: "/api/monitors",
+      invitations: "/api/invitations",
+      incidents: "/api/incidents",
+      maintenances: "/api/maintenances",
+      integrations: "/api/integrations",
+      statusPages: "/api/status-pages",
+      chat: "/api/chat",
+    },
+  });
+});
+
+app.get("/health", (_req: Request, res: Response) => {
+  res.json({
+    status: "OK",
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+  });
+});
+
+app.get("/api/health", (_req: Request, res: Response) => {
+  res.json({
+    ok: true,
+    status: "OK",
+    provider: "gemini",
+    apiKeyConfigured: Boolean(getGeminiApiKey()),
+    model: process.env.GEMINI_MODEL?.trim() || "gemini-2.5-flash",
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+  });
+});
+
+app.use((req: Request, res: Response) => {
+  res.status(404).json({
+    error: "Route non trouvee",
+    path: req.path,
+  });
+});
+
+app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
+  console.error("Erreur non geree:", err);
+
+  if (err.message.startsWith("CORS refuse pour l'origine:")) {
+    res.status(403).json({
+      error: err.message,
+    });
+    return;
+  }
+
+  const exposedError = isDevelopmentLike
+    ? err.message
+    : "Erreur interne du serveur";
+  res.status(500).json({
+    error: exposedError,
+    message: isDevelopmentLike ? err.message : undefined,
+  });
+});
+
+export const startServer = async (): Promise<void> => {
+  try {
+    if (!process.env.JWT_SECRET || process.env.JWT_SECRET.trim() === "") {
+      throw new Error(`JWT_SECRET manquant. Verifiez le fichier ${envPath}`);
+    }
+
+    await connectDB();
+    startMonitorScheduler();
+    startCleanupScheduler();
+
+    const hasExplicitPort = process.env.PORT !== undefined;
+    const requestedPort = parsePort(process.env.PORT ?? String(DEFAULT_PORT));
+    const { port } = await listenWithRetry(
+      app,
+      requestedPort,
+      MAX_PORT_RETRIES,
+      !hasExplicitPort,
+    );
+
+    app.set("port", port);
+
+    if (!hasExplicitPort && port !== requestedPort) {
+      console.warn(
+        `Port ${requestedPort} indisponible, serveur lance sur ${port}.`,
+      );
+    }
+
+    console.log("");
+    console.log("====================================");
+    console.log(`Serveur demarre sur le port ${port}`);
+    console.log(`Environnement: ${process.env.NODE_ENV || "development"}`);
+    console.log(`URL: http://localhost:${port}`);
+    console.log(`SMTP configure: ${isSmtpConfigured() ? "oui" : "non"}`);
+    console.log(
+      `Fallback invitation sans email: ${String(process.env.INVITATION_ALLOW_WITHOUT_EMAIL ?? "auto (true hors production)")}`,
+    );
+    console.log(
+      `Fallback reset password dev: ${String(process.env.ALLOW_DEV_PASSWORD_RESET_FALLBACK ?? "false")}`,
+    );
+    console.log("====================================");
+    console.log("");
+  } catch (error) {
+    const err = error as NodeJS.ErrnoException;
+    if (err.code === "EADDRINUSE") {
+      console.error(
+        `Erreur: le port ${process.env.PORT ?? DEFAULT_PORT} est occupe. Definissez PORT avec une autre valeur.`,
+      );
+    } else {
+      console.error("Erreur lors du demarrage du serveur:", error);
+    }
+    process.exit(1);
+  }
+};
+
+if (require.main === module) {
+  process.on("SIGTERM", () => {
+    console.log("SIGTERM recu. Arret du serveur...");
+    process.exit(0);
+  });
+
+  process.on("SIGINT", () => {
+    console.log("SIGINT recu. Arret du serveur...");
+    process.exit(0);
+  });
+
+  void startServer();
+}
+
+export default app;
