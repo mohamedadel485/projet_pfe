@@ -1,4 +1,4 @@
-import { Router, Request, Response } from "express";
+import { Router, Request, Response, NextFunction } from "express";
 import { body, validationResult } from "express-validator";
 import crypto from "crypto";
 import jwt from "jsonwebtoken";
@@ -6,6 +6,7 @@ import type { SignOptions } from "jsonwebtoken";
 import User from "../models/User";
 import Invitation from "../models/Invitation";
 import AccountRequest from "../models/AccountRequest";
+import Tokens, { type TokenType } from "../models/Tokens";
 import Monitor from "../models/Monitor";
 import emailService from "../services/emailService";
 import { authenticate, AuthRequest } from "../middleware/auth";
@@ -42,6 +43,32 @@ const generatePasswordResetCode = (): string =>
 const generateLoginOtpCode = (): string =>
   generateNumericCode(LOGIN_OTP_CODE_LENGTH);
 
+const parseCookieHeader = (header?: string): Record<string, string> => {
+  if (!header) return {};
+
+  return header.split(";").reduce<Record<string, string>>((acc, part) => {
+    const trimmed = part.trim();
+    if (trimmed === "") return acc;
+
+    const separatorIndex = trimmed.indexOf("=");
+    if (separatorIndex === -1) {
+      acc[trimmed] = "";
+      return acc;
+    }
+
+    const key = trimmed.slice(0, separatorIndex).trim();
+    const value = trimmed.slice(separatorIndex + 1).trim();
+    if (!key) return acc;
+
+    try {
+      acc[key] = decodeURIComponent(value);
+    } catch {
+      acc[key] = value;
+    }
+    return acc;
+  }, {});
+};
+
 const parseRememberMe = (value: unknown): boolean => {
   if (typeof value === "boolean") return value;
   if (typeof value === "string") {
@@ -51,12 +78,102 @@ const parseRememberMe = (value: unknown): boolean => {
   return true;
 };
 
+const getIssuedTokenExpirationDate = (token: string): Date | null => {
+  const decoded = jwt.decode(token);
+  if (!decoded || typeof decoded !== "object" || decoded === null) {
+    return null;
+  }
+
+  const exp = "exp" in decoded ? decoded.exp : undefined;
+  if (typeof exp !== "number") {
+    return null;
+  }
+
+  return new Date(exp * 1000);
+};
+
+const mirrorTokenRecord = async ({
+  userId,
+  token,
+  type,
+  expiresAt,
+}: {
+  userId: string;
+  token: string;
+  type: TokenType;
+  expiresAt: Date;
+}): Promise<void> => {
+  try {
+    await Tokens.deleteMany({ user: userId, type });
+    await Tokens.create({
+      user: userId,
+      token,
+      type,
+      expiresAt,
+    });
+  } catch (error) {
+    console.warn(`Impossible de synchroniser le jeton ${type}:`, error);
+  }
+};
+
+const deleteTokenRecord = async (
+  token: string | undefined,
+  type?: TokenType,
+  userId?: string,
+): Promise<void> => {
+  if (!token) return;
+
+  try {
+    const query: Record<string, unknown> = userId
+      ? { user: userId }
+      : { token };
+    if (type) {
+      query.type = type;
+    }
+    await Tokens.deleteMany(query);
+  } catch (error) {
+    console.warn(`Impossible de supprimer le jeton ${type ?? "unknown"}:`, error);
+  }
+};
+
+const getAuthTokenFromRequest = (req: Request): string | null => {
+  const headerToken = req.header("Authorization")?.replace("Bearer ", "");
+  if (headerToken) {
+    return headerToken;
+  }
+
+  const cookies = parseCookieHeader(req.headers.cookie);
+  return cookies[getAuthCookieName()] || null;
+};
+
+const normalizeRegisterPayload = (
+  req: Request,
+  _res: Response,
+  next: NextFunction,
+): void => {
+  const body = req.body as Record<string, unknown>;
+
+  if (typeof body.nom === "string" && typeof body.name !== "string") {
+    body.name = body.nom;
+  }
+
+  if (
+    typeof body.motDePasse === "string" &&
+    typeof body.password !== "string"
+  ) {
+    body.password = body.motDePasse;
+  }
+
+  next();
+};
+
 /**
  * POST /api/auth/register
  * Inscription (premier super admin uniquement)
  */
 router.post(
   "/register",
+  normalizeRegisterPayload,
   [
     body("email").isEmail().withMessage("Email invalide").normalizeEmail(),
     body("password")
@@ -99,7 +216,7 @@ router.post(
 
       // Vérifier si un utilisateur existe déjà
       const existingUser = await User.findOne({ email });
-      if (false && existingUser) {
+      if (existingUser) {
         res.status(400).json({ error: "Cet email est déjà utilisé" });
         return;
       }
@@ -141,16 +258,20 @@ router.post(
       const cookieName = getAuthCookieName();
       res.cookie(cookieName, token, buildAuthCookieOptions({ rememberMe }));
 
+      const tokenExpiresAt = getIssuedTokenExpirationDate(token);
+      if (tokenExpiresAt) {
+        void mirrorTokenRecord({
+          userId: user._id.toString(),
+          token,
+          type: "access",
+          expiresAt: tokenExpiresAt,
+        });
+      }
+
       res.status(201).json({
         message: "Compte super administrateur cree avec succes",
         token,
-        user: {
-          id: user._id,
-          email: user.email,
-          name: user.name,
-          role: user.role,
-          avatar: user.avatar || null,
-        },
+        user: user.consulterProfil(),
       });
     } catch (error: any) {
       console.error("Erreur inscription:", error);
@@ -165,6 +286,7 @@ router.post(
  */
 router.post(
   "/login",
+  normalizeRegisterPayload,
   [
     body("email").isEmail().withMessage("Email invalide").normalizeEmail(),
     body("password").notEmpty().withMessage("Mot de passe requis"),
@@ -206,7 +328,7 @@ router.post(
         return;
       }
 
-      const isMatch = await user.comparePassword(password);
+      const isMatch = await user.authenticate(password);
       if (!isMatch) {
         res.status(401).json({ error: "Mot de passe incorrect" });
         return;
@@ -225,6 +347,12 @@ router.post(
         Date.now() + loginOtpExpireMinutes * 60 * 1000,
       );
       await user.save();
+      void mirrorTokenRecord({
+        userId: user._id.toString(),
+        token: loginOtpCode,
+        type: "verify_email",
+        expiresAt: user.loginOtpExpires!,
+      });
 
       try {
         await emailService.sendLoginOtpCode(
@@ -236,6 +364,11 @@ router.post(
         user.loginOtpCode = undefined;
         user.loginOtpExpires = undefined;
         await user.save();
+        void deleteTokenRecord(
+          loginOtpCode,
+          "verify_email",
+          user._id.toString(),
+        );
 
         res.status(502).json({
           error:
@@ -310,6 +443,7 @@ router.post(
         user.loginOtpCode = undefined;
         user.loginOtpExpires = undefined;
         await user.save();
+        void deleteTokenRecord(code.trim(), "verify_email", user._id.toString());
         res.status(400).json({ error: "Code OTP invalide ou expire" });
         return;
       }
@@ -322,6 +456,7 @@ router.post(
       user.loginOtpCode = undefined;
       user.loginOtpExpires = undefined;
       await user.save();
+      void deleteTokenRecord(code.trim(), "verify_email", user._id.toString());
 
       if (!jwtSecret) {
         res.status(500).json({
@@ -335,17 +470,20 @@ router.post(
       });
       const cookieName = getAuthCookieName();
       res.cookie(cookieName, token, buildAuthCookieOptions({ rememberMe }));
+      const tokenExpiresAt = getIssuedTokenExpirationDate(token);
+      if (tokenExpiresAt) {
+        void mirrorTokenRecord({
+          userId: user._id.toString(),
+          token,
+          type: "access",
+          expiresAt: tokenExpiresAt,
+        });
+      }
 
       res.json({
         message: "Connexion reussie",
         token,
-        user: {
-          id: user._id,
-          email: user.email,
-          name: user.name,
-          role: user.role,
-          avatar: user.avatar || null,
-        },
+        user: user.consulterProfil(),
       });
     } catch (error: any) {
       console.error("Erreur verification OTP connexion:", error);
@@ -394,6 +532,12 @@ router.post(
         Date.now() + passwordResetCodeExpireMinutes * 60 * 1000,
       );
       await user.save();
+      void mirrorTokenRecord({
+        userId: user._id.toString(),
+        token: resetCode,
+        type: "reset_password",
+        expiresAt: user.passwordResetExpires!,
+      });
 
       try {
         await emailService.sendPasswordResetCode(
@@ -410,6 +554,11 @@ router.post(
         user.passwordResetCode = undefined;
         user.passwordResetExpires = undefined;
         await user.save();
+        void deleteTokenRecord(
+          resetCode,
+          "reset_password",
+          user._id.toString(),
+        );
 
         res.status(502).json({
           error:
@@ -519,6 +668,11 @@ router.post(
         user.passwordResetCode = undefined;
         user.passwordResetExpires = undefined;
         await user.save();
+        void deleteTokenRecord(
+          code.trim(),
+          "reset_password",
+          user._id.toString(),
+        );
         res.status(400).json({ error: "Code invalide ou expire" });
         return;
       }
@@ -528,10 +682,15 @@ router.post(
         return;
       }
 
-      user.password = newPassword;
+      await user.reinitialiserMotDePasse(newPassword);
       user.passwordResetCode = undefined;
       user.passwordResetExpires = undefined;
       await user.save();
+      void deleteTokenRecord(
+        code.trim(),
+        "reset_password",
+        user._id.toString(),
+      );
 
       res.json({ message: "Mot de passe reinitialise avec succes" });
     } catch (error: any) {
@@ -593,14 +752,13 @@ router.post(
         return;
       }
 
-      const isCurrentPasswordValid =
-        await user.comparePassword(currentPassword);
+      const isCurrentPasswordValid = await user.authenticate(currentPassword);
       if (!isCurrentPasswordValid) {
         res.status(400).json({ error: "Mot de passe actuel incorrect" });
         return;
       }
 
-      const isSamePassword = await user.comparePassword(newPassword);
+      const isSamePassword = await user.authenticate(newPassword);
       if (isSamePassword) {
         res
           .status(400)
@@ -608,8 +766,7 @@ router.post(
         return;
       }
 
-      user.password = newPassword;
-      await user.save();
+      await user.reinitialiserMotDePasse(newPassword);
 
       res.json({ message: "Mot de passe modifie avec succes" });
     } catch (error: any) {
@@ -627,6 +784,7 @@ router.post(
  */
 router.post(
   "/accept-invitation",
+  normalizeRegisterPayload,
   [
     body("token").notEmpty().withMessage("Token d'invitation requis"),
     body("password")
@@ -677,8 +835,7 @@ router.post(
       }
 
       if (invitation.expiresAt < new Date()) {
-        invitation.status = "expired";
-        await invitation.save();
+        await invitation.refuser();
         res.status(400).json({ error: "Cette invitation a expiré" });
         return;
       }
@@ -724,8 +881,7 @@ router.post(
       }
 
       // Marquer l'invitation comme acceptée
-      invitation.status = "accepted";
-      await invitation.save();
+      await invitation.accepter();
 
       if (!jwtSecret) {
         res.status(500).json({
@@ -739,17 +895,20 @@ router.post(
       });
       const cookieName = getAuthCookieName();
       res.cookie(cookieName, authToken, buildAuthCookieOptions({ rememberMe }));
+      const authTokenExpiresAt = getIssuedTokenExpirationDate(authToken);
+      if (authTokenExpiresAt) {
+        void mirrorTokenRecord({
+          userId: user._id.toString(),
+          token: authToken,
+          type: "access",
+          expiresAt: authTokenExpiresAt,
+        });
+      }
 
       res.status(201).json({
         message: "Compte créé avec succès",
         token: authToken,
-        user: {
-          id: user._id,
-          email: user.email,
-          name: user.name,
-          role: user.role,
-          avatar: user.avatar || null,
-        },
+        user: user.consulterProfil(),
       });
     } catch (error: any) {
       console.error("Erreur acceptation invitation:", error);
@@ -770,13 +929,7 @@ router.get(
   async (req: AuthRequest, res: Response): Promise<void> => {
     try {
       res.json({
-        user: {
-          id: req.user!._id,
-          email: req.user!.email,
-          name: req.user!.name,
-          role: req.user!.role,
-          avatar: req.user!.avatar || null,
-        },
+        user: req.user!.consulterProfil(),
       });
     } catch (error: any) {
       console.error("Erreur récupération profil:", error);
@@ -1077,10 +1230,7 @@ router.post(
       }
 
       // Mettre à jour la demande
-      request.status = "approved";
-      request.approvedAt = new Date();
-      request.approvedBy = req.user!._id;
-      await request.save();
+      await request.accepter(req.user!._id);
 
       if (!existingUser) {
         // Envoyer un email Ã  l'utilisateur avec ses credentials uniquement pour un nouveau compte
@@ -1096,11 +1246,7 @@ router.post(
         message: existingUser
           ? "Demande approuvÃ©e avec succÃ¨s. Le compte existait dÃ©jÃ ."
           : "Demande approuvÃ©e avec succÃ¨s. Un email a Ã©tÃ© envoyÃ© Ã  l'utilisateur.",
-        user: {
-          id: user._id,
-          email: user.email,
-          name: user.name,
-        },
+        user: user.consulterProfil(),
         assignedMonitorCount: normalizedMonitorIds.length,
       });
     } catch (error) {
@@ -1149,8 +1295,7 @@ router.post(
       }
 
       // Mettre à jour la demande
-      request.status = "rejected";
-      await request.save();
+      await request.refuser();
 
       res.json({ message: "Demande rejetée avec succès" });
     } catch (error) {
@@ -1221,6 +1366,8 @@ router.delete(
 router.post("/logout", (_req: Request, res: Response): void => {
   const cookieName = getAuthCookieName();
   res.clearCookie(cookieName, buildAuthCookieClearOptions());
+  const token = getAuthTokenFromRequest(_req);
+  void deleteTokenRecord(token ?? undefined, "access");
   res.json({ message: "Deconnexion reussie" });
 });
 

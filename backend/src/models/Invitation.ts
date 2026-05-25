@@ -1,6 +1,7 @@
 import mongoose, { Document, Schema } from 'mongoose';
 
 export type InvitationRole = 'admin' | 'user';
+export type InvitationStatus = 'pending' | 'accepted' | 'expired';
 
 export interface IInvitation extends Document {
   name?: string;
@@ -9,10 +10,13 @@ export interface IInvitation extends Document {
   invitedBy: mongoose.Types.ObjectId;
   monitorIds: mongoose.Types.ObjectId[];
   role?: InvitationRole;
-  status: 'pending' | 'accepted' | 'expired';
+  status: InvitationStatus;
   expiresAt: Date;
   createdAt: Date;
   updatedAt: Date;
+  envoyer(): Promise<IInvitation>;
+  accepter(): Promise<IInvitation>;
+  refuser(): Promise<IInvitation>;
 }
 
 const invitationSchema = new Schema<IInvitation>(
@@ -67,5 +71,28 @@ const invitationSchema = new Schema<IInvitation>(
 invitationSchema.index({ token: 1 }, { unique: true });
 invitationSchema.index({ email: 1 });
 invitationSchema.index({ expiresAt: 1 });
+
+invitationSchema.methods.envoyer = async function (
+  this: IInvitation,
+): Promise<IInvitation> {
+  await this.save();
+  return this;
+};
+
+invitationSchema.methods.accepter = async function (
+  this: IInvitation,
+): Promise<IInvitation> {
+  this.status = 'accepted';
+  await this.save();
+  return this;
+};
+
+invitationSchema.methods.refuser = async function (
+  this: IInvitation,
+): Promise<IInvitation> {
+  this.status = 'expired';
+  await this.save();
+  return this;
+};
 
 export default mongoose.model<IInvitation>('Invitation', invitationSchema);

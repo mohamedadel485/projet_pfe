@@ -1,4 +1,4 @@
-import { Router, Response } from 'express';
+import { Router, Response, NextFunction } from 'express';
 import { body, validationResult } from 'express-validator';
 import Integration, { IntegrationEvent, IntegrationType } from '../models/Integration';
 import { authenticate, AuthRequest } from '../middleware/auth';
@@ -15,6 +15,27 @@ const normalizeEvents = (events: unknown): IntegrationEvent[] => {
   return unique.length > 0 ? unique : ['up', 'down'];
 };
 
+const normalizeIntegrationPayload = (
+  req: any,
+  _res: Response,
+  next: NextFunction,
+): void => {
+  const body = req.body as Record<string, unknown>;
+
+  if (typeof body.integrationType === 'string' && typeof body.type !== 'string') {
+    body.type = body.integrationType;
+  }
+
+  if (typeof body.eventType === 'string' && !Array.isArray(body.events)) {
+    body.events = body.eventType
+      .split(',')
+      .map((event) => event.trim())
+      .filter((event) => event === 'up' || event === 'down');
+  }
+
+  next();
+};
+
 /**
  * POST /api/integrations
  * Creer une integration webhook/slack/telegram
@@ -22,6 +43,7 @@ const normalizeEvents = (events: unknown): IntegrationEvent[] => {
 router.post(
   '/',
   authenticate,
+  normalizeIntegrationPayload,
   [
     body('type').optional().isIn(['webhook', 'slack', 'telegram']),
     body('endpointUrl').isURL({ protocols: ['http', 'https'], require_protocol: true }),

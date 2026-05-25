@@ -1,4 +1,4 @@
-import { Router, Response } from 'express';
+import { Router, Response, NextFunction } from 'express';
 import { body, param, query, validationResult } from 'express-validator';
 import Maintenance, { MaintenanceStatus } from '../models/Maintenance';
 import Monitor from '../models/Monitor';
@@ -22,6 +22,36 @@ const getOwnedMaintenance = async (id: string, ownerId: string) =>
     _id: id,
     owner: ownerId,
   });
+
+const normalizeMaintenancePayload = (
+  req: any,
+  _res: Response,
+  next: NextFunction,
+): void => {
+  const body = req.body as Record<string, unknown>;
+
+  if (typeof body.nom === 'string' && typeof body.name !== 'string') {
+    body.name = body.nom;
+  }
+
+  if (typeof body.raison === 'string' && typeof body.reason !== 'string') {
+    body.reason = body.raison;
+  }
+
+  if (typeof body.dateDebut === 'string' && typeof body.startAt !== 'string') {
+    body.startAt = body.dateDebut;
+  }
+
+  if (typeof body.dateFin === 'string' && typeof body.endAt !== 'string') {
+    body.endAt = body.dateFin;
+  }
+
+  if (typeof body.statutMaintenance === 'string' && typeof body.status !== 'string') {
+    body.status = body.statutMaintenance;
+  }
+
+  next();
+};
 
 /**
  * GET /api/maintenances
@@ -113,6 +143,7 @@ router.get(
 router.post(
   '/',
   authenticate,
+  normalizeMaintenancePayload,
   [
     body('monitorId').isMongoId(),
     body('name').optional().isString().trim().isLength({ min: 1, max: 120 }),

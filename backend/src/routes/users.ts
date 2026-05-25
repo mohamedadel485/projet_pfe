@@ -1,4 +1,4 @@
-import { Router, Response } from "express";
+import { Router, Response, NextFunction } from "express";
 import multer from "multer";
 import fs from "fs";
 import path from "path";
@@ -26,6 +26,20 @@ const storage = multer.diskStorage({
 });
 
 const upload = multer({ storage });
+
+const normalizeUserPayload = (
+  req: any,
+  _res: Response,
+  next: NextFunction,
+): void => {
+  const body = req.body as Record<string, unknown>;
+
+  if (typeof body.nom === "string" && typeof body.name !== "string") {
+    body.name = body.nom;
+  }
+
+  next();
+};
 
 /**
  * GET /api/users
@@ -107,6 +121,7 @@ router.get(
 router.put(
   "/me",
   authenticate,
+  normalizeUserPayload,
   [
     body("name").optional().trim().notEmpty(),
     body("email").optional().isEmail().normalizeEmail(),
@@ -145,12 +160,8 @@ router.put(
       res.json({
         message: "Profil mis à jour avec succès",
         user: {
-          id: user._id,
-          email: user.email,
-          name: user.name,
-          role: user.role,
+          ...user.consulterProfil(),
           isActive: user.isActive,
-          avatar: user.avatar || null,
         },
       });
     } catch (error: any) {
@@ -170,6 +181,7 @@ router.put(
   "/:id",
   authenticate,
   isAdmin,
+  normalizeUserPayload,
   [
     body("name").optional().trim().notEmpty(),
     body("email").optional().isEmail().normalizeEmail(),
@@ -262,12 +274,8 @@ router.put(
       res.json({
         message: "Utilisateur mis à jour avec succès",
         user: {
-          id: user._id,
-          email: user.email,
-          name: user.name,
-          role: user.role,
+          ...user.consulterProfil(),
           isActive: user.isActive,
-          avatar: user.avatar || null,
         },
       });
     } catch (error: any) {

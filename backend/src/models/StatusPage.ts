@@ -11,6 +11,12 @@ export interface IStatusPage extends Document {
   logoName?: string;
   density?: 'wide' | 'compact';
   alignment?: 'left' | 'center';
+  nom?: string;
+  moniteurs?: string[];
+  statut?: string;
+  creer(): Promise<IStatusPage>;
+  modifier(updates: Partial<IStatusPage>): Promise<IStatusPage>;
+  supprimer(): Promise<void>;
   createdAt: Date;
   updatedAt: Date;
 }

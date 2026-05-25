@@ -9,6 +9,8 @@ export interface IAccountRequest extends Document {
   updatedAt: Date;
   approvedAt?: Date;
   approvedBy?: mongoose.Types.ObjectId;
+  accepter(approvedBy?: mongoose.Types.ObjectId): Promise<IAccountRequest>;
+  refuser(): Promise<IAccountRequest>;
 }
 
 const accountRequestSchema = new Schema<IAccountRequest>(
@@ -53,5 +55,26 @@ const accountRequestSchema = new Schema<IAccountRequest>(
 accountRequestSchema.index({ email: 1 });
 accountRequestSchema.index({ status: 1 });
 accountRequestSchema.index({ createdAt: -1 });
+
+accountRequestSchema.methods.accepter = async function (
+  this: IAccountRequest,
+  approvedBy?: mongoose.Types.ObjectId,
+): Promise<IAccountRequest> {
+  this.status = 'approved';
+  this.approvedAt = new Date();
+  if (approvedBy) {
+    this.approvedBy = approvedBy;
+  }
+  await this.save();
+  return this;
+};
+
+accountRequestSchema.methods.refuser = async function (
+  this: IAccountRequest,
+): Promise<IAccountRequest> {
+  this.status = 'rejected';
+  await this.save();
+  return this;
+};
 
 export default mongoose.model<IAccountRequest>('AccountRequest', accountRequestSchema);

@@ -57,6 +57,7 @@ const applyDevelopmentEnvDefaults = (): void => {
 
 applyDevelopmentEnvDefaults();
 
+import "./compat/sprint2";
 import authRoutes from "./routes/auth";
 import userRoutes from "./routes/users";
 import monitorRoutes from "./routes/monitors";

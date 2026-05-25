@@ -5,20 +5,31 @@ export type MonitorIpVersion =
   | 'IPv6 / IPv4 (IPv6 Priority)'
   | 'IPv4 only'
   | 'IPv6 only';
+export type MonitorProtocol = 'http' | 'https' | 'ws' | 'wss';
+export type MonitorStatus = 'up' | 'down' | 'paused' | 'pending';
+export type MonitorHttpMethod =
+  | 'GET'
+  | 'POST'
+  | 'PUT'
+  | 'PATCH'
+  | 'DELETE'
+  | 'HEAD'
+  | 'OPTIONS';
+export type MonitorHttpMethodCompat = Lowercase<MonitorHttpMethod>;
 
 export interface IMonitor extends Document {
   name: string;
   url: string;
-  type: 'http' | 'https' | 'ws' | 'wss';
+  type: MonitorProtocol;
   interval: number; // en minutes
   timeout: number; // en secondes
-  status: 'up' | 'down' | 'paused' | 'pending';
+  status: MonitorStatus;
   pausedByMaintenance: boolean;
   manuallyResumed?: boolean; // L'utilisateur a manuellement repris le monitoring malgré la maintenance active
   isActive: boolean;
   owner: mongoose.Types.ObjectId;
   sharedWith: mongoose.Types.ObjectId[];
-  httpMethod: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD' | 'OPTIONS';
+  httpMethod: MonitorHttpMethod;
   expectedStatusCode: number;
   ipVersion?: MonitorIpVersion;
   followRedirections?: boolean;
@@ -47,6 +58,13 @@ export interface IMonitor extends Document {
   successfulChecks: number;
   failedChecks: number;
   responseTime: number; // en ms
+  nom?: string;
+  protocole?: MonitorProtocol;
+  typeHTTP?: MonitorHttpMethodCompat;
+  statut?: MonitorStatus;
+  creer(): Promise<IMonitor>;
+  modifier(updates: Partial<IMonitor>): Promise<IMonitor>;
+  supprimer(): Promise<void>;
   createdAt: Date;
   updatedAt: Date;
   deleredAt?: Date;

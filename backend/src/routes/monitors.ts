@@ -1,4 +1,4 @@
-import { Router, Response } from "express";
+import { Router, Response, NextFunction } from "express";
 import { body, validationResult } from "express-validator";
 import User from "../models/User";
 import Monitor from "../models/Monitor";
@@ -14,6 +14,32 @@ import { authenticate, AuthRequest } from "../middleware/auth";
 const router = Router();
 const METHODS_WITHOUT_BODY = new Set(["HEAD", "GET", "DELETE", "OPTIONS"]);
 
+const normalizeMonitorPayload = (
+  req: any,
+  _res: Response,
+  next: NextFunction,
+): void => {
+  const body = req.body as Record<string, unknown>;
+
+  if (typeof body.nom === "string" && typeof body.name !== "string") {
+    body.name = body.nom;
+  }
+
+  if (typeof body.protocole === "string" && typeof body.type !== "string") {
+    body.type = body.protocole;
+  }
+
+  if (typeof body.typeHTTP === "string" && typeof body.httpMethod !== "string") {
+    body.httpMethod = body.typeHTTP.toUpperCase();
+  }
+
+  if (typeof body.statut === "string" && typeof body.status !== "string") {
+    body.status = body.statut;
+  }
+
+  next();
+};
+
 /**
  * POST /api/monitors
  * Créer un nouveau monitor
@@ -21,6 +47,7 @@ const METHODS_WITHOUT_BODY = new Set(["HEAD", "GET", "DELETE", "OPTIONS"]);
 router.post(
   "/",
   authenticate,
+  normalizeMonitorPayload,
   [
     body("name").notEmpty().trim(),
     body("url").isURL({
@@ -293,6 +320,7 @@ router.get(
 router.put(
   "/:id",
   authenticate,
+  normalizeMonitorPayload,
   [
     body("name").optional().trim().notEmpty(),
     body("url")

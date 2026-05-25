@@ -14,6 +14,10 @@ export interface IIncident extends Document {
   errorMessage?: string;
   firstCheckedAt: Date;
   lastCheckedAt: Date;
+  description?: string;
+  dateDebut?: Date;
+  dateFin?: Date;
+  statut?: string;
   createdAt: Date;
   updatedAt: Date;
 }
