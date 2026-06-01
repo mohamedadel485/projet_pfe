@@ -73,7 +73,11 @@ router.get(
         return;
       }
 
-      await maintenanceService.refreshMaintenanceStates();
+      try {
+        await maintenanceService.refreshMaintenanceStates();
+      } catch (refreshError) {
+        console.warn('Erreur lors de la synchronisation des maintenances:', refreshError);
+      }
 
       const { status, monitorId, search } = req.query as {
         status?: MaintenanceStatus;
@@ -175,7 +179,7 @@ router.post(
 
       const monitor = await Monitor.findOne({
         _id: monitorId,
-        owner: req.user!._id,
+        $or: [{ owner: req.user!._id }, { sharedWith: req.user!._id }],
       });
 
       if (!monitor) {

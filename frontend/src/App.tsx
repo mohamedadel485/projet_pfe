@@ -4008,6 +4008,7 @@ function App() {
         )
       ) : isMaintenancePage ? (
         <MaintenancePage
+          authToken={authToken}
           onCreateMonitor={() => {
             openNewMonitorPage();
           }}

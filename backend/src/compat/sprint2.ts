@@ -81,7 +81,11 @@ Monitor.schema.virtual("protocole").set(function (
 Monitor.schema.virtual("typeHTTP").get(function (
   this: IMonitor,
 ): MonitorHttpMethodCompat {
-  return this.httpMethod.toLowerCase() as MonitorHttpMethodCompat;
+  const method =
+    typeof this.httpMethod === "string" && this.httpMethod.trim() !== ""
+      ? this.httpMethod
+      : "GET";
+  return method.toLowerCase() as MonitorHttpMethodCompat;
 });
 
 Monitor.schema.virtual("typeHTTP").set(function (

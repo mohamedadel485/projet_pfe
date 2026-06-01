@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowUpDown, Check, ChevronDown, Pause, RotateCcw, Search, Tag, Trash2, X } from 'lucide-react';
 import { CiSliderHorizontal } from 'react-icons/ci';
 import {
@@ -17,6 +17,7 @@ import {
 import './maintenance-page.css';
 
 interface MaintenancePageProps {
+  authToken?: string | null;
   onCreateMonitor?: () => void;
   onOpenMaintenanceWindows?: () => void;
   onBackToMaintenanceOverview?: () => void;
@@ -221,12 +222,26 @@ const getRepeatStartDates = (
   return nextDates;
 };
 
+const describeLoadError = (error: unknown, fallback: string): string => {
+  if (isApiError(error)) {
+    return error.message || fallback;
+  }
+
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return fallback;
+};
+
 function MaintenancePage({
+  authToken,
   onCreateMonitor,
   onOpenMaintenanceWindows,
   onBackToMaintenanceOverview,
   showWindowsOnly = false,
 }: MaintenancePageProps) {
+  const requestToken = authToken ?? undefined;
   const [rows, setRows] = useState<Row[]>([]);
   const [monitors, setMonitors] = useState<BackendMonitor[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -268,53 +283,65 @@ function MaintenancePage({
   const statusMenuRef = useRef<HTMLDivElement | null>(null);
   const sortMenuRef = useRef<HTMLDivElement | null>(null);
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setIsLoading(true);
     setErrorMessage(null);
 
     try {
-      const [maintenanceData, monitorData] = await Promise.all([fetchMaintenances(), fetchMonitors()]);
-      const mapped = maintenanceData.maintenances.map(mapRow);
-      setRows(mapped);
-      setMonitors(monitorData.monitors);
-      setSelectedIds((previous) => previous.filter((id) => mapped.some((row) => row.id === id)));
+      const [maintenanceResult, monitorResult] = await Promise.allSettled([
+        fetchMaintenances(requestToken),
+        fetchMonitors(requestToken),
+      ]);
+      const nextRows = maintenanceResult.status === 'fulfilled'
+        ? maintenanceResult.value.maintenances.map(mapRow)
+        : [];
+      const nextMonitors = monitorResult.status === 'fulfilled'
+        ? monitorResult.value.monitors
+        : [];
 
-      if (monitorData.monitors.length > 0) {
+      setRows(nextRows);
+      setMonitors(nextMonitors);
+      setSelectedIds((previous) => previous.filter((id) => nextRows.some((row) => row.id === id)));
+
+      if (nextMonitors.length > 0) {
         setSelectedMonitorId((currentId) => {
-          if (currentId && monitorData.monitors.some((monitor) => monitor._id === currentId)) {
+          if (currentId && nextMonitors.some((monitor) => monitor._id === currentId)) {
             return currentId;
           }
-          return monitorData.monitors[0]._id;
+          return nextMonitors[0]._id;
         });
       } else {
         setSelectedMonitorId('');
       }
+
+      const maintenanceError =
+        maintenanceResult.status === 'rejected'
+          ? describeLoadError(maintenanceResult.reason, 'Unable to load maintenance.')
+          : null;
+      const monitorError =
+        monitorResult.status === 'rejected'
+          ? describeLoadError(monitorResult.reason, 'Unable to load monitors.')
+          : null;
+      setErrorMessage(maintenanceError ?? monitorError);
     } catch (error) {
-      if (isApiError(error)) {
-        const normalizedMessage = (error.message || '').toLowerCase();
-        if (error.status === 404 && normalizedMessage.includes('route non trouvee')) {
-          setErrorMessage('Maintenance endpoint not found on the backend API. Restart the backend service.');
-        } else {
-          setErrorMessage(error.message || 'Unable to load maintenance.');
-        }
-      } else if (error instanceof Error) {
-        setErrorMessage(error.message);
-      } else {
-        setErrorMessage('Unable to load maintenance.');
-      }
+      setErrorMessage(describeLoadError(error, 'Unable to load maintenance.'));
       setRows([]);
+      setMonitors([]);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [requestToken]);
 
   useEffect(() => {
     const now = new Date(Date.now() + 10 * 60_000);
     setStartDate(toDateInput(now));
     setStartTime(toTimeInput(now));
     setWeeklyDays([now.getDay()]);
-    void loadData();
   }, []);
+
+  useEffect(() => {
+    void loadData();
+  }, [loadData]);
 
   useEffect(() => {
     const handleMouseDown = (event: MouseEvent) => {
@@ -385,12 +412,12 @@ function MaintenancePage({
 
     const run = (id: string) =>
       action === 'start'
-        ? startMaintenance(id)
-        : action === 'pause'
-          ? pauseMaintenance(id)
-          : action === 'resume'
-            ? resumeMaintenance(id)
-            : deleteMaintenance(id);
+        ? startMaintenance(id, requestToken)
+          : action === 'pause'
+            ? pauseMaintenance(id, requestToken)
+            : action === 'resume'
+              ? resumeMaintenance(id, requestToken)
+            : deleteMaintenance(id, requestToken);
 
     const results = await Promise.allSettled(ids.map((id) => run(id)));
     const failed = results.filter((result) => result.status === 'rejected');
@@ -472,7 +499,7 @@ function MaintenancePage({
         reason: windowReason.trim(),
         startAt: start.toISOString(),
         endAt: end.toISOString(),
-      });
+      }, requestToken);
     });
 
     const results = await Promise.allSettled(createRequests);

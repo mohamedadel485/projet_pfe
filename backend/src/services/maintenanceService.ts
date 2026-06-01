@@ -1,7 +1,16 @@
+import mongoose from 'mongoose';
 import Monitor from '../models/Monitor';
 import Maintenance, { MaintenanceStatus } from '../models/Maintenance';
 
 const ACTIVE_MAINTENANCE_STATUSES: MaintenanceStatus[] = ['ongoing', 'paused'];
+
+const normalizeObjectId = (value: unknown): string | null => {
+  if (!mongoose.isValidObjectId(value)) {
+    return null;
+  }
+
+  return String(value);
+};
 
 class MaintenanceService {
   getStatusForWindow(startAt: Date, endAt: Date, now: Date = new Date()): MaintenanceStatus {
@@ -56,28 +65,48 @@ class MaintenanceService {
     }
 
     const monitorIds = new Set<string>();
+    const startingMonitorIds = new Set<string>();
     for (const entry of toStart) {
-      monitorIds.add(String(entry.monitor));
+      const monitorId = normalizeObjectId(entry.monitor);
+      if (!monitorId) continue;
+      monitorIds.add(monitorId);
+      startingMonitorIds.add(monitorId);
     }
     for (const entry of toComplete) {
-      monitorIds.add(String(entry.monitor));
+      const monitorId = normalizeObjectId(entry.monitor);
+      if (!monitorId) continue;
+      monitorIds.add(monitorId);
     }
 
     if (monitorIds.size === 0) return;
     
     // Pour les monitors où une maintenance démarre, réinitialiser le flag manuallyResumed
-    const startingMonitorIds = toStart.map(entry => String(entry.monitor));
-    if (startingMonitorIds.length > 0) {
+    if (startingMonitorIds.size > 0) {
       await Monitor.updateMany(
-        { _id: { $in: startingMonitorIds } },
+        { _id: { $in: Array.from(startingMonitorIds) } },
         { $set: { manuallyResumed: false } }
       );
     }
     
-    await Promise.all(Array.from(monitorIds).map((monitorId) => this.syncMonitorMaintenanceState(monitorId, now)));
+    await Promise.all(
+      Array.from(monitorIds).map(async (monitorId) => {
+        try {
+          await this.syncMonitorMaintenanceState(monitorId, now);
+        } catch (error) {
+          console.warn(
+            `Impossible de synchroniser la maintenance pour le monitor ${monitorId}:`,
+            error,
+          );
+        }
+      }),
+    );
   }
 
   async syncMonitorMaintenanceState(monitorId: string, now: Date = new Date()): Promise<void> {
+    if (!mongoose.isValidObjectId(monitorId)) {
+      return;
+    }
+
     const monitor = await Monitor.findById(monitorId);
     if (!monitor) return;
 
