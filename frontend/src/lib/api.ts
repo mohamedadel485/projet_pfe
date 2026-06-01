@@ -438,12 +438,43 @@ const clearLegacyStoredAuthTokens = (): void => {
 };
 
 export const getStoredAuthToken = (): string | null => {
-  clearLegacyStoredAuthTokens();
-  return null;
+  if (!isBrowser) {
+    return null;
+  }
+
+  try {
+    const localToken = window.localStorage.getItem(AUTH_LOCAL_STORAGE_KEY);
+    if (localToken && localToken.trim() !== "") {
+      return localToken;
+    }
+  } catch {
+    // Ignore storage access issues and fall back to the session storage token.
+  }
+
+  try {
+    const sessionToken = window.sessionStorage.getItem(AUTH_SESSION_STORAGE_KEY);
+    return sessionToken && sessionToken.trim() !== "" ? sessionToken : null;
+  } catch {
+    return null;
+  }
 };
 
-export const saveAuthToken = (_token: string, _rememberMe: boolean): void => {
+export const saveAuthToken = (token: string, rememberMe: boolean): void => {
+  if (!isBrowser) {
+    return;
+  }
+
   clearLegacyStoredAuthTokens();
+
+  try {
+    if (rememberMe) {
+      window.localStorage.setItem(AUTH_LOCAL_STORAGE_KEY, token);
+    } else {
+      window.sessionStorage.setItem(AUTH_SESSION_STORAGE_KEY, token);
+    }
+  } catch {
+    // Best effort only. Authentication still works through the backend cookie.
+  }
 };
 
 export const clearStoredAuthToken = (): void => {
@@ -1258,6 +1289,23 @@ export const checkMonitor = (
     };
     monitor: BackendMonitor;
   }>(`/monitors/${monitorId}/check`, {
+    method: "POST",
+    token,
+  });
+
+export const testMonitorAlert = (
+  monitorId: string,
+  token?: string,
+): Promise<{
+  message: string;
+  integrations_found: number;
+  monitor: BackendMonitor;
+}> =>
+  request<{
+    message: string;
+    integrations_found: number;
+    monitor: BackendMonitor;
+  }>(`/monitors/${monitorId}/test-alert`, {
     method: "POST",
     token,
   });

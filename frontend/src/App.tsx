@@ -68,9 +68,11 @@ import {
   requestPasswordReset,
   resetPasswordWithCode,
   resumeMonitor,
+  getStoredAuthToken,
   saveAuthToken,
   shareMonitorWithUser,
   resolveAvatarUrl,
+  testMonitorAlert,
   type CreateIntegrationInput,
   type CreateMonitorInput,
   type BackendMonitor,
@@ -679,7 +681,7 @@ function App() {
     Map<string, { fetchedAt: number; logs: BackendMonitorLog[] }>
   >(new Map());
   const [authToken, setAuthToken] = useState<string | null>(
-    COOKIE_AUTH_SENTINEL,
+    () => getStoredAuthToken() ?? COOKIE_AUTH_SENTINEL,
   );
   const [isAuthBootstrapComplete, setIsAuthBootstrapComplete] = useState(false);
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(() =>
@@ -2452,10 +2454,6 @@ function App() {
   }, []);
 
   useEffect(() => {
-    clearStoredAuthToken();
-  }, []);
-
-  useEffect(() => {
     writeCachedUser(currentUser);
   }, [currentUser]);
 
@@ -2843,6 +2841,44 @@ function App() {
       );
     },
     [authToken, clearSessionAndRedirectToLogin, monitorSnapshotById, refreshMonitors],
+  );
+
+  const handleTestNotification = useCallback(
+    async (monitorId: string) => {
+      if (isBulkActionRunning) {
+        return;
+      }
+
+      if (!authToken) {
+        setMonitorActionFeedback("Authentication required.");
+        return;
+      }
+
+      setIsBulkActionRunning(true);
+      setMonitorActionFeedback(null);
+
+      try {
+        const response = await testMonitorAlert(monitorId, authToken);
+        const integrationCount = response.integrations_found;
+        setMonitorActionFeedback(
+          integrationCount > 0
+            ? `Test notification sent to ${integrationCount} integration(s).`
+            : "Test notification sent, but no active DOWN integrations were found.",
+        );
+      } catch (error) {
+        if (isApiError(error) && error.status === 401) {
+          clearSessionAndRedirectToLogin();
+          return;
+        }
+
+        setMonitorActionFeedback(
+          formatAppError(error, "Unable to send the test notification."),
+        );
+      } finally {
+        setIsBulkActionRunning(false);
+      }
+    },
+    [authToken, clearSessionAndRedirectToLogin, isBulkActionRunning],
   );
 
   const handleBulkActionOptionSelect = useCallback(
@@ -3704,19 +3740,19 @@ function App() {
           }}
         />
       ) : selectedMonitor ? (
-        <MonitorDetailsPage
-          monitor={selectedMonitor}
-          onBack={() => {
-            navigateTo("/monitoring");
-          }}
-          isActionPending={isBulkActionRunning}
-          onRunCheck={() => {
-            void runBulkMonitorAction("start", [selectedMonitor.id]);
-          }}
-          onDelete={() => {
-            void (async () => {
-              await runBulkMonitorAction("delete", [selectedMonitor.id]);
+          <MonitorDetailsPage
+            monitor={selectedMonitor}
+            onBack={() => {
               navigateTo("/monitoring");
+            }}
+            isActionPending={isBulkActionRunning}
+            onTestNotification={() => {
+              void handleTestNotification(selectedMonitor.id);
+            }}
+            onDelete={() => {
+              void (async () => {
+                await runBulkMonitorAction("delete", [selectedMonitor.id]);
+                navigateTo("/monitoring");
             })();
           }}
           onExportLogs={() => {

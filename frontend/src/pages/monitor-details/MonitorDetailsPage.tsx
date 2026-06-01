@@ -62,7 +62,7 @@ interface MonitorDetails {
 interface MonitorDetailsPageProps {
   monitor: MonitorDetails;
   onBack: () => void;
-  onRunCheck?: () => void;
+  onTestNotification?: () => void;
   onDelete?: () => void;
   onExportLogs?: () => void;
   onOpenMaintenanceInfo?: () => void;
@@ -282,7 +282,7 @@ const mapErrorMessage = (reason: unknown): string => {
 function MonitorDetailsPage({
   monitor,
   onBack,
-  onRunCheck,
+  onTestNotification,
   onDelete,
   onExportLogs,
   onOpenMaintenanceInfo,
@@ -949,7 +949,7 @@ function MonitorDetailsPage({
           <button
             type="button"
             className="monitor-action-button"
-            onClick={onRunCheck}
+            onClick={onTestNotification}
             disabled={isActionPending}
           >
             <Bell size={13} />
