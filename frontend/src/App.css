@@ -202,7 +202,7 @@ input {
 .app-shell {
   min-height: 100vh;
   display: grid;
-  grid-template-columns: 230px minmax(0, 1fr) 210px;
+  grid-template-columns: 240px minmax(0, 1fr) 210px;
   gap: 16px;
   padding: 16px;
   position: relative;
@@ -210,7 +210,7 @@ input {
 
 /* Team Members Management prend toute la largeur */
 .app-shell.team-members-management-view {
-  grid-template-columns: 230px 1fr;
+  grid-template-columns: 240px 1fr;
   gap: 16px;
   padding: 16px;
 }
@@ -238,25 +238,31 @@ input {
 .sidebar-head {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 14px;
 }
 
 .sidebar-collapse-toggle {
-  width: 24px;
-  height: 24px;
+  width: 42px;
+  height: 42px;
   border: 0;
   border-radius: 50%;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   color: #fff;
-  background: #8baee8;
+  background: linear-gradient(180deg, #b9d2fb 0%, #96baf6 100%);
   cursor: pointer;
   flex-shrink: 0;
+  box-shadow: 0 10px 24px rgba(82, 129, 223, 0.18);
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease,
+    background-color 0.2s ease;
 }
 
 .sidebar-collapse-toggle:hover {
-  background: #7da2e2;
+  transform: translateY(-1px);
+  box-shadow: 0 12px 28px rgba(82, 129, 223, 0.22);
 }
 
 .sidebar-collapse-toggle.pending {
@@ -284,11 +290,91 @@ input {
   }
 }
 
+.brand-copy {
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  overflow: hidden;
+}
+
+.brand-mark {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: #d8e7ff;
+  box-shadow: 0 10px 24px rgba(82, 129, 223, 0.18);
+}
+
+.brand-mark-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: left center;
+}
+
 .brand-copy h2 {
   margin: 0;
   font-size: 1.15rem;
-  color: #427cef;
+  line-height: 1;
+  color: #3f7ff0;
   font-weight: 800;
+  letter-spacing: -0.03em;
+  white-space: nowrap;
+}
+
+.sidebar.collapsed .brand-copy {
+  justify-content: center;
+}
+
+.sidebar.collapsed .brand-copy h2 {
+  display: none;
+}
+
+.sidebar.collapsed .brand-mark {
+  width: 40px;
+  height: 40px;
+}
+
+.workspace-title {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+
+.workspace-title-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  overflow: hidden;
+  flex-shrink: 0;
+  box-shadow: 0 10px 24px rgba(82, 129, 223, 0.18);
+}
+
+.workspace-title-icon img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: left center;
+}
+
+.workspace-top h1 {
+  margin: 0;
+  font-size: 1.8rem;
+  line-height: 1;
+  color: #3f7ff0;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  white-space: nowrap;
 }
 
 .mobile-close {
@@ -525,7 +611,7 @@ input {
 
   .sidebar.collapsed .sidebar-head {
     flex-direction: column;
-    gap: 8px;
+    gap: 10px;
     width: 100%;
   }
 
@@ -590,13 +676,6 @@ input {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-}
-
-.workspace-top h1 {
-  margin: 0;
-  font-size: 1.4rem;
-  color: var(--blue);
-  font-weight: 800;
 }
 
 .primary-button-wrap {
@@ -1850,7 +1929,7 @@ input {
 /* ── Responsive ───────────────────────────────── */
 @media (max-width: 1100px) {
   .app-shell {
-    grid-template-columns: 230px minmax(0, 1fr) 180px;
+    grid-template-columns: 240px minmax(0, 1fr) 180px;
     padding: 12px;
     gap: 10px;
   }
@@ -1894,7 +1973,7 @@ input {
     top: 10px;
     left: 10px;
     bottom: 10px;
-    width: 230px;
+    width: 240px;
     transform: translateX(-120%);
     transition: transform 0.24s ease;
     z-index: 30;

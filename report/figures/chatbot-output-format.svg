@@ -1,0 +1,178 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="1100" viewBox="0 0 1800 1100" role="img" aria-labelledby="title desc">
+  <title id="title">Format de sortie du chatbot</title>
+  <desc id="desc">Schema montrant l'entree utilisateur, le traitement Gemini 2.5 Flash, la reponse principale en texte brut, ainsi que les cas de fallback et d'erreur JSON.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f6f3eb" />
+      <stop offset="45%" stop-color="#eef5f8" />
+      <stop offset="100%" stop-color="#edf2ff" />
+    </linearGradient>
+    <linearGradient id="cardGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" />
+      <stop offset="100%" stop-color="#fbfcfe" />
+    </linearGradient>
+    <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#1f5d8b" />
+      <stop offset="100%" stop-color="#3c86b4" />
+    </linearGradient>
+    <linearGradient id="success" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#143c2f" />
+      <stop offset="100%" stop-color="#235d48" />
+    </linearGradient>
+    <linearGradient id="warning" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#5a4410" />
+      <stop offset="100%" stop-color="#8b6a1f" />
+    </linearGradient>
+    <linearGradient id="error" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#5d2424" />
+      <stop offset="100%" stop-color="#8d3737" />
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="160%">
+      <feDropShadow dx="0" dy="12" stdDeviation="16" flood-color="#10233d" flood-opacity="0.14" />
+    </filter>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M0,0 L12,6 L0,12 z" fill="#3d5c7a" />
+    </marker>
+    <marker id="arrowMuted" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M0,0 L12,6 L0,12 z" fill="#8494a8" />
+    </marker>
+    <style>
+      .title { font: 800 48px "Segoe UI", Arial, sans-serif; fill: #13253d; letter-spacing: -0.02em; }
+      .subtitle { font: 400 22px "Segoe UI", Arial, sans-serif; fill: #4a5d73; }
+      .badge { font: 700 16px "Segoe UI", Arial, sans-serif; fill: #1b3552; }
+      .section { font: 800 24px "Segoe UI", Arial, sans-serif; fill: #14263f; }
+      .small { font: 600 16px "Segoe UI", Arial, sans-serif; fill: #42566b; }
+      .body { font: 400 18px "Segoe UI", Arial, sans-serif; fill: #274056; }
+      .mono { font: 600 17px Consolas, "Courier New", monospace; fill: #193041; }
+      .mono-light { font: 600 16px Consolas, "Courier New", monospace; fill: #edf7ff; }
+      .card { fill: url(#cardGrad); stroke: rgba(26, 52, 77, 0.12); stroke-width: 1.4; }
+      .chip { fill: #eaf3fb; stroke: #c6d8e9; stroke-width: 1; }
+      .chipText { font: 700 15px "Segoe UI", Arial, sans-serif; fill: #25425f; }
+      .darkBox { fill: #132536; stroke: #20384d; stroke-width: 1.2; }
+      .noteBox { fill: #f8fafc; stroke: #d6dfe8; stroke-width: 1.2; }
+      .errorBox { fill: #fff8f8; stroke: #ebc8c8; stroke-width: 1.2; }
+      .arrowLine { stroke: #49607c; stroke-width: 4; fill: none; marker-end: url(#arrow); }
+      .arrowMuted { stroke: #8b9caf; stroke-width: 3; fill: none; marker-end: url(#arrowMuted); stroke-dasharray: 10 8; }
+      .panelHeader { font: 800 22px "Segoe UI", Arial, sans-serif; fill: #ffffff; letter-spacing: 0.01em; }
+      .panelSub { font: 500 16px "Segoe UI", Arial, sans-serif; fill: rgba(255,255,255,0.88); }
+      .footer { font: 600 16px "Segoe UI", Arial, sans-serif; fill: #5f7084; }
+    </style>
+  </defs>
+
+  <rect x="0" y="0" width="1800" height="1100" fill="url(#bg)" />
+  <circle cx="1530" cy="120" r="120" fill="#d8e9f4" opacity="0.35" />
+  <circle cx="220" cy="980" r="180" fill="#dde8ff" opacity="0.28" />
+  <circle cx="1650" cy="930" r="150" fill="#f0e7d4" opacity="0.25" />
+
+  <text x="90" y="96" class="title">Format de sortie du chatbot</text>
+  <text x="90" y="136" class="subtitle">Assistant conversationnel basé sur Gemini 2.5 Flash via @google/genai</text>
+
+  <g filter="url(#shadow)">
+    <rect x="1380" y="42" rx="22" ry="22" width="330" height="62" fill="#ffffff" stroke="#d4deea" stroke-width="1.2" />
+    <text x="1405" y="82" class="badge">POST /api/chat</text>
+  </g>
+
+  <!-- Left card -->
+  <g filter="url(#shadow)">
+    <rect x="90" y="190" width="350" height="330" rx="28" ry="28" class="card" />
+    <rect x="90" y="190" width="350" height="76" rx="28" ry="28" fill="url(#accent)" />
+    <text x="118" y="236" class="panelHeader">Entrée</text>
+    <text x="118" y="258" class="panelSub">Message utilisateur + contexte</text>
+
+    <rect x="120" y="295" width="290" height="42" rx="18" ry="18" class="chip" />
+    <text x="140" y="322" class="chipText">messages[]</text>
+
+    <rect x="120" y="350" width="290" height="42" rx="18" ry="18" class="chip" />
+    <text x="140" y="377" class="chipText">model = gemini-2.5-flash</text>
+
+    <rect x="120" y="405" width="290" height="42" rx="18" ry="18" class="chip" />
+    <text x="140" y="432" class="chipText">temperature = 0.7</text>
+
+    <rect x="120" y="460" width="290" height="42" rx="18" ry="18" class="chip" />
+    <text x="140" y="487" class="chipText">systemInstruction</text>
+  </g>
+
+  <!-- Center card -->
+  <g filter="url(#shadow)">
+    <rect x="510" y="190" width="360" height="330" rx="28" ry="28" class="card" />
+    <rect x="510" y="190" width="360" height="76" rx="28" ry="28" fill="#183147" />
+    <text x="538" y="236" class="panelHeader">Traitement backend</text>
+    <text x="538" y="258" class="panelSub">Validation + appel du modèle</text>
+
+    <rect x="540" y="295" width="300" height="44" rx="18" ry="18" fill="#eef5ff" stroke="#d1dff2" />
+    <text x="560" y="322" class="chipText">1. Vérification des entrées</text>
+
+    <rect x="540" y="350" width="300" height="44" rx="18" ry="18" fill="#eef5ff" stroke="#d1dff2" />
+    <text x="560" y="377" class="chipText">2. Historique de conversation</text>
+
+    <rect x="540" y="405" width="300" height="44" rx="18" ry="18" fill="#eef5ff" stroke="#d1dff2" />
+    <text x="560" y="432" class="chipText">3. Streaming de la réponse</text>
+
+    <rect x="540" y="460" width="300" height="44" rx="18" ry="18" fill="#eef5ff" stroke="#d1dff2" />
+    <text x="560" y="487" class="chipText">@google/genai</text>
+  </g>
+
+  <!-- Right success output -->
+  <g filter="url(#shadow)">
+    <rect x="950" y="160" width="760" height="420" rx="30" ry="30" class="card" />
+    <rect x="950" y="160" width="760" height="76" rx="30" ry="30" fill="url(#success)" />
+    <text x="980" y="206" class="panelHeader">Sortie principale</text>
+    <text x="980" y="228" class="panelSub">Réponse renvoyée en texte brut, au fil de l’eau</text>
+
+    <rect x="980" y="270" width="170" height="40" rx="16" ry="16" fill="#daf0e4" stroke="#b1d7c6" />
+    <text x="1003" y="296" class="chipText">HTTP 200 OK</text>
+
+    <rect x="980" y="330" width="700" height="170" rx="22" ry="22" class="darkBox" />
+    <text x="1010" y="370" class="mono-light">Content-Type: text/plain; charset=utf-8</text>
+    <text x="1010" y="410" class="mono-light">Le chatbot renvoie un texte</text>
+    <text x="1010" y="440" class="mono-light">qui s'affiche progressivement</text>
+    <text x="1010" y="470" class="mono-light">dans l'interface.</text>
+
+    <rect x="980" y="520" width="700" height="36" rx="14" ry="14" fill="#f2f6fa" stroke="#d4dde7" />
+    <text x="1006" y="544" class="small">Format normal: texte simple, pas de JSON en sortie courante</text>
+  </g>
+
+  <!-- Arrows -->
+  <path d="M440 355 C470 355, 480 355, 510 355" class="arrowLine" />
+  <path d="M870 355 C910 355, 920 355, 950 355" class="arrowLine" />
+
+  <path d="M690 520 C690 575, 690 580, 690 630" class="arrowMuted" />
+  <path d="M1130 520 C1130 570, 1130 585, 1130 630" class="arrowMuted" />
+
+  <!-- Bottom left fallback -->
+  <g filter="url(#shadow)">
+    <rect x="90" y="650" width="820" height="350" rx="28" ry="28" class="card" />
+    <rect x="90" y="650" width="820" height="74" rx="28" ry="28" fill="url(#warning)" />
+    <text x="118" y="696" class="panelHeader">Fallback de quota</text>
+    <text x="118" y="718" class="panelSub">Réponse locale simplifiée si Gemini est temporairement limité</text>
+
+    <rect x="120" y="770" width="170" height="40" rx="16" ry="16" fill="#fff3d7" stroke="#edd396" />
+    <text x="146" y="796" class="chipText">HTTP 200 OK</text>
+
+    <rect x="120" y="830" width="760" height="120" rx="22" ry="22" class="noteBox" />
+    <text x="150" y="874" class="mono">Gemini quota atteint.</text>
+    <text x="150" y="910" class="mono">Reessaie dans un moment ou verifie ton plan.</text>
+    <text x="150" y="946" class="small">Le service renvoie un texte de secours, toujours en text/plain.</text>
+  </g>
+
+  <!-- Bottom right error -->
+  <g filter="url(#shadow)">
+    <rect x="950" y="650" width="760" height="350" rx="28" ry="28" class="card" />
+    <rect x="950" y="650" width="760" height="74" rx="28" ry="28" fill="url(#error)" />
+    <text x="978" y="696" class="panelHeader">Erreur serveur / validation</text>
+    <text x="978" y="718" class="panelSub">Réponse JSON uniquement en cas d'échec non récupérable</text>
+
+    <rect x="980" y="770" width="150" height="40" rx="16" ry="16" fill="#f6dede" stroke="#e5bcbc" />
+    <text x="1008" y="796" class="chipText">HTTP 500</text>
+
+    <rect x="980" y="830" width="700" height="120" rx="22" ry="22" class="darkBox" />
+    <text x="1010" y="872" class="mono-light">{</text>
+    <text x="1040" y="872" class="mono-light">"error": "message explicatif"</text>
+    <text x="1010" y="908" class="mono-light">}</text>
+    <text x="1010" y="928" class="small" fill="#e8f1f8">Affichage lisible en interface.</text>
+  </g>
+
+  <text x="90" y="1056" class="footer">Figure 4.4 - Schéma du format de sortie du chatbot</text>
+  <text x="1660" y="1056" text-anchor="end" class="footer">Uptime Warden</text>
+</svg>

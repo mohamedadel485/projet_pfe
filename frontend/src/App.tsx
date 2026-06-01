@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CiSliderHorizontal } from "react-icons/ci";
 import type { LucideIcon } from "lucide-react";
 import ExclamationHexagonIcon from "./ExclamationHexagonIcon";
+import uptimeWLogo from "./images/uptimeW.png";
 import monitoringMenuIcon from "./images/m1.png";
 import AssistantChatbot from "./components/assistant-chat/AssistantChatbot";
 import ChatbotPage from "./pages/chatbot/ChatbotPage";
@@ -3229,7 +3230,7 @@ function App() {
             )}
           </button>
           <div className="brand-copy">
-            <h2>{sidebarCollapsed ? "M" : "Monitoring"}</h2>
+            <h2>Monitoring</h2>
           </div>
           <button
             className="mobile-close"
@@ -3993,7 +3994,12 @@ function App() {
           {/* --- Main Panel (center column) --- */}
           <div className="panel-main">
             <header className="workspace-top">
-              <h1>Monitors</h1>
+              <div className="workspace-title">
+                <span className="workspace-title-icon" aria-hidden="true">
+                  <img src={uptimeWLogo} alt="" />
+                </span>
+                <h1>Monitoring</h1>
+              </div>
               <div className="primary-button-wrap" ref={newMonitorMenuRef}>
                 <button
                   className="primary-button primary-button-main"

@@ -5,7 +5,7 @@ import jwt from "jsonwebtoken";
 import type { SignOptions } from "jsonwebtoken";
 import User from "../models/User";
 import Invitation from "../models/Invitation";
-import AccountRequest from "../models/AccountRequest";
+import DemandeCompte from "../models/DemandeCompte";
 import Tokens, { type TokenType } from "../models/Tokens";
 import Monitor from "../models/Monitor";
 import emailService from "../services/emailService";
@@ -987,7 +987,7 @@ router.post(
       const existingUser = await User.findOne({ email: normalizedEmail });
 
       // Verifier si une demande en attente existe deja pour cet email
-      const existingPendingRequest = await AccountRequest.findOne({
+      const existingPendingRequest = await DemandeCompte.findOne({
         email: normalizedEmail,
         status: "pending",
       });
@@ -1002,7 +1002,7 @@ router.post(
       }
 
       // Créer la demande en base de données
-      const accountRequest = new AccountRequest({
+      const accountRequest = new DemandeCompte({
         email: normalizedEmail,
         name: normalizedName,
         message: normalizedMessage,
@@ -1089,7 +1089,7 @@ router.get(
         return;
       }
 
-      const requests = await AccountRequest.find().sort({ createdAt: -1 });
+      const requests = await DemandeCompte.find().sort({ createdAt: -1 });
       const serializedRequests = requests.map((request) => ({
         id: request._id.toString(),
         email: request.email,
@@ -1187,7 +1187,7 @@ router.post(
       }
 
       // RÃ©cupÃ©rer la demande
-      const request = await AccountRequest.findById(requestId);
+      const request = await DemandeCompte.findById(requestId);
       if (!request) {
         res.status(404).json({ error: "Demande non trouvÃ©e" });
         return;
@@ -1283,7 +1283,7 @@ router.post(
       const { requestId } = req.body;
 
       // Récupérer la demande
-      const request = await AccountRequest.findById(requestId);
+      const request = await DemandeCompte.findById(requestId);
       if (!request) {
         res.status(404).json({ error: "Demande non trouvée" });
         return;
@@ -1346,7 +1346,7 @@ router.delete(
         query.status = { $in: ["approved", "rejected"] };
       }
 
-      const result = await AccountRequest.deleteMany(query);
+      const result = await DemandeCompte.deleteMany(query);
 
       res.json({
         message: `${result.deletedCount} demande(s) supprimée(s) avec succès`,
