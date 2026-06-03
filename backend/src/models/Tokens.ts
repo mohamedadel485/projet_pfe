@@ -19,7 +19,7 @@ const tokenSchema = new Schema<IToken>(
   {
     user: {
       type: Schema.Types.ObjectId,
-      ref: "User",
+      ref: "Utilisateur",
       required: true,
       index: true,
     },

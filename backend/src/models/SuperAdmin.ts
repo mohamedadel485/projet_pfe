@@ -1,7 +1,5 @@
-import User, { type IUser } from "./User";
+import type { Administrateur } from "./Administrateur";
 
-export type SuperAdmin = IUser & {
+export interface SuperAdmin extends Administrateur {
   role: "super_admin";
-};
-
-export default User;
+}

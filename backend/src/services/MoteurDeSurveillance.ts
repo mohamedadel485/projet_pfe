@@ -15,8 +15,19 @@ const extractHostname = (monitor: IMonitor): string => {
 const normalizeDate = (value?: Date): Date => value ?? new Date(0);
 
 export class MoteurDeSurveillance {
+  private statut: "actif" | "inactif" | "en_pause" = "inactif";
+  private intervalleVerification: number = 60000; // 60 secondes par défaut
+  private derniereVerification: Date | null = null;
+  private totalVerifications: number = 0;
+  private verificationsReussies: number = 0;
+  private verificationsEchouees: number = 0;
+  private historiqueErreurs: Array<{ date: Date; message: string; type: string }> = [];
+
   async detecterPannes(): Promise<void> {
+    this.statut = "actif";
     await monitorService.checkAllMonitors();
+    this.derniereVerification = new Date();
+    this.totalVerifications++;
   }
 
   async VerifierSSL(monitor: IMonitor): Promise<CertificatsSSL | null> {
@@ -59,6 +70,82 @@ export class MoteurDeSurveillance {
       description: errorMessage,
       dateErreur: new Date(),
     });
+  }
+
+  // Méthodes pour accéder aux champs
+  getStatut(): "actif" | "inactif" | "en_pause" {
+    return this.statut;
+  }
+
+  getIntervalleVerification(): number {
+    return this.intervalleVerification;
+  }
+
+  setIntervalleVerification(intervalle: number): void {
+    this.intervalleVerification = intervalle;
+  }
+
+  getDerniereVerification(): Date | null {
+    return this.derniereVerification;
+  }
+
+  getStatistiques(): {
+    total: number;
+    reussies: number;
+    echouees: number;
+    tauxReussite: number;
+  } {
+    const tauxReussite =
+      this.totalVerifications > 0
+        ? (this.verificationsReussies / this.totalVerifications) * 100
+        : 0;
+    return {
+      total: this.totalVerifications,
+      reussies: this.verificationsReussies,
+      echouees: this.verificationsEchouees,
+      tauxReussite,
+    };
+  }
+
+  getHistoriqueErreurs(): Array<{ date: Date; message: string; type: string }> {
+    return [...this.historiqueErreurs];
+  }
+
+  // Méthodes pour mettre à jour les statistiques
+  incrementerVerificationsReussies(): void {
+    this.verificationsReussies++;
+  }
+
+  incrementerVerificationsEchouees(message: string, type: string): void {
+    this.verificationsEchouees++;
+    this.historiqueErreurs.push({
+      date: new Date(),
+      message,
+      type,
+    });
+    // Garder seulement les 100 dernières erreurs
+    if (this.historiqueErreurs.length > 100) {
+      this.historiqueErreurs = this.historiqueErreurs.slice(-100);
+    }
+  }
+
+  mettreEnPause(): void {
+    this.statut = "en_pause";
+  }
+
+  reprendre(): void {
+    this.statut = "actif";
+  }
+
+  arreter(): void {
+    this.statut = "inactif";
+  }
+
+  reinitialiserStatistiques(): void {
+    this.totalVerifications = 0;
+    this.verificationsReussies = 0;
+    this.verificationsEchouees = 0;
+    this.historiqueErreurs = [];
   }
 }
 

@@ -1,7 +1,7 @@
-import mongoose, { Document, Schema } from 'mongoose';
+import mongoose, { Document, Schema } from "mongoose";
 
-export type InvitationRole = 'admin' | 'user';
-export type InvitationStatus = 'pending' | 'accepted' | 'expired';
+export type InvitationRole = "admin" | "user";
+export type InvitationStatus = "pending" | "accepted" | "expired";
 
 export interface IInvitation extends Document {
   name?: string;
@@ -38,24 +38,24 @@ const invitationSchema = new Schema<IInvitation>(
     },
     invitedBy: {
       type: Schema.Types.ObjectId,
-      ref: 'User',
+      ref: "Utilisateur",
       required: true,
     },
     monitorIds: [
       {
         type: Schema.Types.ObjectId,
-        ref: 'Monitor',
+        ref: "Monitor",
       },
     ],
     role: {
       type: String,
-      enum: ['admin', 'user'],
-      default: 'user',
+      enum: ["admin", "user"],
+      default: "user",
     },
     status: {
       type: String,
-      enum: ['pending', 'accepted', 'expired'],
-      default: 'pending',
+      enum: ["pending", "accepted", "expired"],
+      default: "pending",
     },
     expiresAt: {
       type: Date,
@@ -64,7 +64,7 @@ const invitationSchema = new Schema<IInvitation>(
   },
   {
     timestamps: true,
-  }
+  },
 );
 
 // Index pour optimiser les requêtes
@@ -82,7 +82,7 @@ invitationSchema.methods.envoyer = async function (
 invitationSchema.methods.accepter = async function (
   this: IInvitation,
 ): Promise<IInvitation> {
-  this.status = 'accepted';
+  this.status = "accepted";
   await this.save();
   return this;
 };
@@ -90,9 +90,9 @@ invitationSchema.methods.accepter = async function (
 invitationSchema.methods.refuser = async function (
   this: IInvitation,
 ): Promise<IInvitation> {
-  this.status = 'expired';
+  this.status = "expired";
   await this.save();
   return this;
 };
 
-export default mongoose.model<IInvitation>('Invitation', invitationSchema);
+export default mongoose.model<IInvitation>("Invitation", invitationSchema);

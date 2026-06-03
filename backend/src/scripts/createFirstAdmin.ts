@@ -1,12 +1,12 @@
-import path from 'path';
-import { createInterface } from 'node:readline/promises';
-import { stdin as input, stdout as output } from 'node:process';
-import dotenv from 'dotenv';
-import User from '../models/User';
-import { connectDB, disconnectDB } from '../config/database';
-import { ADMIN_ROLES } from '../utils/roles';
+import path from "path";
+import { createInterface } from "node:readline/promises";
+import { stdin as input, stdout as output } from "node:process";
+import dotenv from "dotenv";
+import Utilisateur from "../models/Utilisateur";
+import { connectDB, disconnectDB } from "../config/database";
+import { ADMIN_ROLES } from "../utils/roles";
 
-const envPath = path.resolve(__dirname, '../../.env');
+const envPath = path.resolve(__dirname, "../../.env");
 dotenv.config({ path: envPath, override: true });
 
 interface CliOptions {
@@ -25,8 +25,12 @@ interface AdminCredentials {
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const printUsage = (): void => {
-  console.log('Usage: npm run create:first-admin -- [--email admin@example.com --name "Super Admin" --password "secret123"]');
-  console.log('Si des arguments sont manquants, le script les demandera dans le terminal.');
+  console.log(
+    'Usage: npm run create:first-admin -- [--email admin@example.com --name "Super Admin" --password "secret123"]',
+  );
+  console.log(
+    "Si des arguments sont manquants, le script les demandera dans le terminal.",
+  );
 };
 
 const parseArgs = (argv: string[]): CliOptions => {
@@ -35,39 +39,39 @@ const parseArgs = (argv: string[]): CliOptions => {
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
 
-    if (arg === '--help' || arg === '-h') {
+    if (arg === "--help" || arg === "-h") {
       options.help = true;
       continue;
     }
 
-    if (arg.startsWith('--email=')) {
-      options.email = arg.slice('--email='.length);
+    if (arg.startsWith("--email=")) {
+      options.email = arg.slice("--email=".length);
       continue;
     }
 
-    if (arg === '--email') {
+    if (arg === "--email") {
       options.email = argv[index + 1];
       index += 1;
       continue;
     }
 
-    if (arg.startsWith('--name=')) {
-      options.name = arg.slice('--name='.length);
+    if (arg.startsWith("--name=")) {
+      options.name = arg.slice("--name=".length);
       continue;
     }
 
-    if (arg === '--name') {
+    if (arg === "--name") {
       options.name = argv[index + 1];
       index += 1;
       continue;
     }
 
-    if (arg.startsWith('--password=')) {
-      options.password = arg.slice('--password='.length);
+    if (arg.startsWith("--password=")) {
+      options.password = arg.slice("--password=".length);
       continue;
     }
 
-    if (arg === '--password') {
+    if (arg === "--password") {
       options.password = argv[index + 1];
       index += 1;
       continue;
@@ -78,28 +82,29 @@ const parseArgs = (argv: string[]): CliOptions => {
 };
 
 const validateEmail = (value: string): string | null => {
-  if (value.trim() === '') return 'Email requis.';
-  if (!EMAIL_PATTERN.test(value.trim())) return 'Email invalide.';
+  if (value.trim() === "") return "Email requis.";
+  if (!EMAIL_PATTERN.test(value.trim())) return "Email invalide.";
   return null;
 };
 
 const validateName = (value: string): string | null => {
-  if (value.trim() === '') return 'Nom requis.';
+  if (value.trim() === "") return "Nom requis.";
   return null;
 };
 
 const validatePassword = (value: string): string | null => {
-  if (value.trim() === '') return 'Mot de passe requis.';
-  if (value.length < 6) return 'Le mot de passe doit contenir au moins 6 caracteres.';
+  if (value.trim() === "") return "Mot de passe requis.";
+  if (value.length < 6)
+    return "Le mot de passe doit contenir au moins 6 caracteres.";
   return null;
 };
 
 const normalizeCredentials = (options: CliOptions): AdminCredentials | null => {
   const email = options.email?.trim();
   const name = options.name?.trim();
-  const password = options.password ?? '';
+  const password = options.password ?? "";
 
-  if (!email || !name || password === '') {
+  if (!email || !name || password === "") {
     return null;
   }
 
@@ -125,18 +130,20 @@ const normalizeCredentials = (options: CliOptions): AdminCredentials | null => {
   };
 };
 
-const promptForCredentials = async (options: CliOptions): Promise<AdminCredentials> => {
+const promptForCredentials = async (
+  options: CliOptions,
+): Promise<AdminCredentials> => {
   const rl = createInterface({ input, output });
 
   const askUntilValid = async (
     label: string,
     initialValue: string | undefined,
-    validate: (value: string) => string | null
+    validate: (value: string) => string | null,
   ): Promise<string> => {
-    let candidate = initialValue?.trim() ?? '';
+    let candidate = initialValue?.trim() ?? "";
 
     while (true) {
-      if (candidate === '') {
+      if (candidate === "") {
         candidate = (await rl.question(label)).trim();
       }
 
@@ -146,32 +153,38 @@ const promptForCredentials = async (options: CliOptions): Promise<AdminCredentia
       }
 
       console.log(validationError);
-      candidate = '';
+      candidate = "";
     }
   };
 
   try {
-    const email = (await askUntilValid('Email super admin: ', options.email, validateEmail)).toLowerCase();
-    const name = await askUntilValid('Nom super admin: ', options.name, validateName);
+    const email = (
+      await askUntilValid("Email super admin: ", options.email, validateEmail)
+    ).toLowerCase();
+    const name = await askUntilValid(
+      "Nom super admin: ",
+      options.name,
+      validateName,
+    );
 
-    let password = options.password ?? '';
+    let password = options.password ?? "";
     while (true) {
-      if (password === '') {
-        password = await rl.question('Mot de passe super admin: ');
+      if (password === "") {
+        password = await rl.question("Mot de passe super admin: ");
       }
 
       const passwordError = validatePassword(password);
       if (passwordError) {
         console.log(passwordError);
-        password = '';
+        password = "";
         continue;
       }
 
       if (!options.password) {
-        const confirmation = await rl.question('Confirmer le mot de passe: ');
+        const confirmation = await rl.question("Confirmer le mot de passe: ");
         if (confirmation !== password) {
-          console.log('Les mots de passe ne correspondent pas.');
-          password = '';
+          console.log("Les mots de passe ne correspondent pas.");
+          password = "";
           continue;
         }
       }
@@ -183,28 +196,38 @@ const promptForCredentials = async (options: CliOptions): Promise<AdminCredentia
   }
 };
 
-const resolveCredentials = async (options: CliOptions): Promise<AdminCredentials> => {
+const resolveCredentials = async (
+  options: CliOptions,
+): Promise<AdminCredentials> => {
   const normalized = normalizeCredentials(options);
   if (normalized) {
     return normalized;
   }
 
   if (!input.isTTY) {
-    throw new Error('Mode interactif indisponible. Passez --email, --name et --password.');
+    throw new Error(
+      "Mode interactif indisponible. Passez --email, --name et --password.",
+    );
   }
 
   return promptForCredentials(options);
 };
 
 const ensureDatabaseIsEmpty = async (): Promise<void> => {
-  const adminCount = await User.countDocuments({ role: { $in: ADMIN_ROLES } });
+  const adminCount = await Utilisateur.countDocuments({
+    role: { $in: ADMIN_ROLES },
+  });
   if (adminCount > 0) {
-    throw new Error('Un super administrateur existe deja. Ce script sert uniquement a creer le premier super admin.');
+    throw new Error(
+      "Un super administrateur existe deja. Ce script sert uniquement a creer le premier super admin.",
+    );
   }
 
-  const userCount = await User.countDocuments();
+  const userCount = await Utilisateur.countDocuments();
   if (userCount > 0) {
-    throw new Error('Des utilisateurs existent deja. Refus de creer un premier super admin sur une base non vide.');
+    throw new Error(
+      "Des utilisateurs existent deja. Refus de creer un premier super admin sur une base non vide.",
+    );
   }
 };
 
@@ -223,18 +246,18 @@ const createFirstAdmin = async (): Promise<void> => {
   try {
     await ensureDatabaseIsEmpty();
 
-    const user = new User({
+    const user = new Utilisateur({
       email: credentials.email,
       name: credentials.name,
       password: credentials.password,
-      role: 'super_admin',
+      role: "super_admin",
       isActive: true,
     });
 
     await user.save();
 
-    console.log('');
-    console.log('Premier super administrateur cree avec succes.');
+    console.log("");
+    console.log("Premier super administrateur cree avec succes.");
     console.log(`Email: ${user.email}`);
     console.log(`Nom: ${user.name}`);
     console.log(`ID: ${String(user._id)}`);
@@ -244,8 +267,8 @@ const createFirstAdmin = async (): Promise<void> => {
 };
 
 void createFirstAdmin().catch(async (error: unknown) => {
-  console.error('');
-  console.error('Impossible de creer le premier super administrateur.');
+  console.error("");
+  console.error("Impossible de creer le premier super administrateur.");
   console.error(error instanceof Error ? error.message : error);
 
   try {

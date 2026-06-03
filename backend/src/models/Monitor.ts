@@ -1,20 +1,20 @@
-import mongoose, { Document, Schema } from 'mongoose';
+import mongoose, { Document, Schema } from "mongoose";
 
 export type MonitorIpVersion =
-  | 'IPv4 / IPv6 (IPv4 Priority)'
-  | 'IPv6 / IPv4 (IPv6 Priority)'
-  | 'IPv4 only'
-  | 'IPv6 only';
-export type MonitorProtocol = 'http' | 'https' | 'ws' | 'wss';
-export type MonitorStatus = 'up' | 'down' | 'paused' | 'pending';
+  | "IPv4 / IPv6 (IPv4 Priority)"
+  | "IPv6 / IPv4 (IPv6 Priority)"
+  | "IPv4 only"
+  | "IPv6 only";
+export type MonitorProtocol = "http" | "https" | "ws" | "wss";
+export type MonitorStatus = "up" | "down" | "paused" | "pending";
 export type MonitorHttpMethod =
-  | 'GET'
-  | 'POST'
-  | 'PUT'
-  | 'PATCH'
-  | 'DELETE'
-  | 'HEAD'
-  | 'OPTIONS';
+  | "GET"
+  | "POST"
+  | "PUT"
+  | "PATCH"
+  | "DELETE"
+  | "HEAD"
+  | "OPTIONS";
 export type MonitorHttpMethodCompat = Lowercase<MonitorHttpMethod>;
 
 export interface IMonitor extends Document {
@@ -33,26 +33,26 @@ export interface IMonitor extends Document {
   expectedStatusCode: number;
   ipVersion?: MonitorIpVersion;
   followRedirections?: boolean;
-  upStatusCodeGroups?: Array<'2xx' | '3xx'>;
-  domainExpiryMode?: 'enabled' | 'disabled';
+  upStatusCodeGroups?: Array<"2xx" | "3xx">;
+  domainExpiryMode?: "enabled" | "disabled";
   domainExpiryAt?: Date;
   domainExpiryCheckedAt?: Date;
   domainExpiryError?: string;
-  sslExpiryMode?: 'enabled' | 'disabled';
+  sslExpiryMode?: "enabled" | "disabled";
   sslExpiryAt?: Date;
   sslExpiryCheckedAt?: Date;
   sslExpiryError?: string;
   headers?: Record<string, string>;
   body?: string;
   responseValidation?: {
-    field: 'status';
-    mode: 'value' | 'type';
+    field: "status";
+    mode: "value" | "type";
     expectedValue?: string;
-    expectedType?: 'string' | 'boolean' | 'number';
+    expectedType?: "string" | "boolean" | "number";
   };
   port?: number;
   lastChecked?: Date;
-  lastStatus?: 'up' | 'down';
+  lastStatus?: "up" | "down";
   uptime: number; // pourcentage
   totalChecks: number;
   successfulChecks: number;
@@ -84,8 +84,8 @@ const monitorSchema = new Schema<IMonitor>(
     },
     type: {
       type: String,
-      enum: ['http', 'https', 'ws', 'wss'],
-      default: 'https',
+      enum: ["http", "https", "ws", "wss"],
+      default: "https",
     },
     interval: {
       type: Number,
@@ -100,8 +100,8 @@ const monitorSchema = new Schema<IMonitor>(
     },
     status: {
       type: String,
-      enum: ['up', 'down', 'paused', 'pending'],
-      default: 'pending',
+      enum: ["up", "down", "paused", "pending"],
+      default: "pending",
     },
     pausedByMaintenance: {
       type: Boolean,
@@ -117,17 +117,19 @@ const monitorSchema = new Schema<IMonitor>(
     },
     owner: {
       type: Schema.Types.ObjectId,
-      ref: 'User',
+      ref: "Utilisateur",
       required: true,
     },
-    sharedWith: [{
-      type: Schema.Types.ObjectId,
-      ref: 'User',
-    }],
+    sharedWith: [
+      {
+        type: Schema.Types.ObjectId,
+        ref: "Utilisateur",
+      },
+    ],
     httpMethod: {
       type: String,
-      enum: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'],
-      default: 'GET',
+      enum: ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"],
+      default: "GET",
     },
     expectedStatusCode: {
       type: Number,
@@ -136,24 +138,24 @@ const monitorSchema = new Schema<IMonitor>(
     ipVersion: {
       type: String,
       enum: [
-        'IPv4 / IPv6 (IPv4 Priority)',
-        'IPv6 / IPv4 (IPv6 Priority)',
-        'IPv4 only',
-        'IPv6 only',
+        "IPv4 / IPv6 (IPv4 Priority)",
+        "IPv6 / IPv4 (IPv6 Priority)",
+        "IPv4 only",
+        "IPv6 only",
       ],
-      default: 'IPv4 / IPv6 (IPv4 Priority)',
+      default: "IPv4 / IPv6 (IPv4 Priority)",
     },
     followRedirections: {
       type: Boolean,
     },
     upStatusCodeGroups: {
       type: [String],
-      enum: ['2xx', '3xx'],
+      enum: ["2xx", "3xx"],
     },
     domainExpiryMode: {
       type: String,
-      enum: ['enabled', 'disabled'],
-      default: 'disabled',
+      enum: ["enabled", "disabled"],
+      default: "disabled",
     },
     domainExpiryAt: {
       type: Date,
@@ -166,8 +168,8 @@ const monitorSchema = new Schema<IMonitor>(
     },
     sslExpiryMode: {
       type: String,
-      enum: ['enabled', 'disabled'],
-      default: 'disabled',
+      enum: ["enabled", "disabled"],
+      default: "disabled",
     },
     sslExpiryAt: {
       type: Date,
@@ -188,18 +190,18 @@ const monitorSchema = new Schema<IMonitor>(
     responseValidation: {
       field: {
         type: String,
-        enum: ['status'],
+        enum: ["status"],
       },
       mode: {
         type: String,
-        enum: ['value', 'type'],
+        enum: ["value", "type"],
       },
       expectedValue: {
         type: String,
       },
       expectedType: {
         type: String,
-        enum: ['string', 'boolean', 'number'],
+        enum: ["string", "boolean", "number"],
       },
     },
     port: {
@@ -210,7 +212,7 @@ const monitorSchema = new Schema<IMonitor>(
     },
     lastStatus: {
       type: String,
-      enum: ['up', 'down'],
+      enum: ["up", "down"],
     },
     uptime: {
       type: Number,
@@ -237,7 +239,7 @@ const monitorSchema = new Schema<IMonitor>(
   },
   {
     timestamps: true,
-  }
+  },
 );
 
 // Index pour optimiser les requêtes
@@ -245,4 +247,4 @@ monitorSchema.index({ owner: 1 });
 monitorSchema.index({ sharedWith: 1 });
 monitorSchema.index({ status: 1 });
 
-export default mongoose.model<IMonitor>('Monitor', monitorSchema);
+export default mongoose.model<IMonitor>("Monitor", monitorSchema);

@@ -1,11 +1,12 @@
 import { Router, Response } from "express";
 import { body, validationResult } from "express-validator";
 import crypto from "crypto";
-import User from "../models/User";
+import Utilisateur from "../models/Utilisateur";
 import Invitation, { type InvitationRole } from "../models/Invitation";
 import Monitor from "../models/Monitor";
 import emailService from "../services/emailService";
 import { authenticate, isAdmin, AuthRequest } from "../middleware/auth";
+import { canAssignRole } from "../utils/roles";
 
 const router = Router();
 
@@ -76,10 +77,11 @@ router.post(
       };
       const role = normalizeInvitationRole(req.body.role);
 
-      if (role === "admin" && req.user!.role !== "super_admin") {
+      // Check if user can assign the requested role using inheritance
+      if (!canAssignRole(req.user!.role, role)) {
         res.status(403).json({
           error:
-            "Acces refuse. Seul le super administrateur peut inviter un administrateur.",
+            "Acces refuse. Vous n'avez pas les permissions necessaires pour inviter avec ce role.",
         });
         return;
       }
@@ -101,17 +103,15 @@ router.post(
         });
 
         if (allowedMonitorCount !== uniqueMonitorIds.length) {
-          res
-            .status(400)
-            .json({
-              error: "Un ou plusieurs monitors selectionnes sont invalides",
-            });
+          res.status(400).json({
+            error: "Un ou plusieurs monitors selectionnes sont invalides",
+          });
           return;
         }
       }
 
       // Vérifier si l'utilisateur existe déjà
-      const existingUser = await User.findOne({ email });
+      const existingUser = await Utilisateur.findOne({ email });
       if (existingUser) {
         res
           .status(400)
@@ -331,10 +331,12 @@ router.delete(
         return;
       }
 
-      if (invitation.role === "admin" && req.user!.role !== "super_admin") {
+      // Check if user can manage invitations with this role using inheritance
+      const invitationRole = (invitation.role || "user") as "admin" | "user";
+      if (!canAssignRole(req.user!.role, invitationRole)) {
         res.status(403).json({
           error:
-            "Acces refuse. Seul le super administrateur peut supprimer une invitation administrateur.",
+            "Acces refuse. Vous n'avez pas les permissions necessaires pour supprimer cette invitation.",
         });
         return;
       }
@@ -374,10 +376,12 @@ router.post(
         return;
       }
 
-      if (invitation.role === "admin" && req.user!.role !== "super_admin") {
+      // Check if user can manage invitations with this role using inheritance
+      const invitationRole = (invitation.role || "user") as "admin" | "user";
+      if (!canAssignRole(req.user!.role, invitationRole)) {
         res.status(403).json({
           error:
-            "Acces refuse. Seul le super administrateur peut renvoyer une invitation administrateur.",
+            "Acces refuse. Vous n'avez pas les permissions necessaires pour renvoyer cette invitation.",
         });
         return;
       }

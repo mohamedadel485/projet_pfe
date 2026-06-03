@@ -1,10 +1,10 @@
-import mongoose, { Document, Schema } from 'mongoose';
+import mongoose, { Document, Schema } from "mongoose";
 
 export interface IDemandeCompte extends Document {
   name: string;
   email: string;
   message?: string;
-  status: 'pending' | 'approved' | 'rejected';
+  status: "pending" | "approved" | "rejected";
   createdAt: Date;
   updatedAt: Date;
   approvedAt?: Date;
@@ -33,8 +33,8 @@ const demandeCompteSchema = new Schema<IDemandeCompte>(
     },
     status: {
       type: String,
-      enum: ['pending', 'approved', 'rejected'],
-      default: 'pending',
+      enum: ["pending", "approved", "rejected"],
+      default: "pending",
     },
     approvedAt: {
       type: Date,
@@ -42,13 +42,13 @@ const demandeCompteSchema = new Schema<IDemandeCompte>(
     },
     approvedBy: {
       type: Schema.Types.ObjectId,
-      ref: 'User',
+      ref: "Utilisateur",
       required: false,
     },
   },
   {
     timestamps: true,
-  }
+  },
 );
 
 // Index pour optimiser les requêtes
@@ -60,7 +60,7 @@ demandeCompteSchema.methods.accepter = async function (
   this: IDemandeCompte,
   approvedBy?: mongoose.Types.ObjectId,
 ): Promise<IDemandeCompte> {
-  this.status = 'approved';
+  this.status = "approved";
   this.approvedAt = new Date();
   if (approvedBy) {
     this.approvedBy = approvedBy;
@@ -72,13 +72,13 @@ demandeCompteSchema.methods.accepter = async function (
 demandeCompteSchema.methods.refuser = async function (
   this: IDemandeCompte,
 ): Promise<IDemandeCompte> {
-  this.status = 'rejected';
+  this.status = "rejected";
   await this.save();
   return this;
 };
 
 export default mongoose.model<IDemandeCompte>(
-  'DemandeCompte',
+  "DemandeCompte",
   demandeCompteSchema,
-  'accountrequests'
+  "accountrequests",
 );

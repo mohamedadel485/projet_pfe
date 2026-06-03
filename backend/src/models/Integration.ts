@@ -1,7 +1,7 @@
-import mongoose, { Document, Schema } from 'mongoose';
+import mongoose, { Document, Schema } from "mongoose";
 
-export type IntegrationType = 'webhook' | 'slack' | 'telegram';
-export type IntegrationEvent = 'up' | 'down';
+export type IntegrationType = "webhook" | "slack" | "telegram";
+export type IntegrationEvent = "up" | "down";
 
 export interface IIntegration extends Document {
   owner: mongoose.Types.ObjectId;
@@ -21,14 +21,14 @@ const integrationSchema = new Schema<IIntegration>(
   {
     owner: {
       type: Schema.Types.ObjectId,
-      ref: 'User',
+      ref: "Utilisateur",
       required: true,
       index: true,
     },
     type: {
       type: String,
-      enum: ['webhook', 'slack', 'telegram'],
-      default: 'webhook',
+      enum: ["webhook", "slack", "telegram"],
+      default: "webhook",
       required: true,
     },
     endpointUrl: {
@@ -43,8 +43,8 @@ const integrationSchema = new Schema<IIntegration>(
     },
     events: {
       type: [String],
-      enum: ['up', 'down'],
-      default: ['up', 'down'],
+      enum: ["up", "down"],
+      default: ["up", "down"],
     },
     isActive: {
       type: Boolean,
@@ -57,42 +57,50 @@ const integrationSchema = new Schema<IIntegration>(
   },
   {
     timestamps: true,
-  }
+  },
 );
 
 integrationSchema.index({ owner: 1, type: 1, isActive: 1 });
 
-integrationSchema.virtual('integrationType').get(function (
+integrationSchema.virtual("integrationType").get(function (
   this: IIntegration,
 ): IntegrationType {
   return this.type;
 });
 
-integrationSchema.virtual('integrationType').set(function (
+integrationSchema.virtual("integrationType").set(function (
   this: IIntegration,
   value: unknown,
 ): void {
-  if (typeof value === 'string' && ['webhook', 'slack', 'telegram'].includes(value.trim())) {
+  if (
+    typeof value === "string" &&
+    ["webhook", "slack", "telegram"].includes(value.trim())
+  ) {
     this.type = value.trim() as IntegrationType;
   }
 });
 
-integrationSchema.virtual('eventType').get(function (this: IIntegration): string {
+integrationSchema.virtual("eventType").get(function (
+  this: IIntegration,
+): string {
   if (this.events.length === 0) {
-    return '';
+    return "";
   }
-  return this.events.join(',');
+  return this.events.join(",");
 });
 
-integrationSchema.virtual('eventType').set(function (
+integrationSchema.virtual("eventType").set(function (
   this: IIntegration,
   value: unknown,
 ): void {
-  if (typeof value === 'string') {
+  if (typeof value === "string") {
     const normalized = value
-      .split(',')
+      .split(",")
       .map((event) => event.trim())
-      .filter((event): event is IntegrationEvent => event === 'up' || event === 'down');
+      .filter(
+        (event): event is IntegrationEvent =>
+          event === "up" || event === "down",
+      );
     if (normalized.length > 0) {
       this.events = normalized;
     }
@@ -101,7 +109,7 @@ integrationSchema.virtual('eventType').set(function (
 
   if (Array.isArray(value)) {
     const normalized = value.filter(
-      (event): event is IntegrationEvent => event === 'up' || event === 'down',
+      (event): event is IntegrationEvent => event === "up" || event === "down",
     );
     if (normalized.length > 0) {
       this.events = normalized;
@@ -109,7 +117,7 @@ integrationSchema.virtual('eventType').set(function (
   }
 });
 
-integrationSchema.set('toJSON', { virtuals: true });
-integrationSchema.set('toObject', { virtuals: true });
+integrationSchema.set("toJSON", { virtuals: true });
+integrationSchema.set("toObject", { virtuals: true });
 
-export default mongoose.model<IIntegration>('Integration', integrationSchema);
+export default mongoose.model<IIntegration>("Integration", integrationSchema);

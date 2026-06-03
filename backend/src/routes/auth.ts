@@ -3,7 +3,7 @@ import { body, validationResult } from "express-validator";
 import crypto from "crypto";
 import jwt from "jsonwebtoken";
 import type { SignOptions } from "jsonwebtoken";
-import User from "../models/User";
+import Utilisateur from "../models/Utilisateur";
 import Invitation from "../models/Invitation";
 import DemandeCompte from "../models/DemandeCompte";
 import Tokens, { type TokenType } from "../models/Tokens";
@@ -132,7 +132,10 @@ const deleteTokenRecord = async (
     }
     await Tokens.deleteMany(query);
   } catch (error) {
-    console.warn(`Impossible de supprimer le jeton ${type ?? "unknown"}:`, error);
+    console.warn(
+      `Impossible de supprimer le jeton ${type ?? "unknown"}:`,
+      error,
+    );
   }
 };
 
@@ -215,14 +218,14 @@ router.post(
       const rememberMe = parseRememberMe(rawRememberMe);
 
       // Vérifier si un utilisateur existe déjà
-      const existingUser = await User.findOne({ email });
+      const existingUser = await Utilisateur.findOne({ email });
       if (existingUser) {
         res.status(400).json({ error: "Cet email est déjà utilisé" });
         return;
       }
 
       // Verifier si c'est le premier utilisateur (sera super admin)
-      const userCount = await User.countDocuments();
+      const userCount = await Utilisateur.countDocuments();
       const role = userCount === 0 ? "super_admin" : "user";
 
       // Si ce n'est pas le premier utilisateur, refuser (seules les invitations sont autorisées)
@@ -236,7 +239,7 @@ router.post(
 
       const user =
         existingUser ??
-        new User({
+        new Utilisateur({
           email,
           password,
           name,
@@ -314,7 +317,7 @@ router.post(
       };
       const rememberMe = parseRememberMe(rawRememberMe);
 
-      const user = await User.findOne({ email });
+      const user = await Utilisateur.findOne({ email });
       if (!user) {
         res.status(401).json({ error: "Email introuvable" });
         return;
@@ -427,7 +430,7 @@ router.post(
       const rememberMe = parseRememberMe(rawRememberMe);
 
       const normalizedEmail = email.trim().toLowerCase();
-      const user = await User.findOne({ email: normalizedEmail });
+      const user = await Utilisateur.findOne({ email: normalizedEmail });
 
       if (!user || !user.isActive) {
         res.status(400).json({ error: "Code OTP invalide ou expire" });
@@ -443,7 +446,11 @@ router.post(
         user.loginOtpCode = undefined;
         user.loginOtpExpires = undefined;
         await user.save();
-        void deleteTokenRecord(code.trim(), "verify_email", user._id.toString());
+        void deleteTokenRecord(
+          code.trim(),
+          "verify_email",
+          user._id.toString(),
+        );
         res.status(400).json({ error: "Code OTP invalide ou expire" });
         return;
       }
@@ -515,7 +522,7 @@ router.post(
 
       const { email } = req.body as { email: string };
       const normalizedEmail = email.trim().toLowerCase();
-      const user = await User.findOne({ email: normalizedEmail });
+      const user = await Utilisateur.findOne({ email: normalizedEmail });
 
       // Reponse volontairement generique pour ne pas exposer les comptes existants.
       if (!user || !user.isActive) {
@@ -597,7 +604,7 @@ router.post(
       const normalizedEmail = String(email ?? "")
         .trim()
         .toLowerCase();
-      const user = await User.findOne({ email: normalizedEmail });
+      const user = await Utilisateur.findOne({ email: normalizedEmail });
 
       res.json({ exists: !!user });
     } catch (error: any) {
@@ -653,7 +660,7 @@ router.post(
       };
 
       const normalizedEmail = email.trim().toLowerCase();
-      const user = await User.findOne({ email: normalizedEmail });
+      const user = await Utilisateur.findOne({ email: normalizedEmail });
       if (!user || !user.isActive) {
         res.status(400).json({ error: "Code invalide ou expire" });
         return;
@@ -746,7 +753,7 @@ router.post(
         newPassword: string;
       };
 
-      const user = await User.findById(req.user!._id);
+      const user = await Utilisateur.findById(req.user!._id);
       if (!user || !user.isActive) {
         res.status(404).json({ error: "Utilisateur non trouvé" });
         return;
@@ -841,7 +848,9 @@ router.post(
       }
 
       // Vérifier si l'utilisateur existe déjà
-      const existingUser = await User.findOne({ email: invitation.email });
+      const existingUser = await Utilisateur.findOne({
+        email: invitation.email,
+      });
       if (existingUser) {
         res.status(400).json({ error: "Un compte existe déjà avec cet email" });
         return;
@@ -854,7 +863,7 @@ router.post(
           : fallbackName;
 
       // Créer l'utilisateur
-      const user = new User({
+      const user = new Utilisateur({
         email: invitation.email,
         password,
         name: invitedName,
@@ -984,7 +993,9 @@ router.post(
         typeof message === "string" ? message.trim() : undefined;
 
       // Si le compte existe deja, on conserve quand meme la demande pour le suivi admin.
-      const existingUser = await User.findOne({ email: normalizedEmail });
+      const existingUser = await Utilisateur.findOne({
+        email: normalizedEmail,
+      });
 
       // Verifier si une demande en attente existe deja pour cet email
       const existingPendingRequest = await DemandeCompte.findOne({
@@ -1011,7 +1022,7 @@ router.post(
       await accountRequest.save();
 
       // Envoyer une notification au super admin sans bloquer l'enregistrement.
-      const superAdmins = await User.find({
+      const superAdmins = await Utilisateur.find({
         role: "super_admin",
         isActive: true,
       })
@@ -1201,7 +1212,7 @@ router.post(
       }
 
       // VÃ©rifier si l'utilisateur existe dÃ©jÃ
-      const existingUser = await User.findOne({ email: request.email });
+      const existingUser = await Utilisateur.findOne({ email: request.email });
       if (existingUser && !existingUser.isActive) {
         existingUser.isActive = true;
       }
@@ -1209,7 +1220,7 @@ router.post(
       // CrÃ©er l'utilisateur uniquement s'il n'existe pas encore
       const user =
         existingUser ??
-        new User({
+        new Utilisateur({
           email: request.email,
           name: request.name,
           password: tempPassword,

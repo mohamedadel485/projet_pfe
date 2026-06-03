@@ -3,9 +3,9 @@ import multer from "multer";
 import fs from "fs";
 import path from "path";
 import { body, validationResult } from "express-validator";
-import User from "../models/User";
+import Utilisateur from "../models/Utilisateur";
 import { authenticate, isAdmin, AuthRequest } from "../middleware/auth";
-import { isUserRole } from "../utils/roles";
+import { isUserRole, canManageUser, canAssignRole } from "../utils/roles";
 
 const router = Router();
 
@@ -68,7 +68,7 @@ router.get(
         query.isActive = isActive === "true";
       }
 
-      const users = await User.find(query)
+      const users = await Utilisateur.find(query)
         .select("-password")
         .populate("invitedBy", "name email")
         .sort({ createdAt: -1 });
@@ -95,7 +95,7 @@ router.get(
     try {
       const { id } = req.params;
 
-      const user = await User.findById(id)
+      const user = await Utilisateur.findById(id)
         .select("-password")
         .populate("invitedBy", "name email");
 
@@ -137,7 +137,7 @@ router.put(
       const userId = req.user!._id;
       const { name, email } = req.body;
 
-      const user = await User.findById(userId);
+      const user = await Utilisateur.findById(userId);
       if (!user) {
         res.status(404).json({ error: "Utilisateur non trouvé" });
         return;
@@ -145,7 +145,7 @@ router.put(
 
       // Vérifier si l'email est déjà utilisé par un autre compte
       if (email && email !== user.email) {
-        const existingUser = await User.findOne({ email });
+        const existingUser = await Utilisateur.findOne({ email });
         if (existingUser) {
           res.status(400).json({ error: "Cet email est déjà utilisé" });
           return;
@@ -199,25 +199,26 @@ router.put(
       const { id } = req.params;
       const { name, email, role, isActive } = req.body;
 
-      const user = await User.findById(id);
+      const user = await Utilisateur.findById(id);
       if (!user) {
         res.status(404).json({ error: "Utilisateur non trouvé" });
         return;
       }
 
-      // Seul le super admin peut gerer les comptes admin.
-      if (user.role === "admin" && req.user!.role !== "super_admin") {
+      // Use role inheritance to check if user can manage target user
+      if (!canManageUser(req.user!.role, user.role)) {
         res.status(403).json({
           error:
-            "Acces refuse. Seul le super administrateur peut modifier un compte administrateur.",
+            "Acces refuse. Vous n'avez pas les permissions necessaires pour modifier cet utilisateur.",
         });
         return;
       }
 
-      if (role === "admin" && req.user!.role !== "super_admin") {
+      // Check if user can assign the requested role
+      if (role && !canAssignRole(req.user!.role, role)) {
         res.status(403).json({
           error:
-            "Acces refuse. Seul le super administrateur peut attribuer le role administrateur.",
+            "Acces refuse. Vous n'avez pas les permissions necessaires pour attribuer ce role.",
         });
         return;
       }
@@ -235,7 +236,7 @@ router.put(
 
       // Vérifier si l'email est déjà utilisé
       if (email && email !== user.email) {
-        const existingUser = await User.findOne({ email });
+        const existingUser = await Utilisateur.findOne({ email });
         if (existingUser) {
           res.status(400).json({ error: "Cet email est déjà utilisé" });
           return;
@@ -299,22 +300,22 @@ router.delete(
     try {
       const { id } = req.params;
 
-      const user = await User.findById(id);
+      const user = await Utilisateur.findById(id);
       if (!user) {
         res.status(404).json({ error: "Utilisateur non trouvé" });
         return;
       }
 
-      // Seul le super admin peut supprimer un compte admin.
-      if (user.role === "admin" && req.user!.role !== "super_admin") {
+      // Use role inheritance to check if user can delete target user
+      if (!canManageUser(req.user!.role, user.role)) {
         res.status(403).json({
           error:
-            "Acces refuse. Seul le super administrateur peut supprimer un compte administrateur.",
+            "Acces refuse. Vous n'avez pas les permissions necessaires pour supprimer cet utilisateur.",
         });
         return;
       }
 
-      // Empêcher l'admin de se supprimer lui-même
+      // Prevent deletion of super_admin
       if (user.role === "super_admin") {
         res.status(403).json({
           error: "Le super administrateur ne peut pas etre supprime.",
@@ -404,24 +405,24 @@ router.get(
         baseQuery.createdAt = createdAt;
       }
 
-      const totalUsers = await User.countDocuments(baseQuery);
-      const activeUsers = await User.countDocuments({
+      const totalUsers = await Utilisateur.countDocuments(baseQuery);
+      const activeUsers = await Utilisateur.countDocuments({
         ...baseQuery,
         isActive: true,
       });
-      const inactiveUsers = await User.countDocuments({
+      const inactiveUsers = await Utilisateur.countDocuments({
         ...baseQuery,
         isActive: false,
       });
-      const superAdminUsers = await User.countDocuments({
+      const superAdminUsers = await Utilisateur.countDocuments({
         ...baseQuery,
         role: "super_admin",
       });
-      const adminUsers = await User.countDocuments({
+      const adminUsers = await Utilisateur.countDocuments({
         ...baseQuery,
         role: "admin",
       });
-      const regularUsers = await User.countDocuments({
+      const regularUsers = await Utilisateur.countDocuments({
         ...baseQuery,
         role: "user",
       });
@@ -468,7 +469,7 @@ router.post(
       }
 
       const userId = req.user!._id;
-      const user = await User.findById(userId);
+      const user = await Utilisateur.findById(userId);
       if (!user) {
         // Remove uploaded file if user not found
         try {

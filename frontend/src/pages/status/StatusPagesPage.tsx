@@ -425,3 +425,5 @@ function StatusPagesPage({
     </section>
   );
 }
+
+export default StatusPagesPage;

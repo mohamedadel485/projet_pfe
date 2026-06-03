@@ -1,6 +1,11 @@
-import mongoose, { Document, Schema } from 'mongoose';
+import mongoose, { Document, Schema } from "mongoose";
 
-export type MaintenanceStatus = 'scheduled' | 'ongoing' | 'paused' | 'completed' | 'cancelled';
+export type MaintenanceStatus =
+  | "scheduled"
+  | "ongoing"
+  | "paused"
+  | "completed"
+  | "cancelled";
 
 export interface IMaintenance extends Document {
   name: string;
@@ -28,22 +33,22 @@ const maintenanceSchema = new Schema<IMaintenance>(
     },
     reason: {
       type: String,
-      default: '',
+      default: "",
       trim: true,
     },
     status: {
       type: String,
-      enum: ['scheduled', 'ongoing', 'paused', 'completed', 'cancelled'],
-      default: 'scheduled',
+      enum: ["scheduled", "ongoing", "paused", "completed", "cancelled"],
+      default: "scheduled",
     },
     monitor: {
       type: Schema.Types.ObjectId,
-      ref: 'Monitor',
+      ref: "Monitor",
       required: true,
     },
     owner: {
       type: Schema.Types.ObjectId,
-      ref: 'User',
+      ref: "Utilisateur",
       required: true,
     },
     startAt: {
@@ -58,64 +63,67 @@ const maintenanceSchema = new Schema<IMaintenance>(
           if (!(value instanceof Date) || Number.isNaN(value.getTime())) {
             return false;
           }
-          if (!(this.startAt instanceof Date) || Number.isNaN(this.startAt.getTime())) {
+          if (
+            !(this.startAt instanceof Date) ||
+            Number.isNaN(this.startAt.getTime())
+          ) {
             return false;
           }
           return value.getTime() > this.startAt.getTime();
         },
-        message: 'La date de fin doit être après la date de début',
+        message: "La date de fin doit être après la date de début",
       },
     },
   },
   {
     timestamps: true,
-  }
+  },
 );
 
 maintenanceSchema.index({ owner: 1, createdAt: -1 });
 maintenanceSchema.index({ monitor: 1, startAt: 1, endAt: 1 });
 maintenanceSchema.index({ status: 1, startAt: 1, endAt: 1 });
 
-maintenanceSchema.virtual('nom').get(function (this: IMaintenance): string {
+maintenanceSchema.virtual("nom").get(function (this: IMaintenance): string {
   return this.name;
 });
 
-maintenanceSchema.virtual('nom').set(function (
+maintenanceSchema.virtual("nom").set(function (
   this: IMaintenance,
   value: unknown,
 ): void {
-  if (typeof value === 'string') {
+  if (typeof value === "string") {
     this.name = value;
   }
 });
 
-maintenanceSchema.virtual('raison').get(function (this: IMaintenance): string {
+maintenanceSchema.virtual("raison").get(function (this: IMaintenance): string {
   return this.reason;
 });
 
-maintenanceSchema.virtual('raison').set(function (
+maintenanceSchema.virtual("raison").set(function (
   this: IMaintenance,
   value: unknown,
 ): void {
-  if (typeof value === 'string') {
+  if (typeof value === "string") {
     this.reason = value;
   }
 });
 
-maintenanceSchema.virtual('statutMaintenance').get(function (
+maintenanceSchema.virtual("statutMaintenance").get(function (
   this: IMaintenance,
 ): MaintenanceStatus {
   return this.status;
 });
 
-maintenanceSchema.virtual('statutMaintenance').set(function (
+maintenanceSchema.virtual("statutMaintenance").set(function (
   this: IMaintenance,
   value: unknown,
 ): void {
-  if (typeof value === 'string') {
+  if (typeof value === "string") {
     const normalized = value.trim().toLowerCase();
     if (
-      ['scheduled', 'ongoing', 'paused', 'completed', 'cancelled'].includes(
+      ["scheduled", "ongoing", "paused", "completed", "cancelled"].includes(
         normalized,
       )
     ) {
@@ -124,11 +132,11 @@ maintenanceSchema.virtual('statutMaintenance').set(function (
   }
 });
 
-maintenanceSchema.virtual('dateDebut').get(function (this: IMaintenance): Date {
+maintenanceSchema.virtual("dateDebut").get(function (this: IMaintenance): Date {
   return this.startAt;
 });
 
-maintenanceSchema.virtual('dateDebut').set(function (
+maintenanceSchema.virtual("dateDebut").set(function (
   this: IMaintenance,
   value: unknown,
 ): void {
@@ -136,7 +144,7 @@ maintenanceSchema.virtual('dateDebut').set(function (
     this.startAt = value;
     return;
   }
-  if (typeof value === 'string' || typeof value === 'number') {
+  if (typeof value === "string" || typeof value === "number") {
     const parsed = new Date(value);
     if (!Number.isNaN(parsed.getTime())) {
       this.startAt = parsed;
@@ -144,11 +152,11 @@ maintenanceSchema.virtual('dateDebut').set(function (
   }
 });
 
-maintenanceSchema.virtual('dateFin').get(function (this: IMaintenance): Date {
+maintenanceSchema.virtual("dateFin").get(function (this: IMaintenance): Date {
   return this.endAt;
 });
 
-maintenanceSchema.virtual('dateFin').set(function (
+maintenanceSchema.virtual("dateFin").set(function (
   this: IMaintenance,
   value: unknown,
 ): void {
@@ -156,7 +164,7 @@ maintenanceSchema.virtual('dateFin').set(function (
     this.endAt = value;
     return;
   }
-  if (typeof value === 'string' || typeof value === 'number') {
+  if (typeof value === "string" || typeof value === "number") {
     const parsed = new Date(value);
     if (!Number.isNaN(parsed.getTime())) {
       this.endAt = parsed;
@@ -164,7 +172,7 @@ maintenanceSchema.virtual('dateFin').set(function (
   }
 });
 
-maintenanceSchema.set('toJSON', { virtuals: true });
-maintenanceSchema.set('toObject', { virtuals: true });
+maintenanceSchema.set("toJSON", { virtuals: true });
+maintenanceSchema.set("toObject", { virtuals: true });
 
-export default mongoose.model<IMaintenance>('Maintenance', maintenanceSchema);
+export default mongoose.model<IMaintenance>("Maintenance", maintenanceSchema);

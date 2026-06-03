@@ -1,6 +1,6 @@
 import { Router, Response, NextFunction } from "express";
 import { body, validationResult } from "express-validator";
-import User from "../models/User";
+import Utilisateur from "../models/Utilisateur";
 import Monitor from "../models/Monitor";
 import MonitorLog from "../models/MonitorLog";
 import Incident from "../models/Incident";
@@ -29,7 +29,10 @@ const normalizeMonitorPayload = (
     body.type = body.protocole;
   }
 
-  if (typeof body.typeHTTP === "string" && typeof body.httpMethod !== "string") {
+  if (
+    typeof body.typeHTTP === "string" &&
+    typeof body.httpMethod !== "string"
+  ) {
     body.httpMethod = body.typeHTTP.toUpperCase();
   }
 
@@ -118,12 +121,10 @@ router.post(
             responseValidation.expectedValue ?? "",
           ).trim();
           if (expectedValue === "") {
-            res
-              .status(400)
-              .json({
-                error:
-                  "responseValidation.expectedValue est requis pour le mode value",
-              });
+            res.status(400).json({
+              error:
+                "responseValidation.expectedValue est requis pour le mode value",
+            });
             return;
           }
           responseValidation.mode = "value";
@@ -134,12 +135,10 @@ router.post(
             .trim()
             .toLowerCase();
           if (!["string", "boolean", "number"].includes(expectedType)) {
-            res
-              .status(400)
-              .json({
-                error:
-                  "responseValidation.expectedType invalide pour le mode type",
-              });
+            res.status(400).json({
+              error:
+                "responseValidation.expectedType invalide pour le mode type",
+            });
             return;
           }
           responseValidation.mode = "type";
@@ -159,7 +158,10 @@ router.post(
         const firstResult = await monitorService.checkMonitor(monitor);
         await monitorService.logCheckResult(monitor, firstResult);
       } catch (error) {
-        console.warn("Erreur verification immediate (creation monitor):", error);
+        console.warn(
+          "Erreur verification immediate (creation monitor):",
+          error,
+        );
       }
 
       if (
@@ -287,10 +289,7 @@ router.get(
           .limit(2500),
         Incident.find({
           monitor: id,
-          $or: [
-            { startedAt: { $gte: lookbackStart } },
-            { status: "ongoing" },
-          ],
+          $or: [{ startedAt: { $gte: lookbackStart } }, { status: "ongoing" }],
         })
           .sort({ startedAt: -1 })
           .limit(100),
@@ -374,11 +373,9 @@ router.put(
       });
 
       if (!monitor) {
-        res
-          .status(404)
-          .json({
-            error: "Monitor non trouvé ou vous n'êtes pas le propriétaire",
-          });
+        res.status(404).json({
+          error: "Monitor non trouvé ou vous n'êtes pas le propriétaire",
+        });
         return;
       }
 
@@ -410,12 +407,10 @@ router.put(
             responseValidation.expectedValue ?? "",
           ).trim();
           if (expectedValue === "") {
-            res
-              .status(400)
-              .json({
-                error:
-                  "responseValidation.expectedValue est requis pour le mode value",
-              });
+            res.status(400).json({
+              error:
+                "responseValidation.expectedValue est requis pour le mode value",
+            });
             return;
           }
           responseValidation.mode = "value";
@@ -426,12 +421,10 @@ router.put(
             .trim()
             .toLowerCase();
           if (!["string", "boolean", "number"].includes(expectedType)) {
-            res
-              .status(400)
-              .json({
-                error:
-                  "responseValidation.expectedType invalide pour le mode type",
-              });
+            res.status(400).json({
+              error:
+                "responseValidation.expectedType invalide pour le mode type",
+            });
             return;
           }
           responseValidation.mode = "type";
@@ -489,11 +482,9 @@ router.delete(
       });
 
       if (!monitor) {
-        res
-          .status(404)
-          .json({
-            error: "Monitor non trouvé ou vous n'êtes pas le propriétaire",
-          });
+        res.status(404).json({
+          error: "Monitor non trouvé ou vous n'êtes pas le propriétaire",
+        });
         return;
       }
 
@@ -674,19 +665,24 @@ router.post(
         events: "down",
       });
 
-      console.log(`   Found ${integrations.length} integrations for DOWN event`);
+      console.log(
+        `   Found ${integrations.length} integrations for DOWN event`,
+      );
       integrations.forEach((i: any) => {
-        console.log(`   - ${i.type} (${i.customValue || i.endpointUrl}) - events: ${i.events}`);
+        console.log(
+          `   - ${i.type} (${i.customValue || i.endpointUrl}) - events: ${i.events}`,
+        );
       });
 
       // Force une alerte DOWN avec status "up" -> "down"
       await integrationService.notifyMonitorStatusChange({
         monitor,
-        previousStatus: "up",  // Toujours "up" pour créer un changement valide
+        previousStatus: "up", // Toujours "up" pour créer un changement valide
         result: {
           status: "down",
           responseTime: 0,
-          errorMessage: "Test alert - simulated downtime for integration testing",
+          errorMessage:
+            "Test alert - simulated downtime for integration testing",
         },
       });
 
@@ -697,9 +693,9 @@ router.post(
       });
     } catch (error: any) {
       console.error("Erreur envoi alerte test:", error);
-      res
-        .status(500)
-        .json({ error: `Erreur lors de l'envoi de l'alerte test: ${error.message}` });
+      res.status(500).json({
+        error: `Erreur lors de l'envoi de l'alerte test: ${error.message}`,
+      });
     }
   },
 );
@@ -817,7 +813,7 @@ router.post(
         return;
       }
 
-      const targetUser = await User.findById(normalizedUserId).select(
+      const targetUser = await Utilisateur.findById(normalizedUserId).select(
         "name email isActive",
       );
       if (!targetUser) {

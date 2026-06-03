@@ -1,4 +1,4 @@
-import mongoose, { Document, Schema } from 'mongoose';
+import mongoose, { Document, Schema } from "mongoose";
 
 export interface IStatusPage extends Document {
   statusPageId: string;
@@ -9,8 +9,8 @@ export interface IStatusPage extends Document {
   passwordHash?: string;
   customDomain?: string;
   logoName?: string;
-  density?: 'wide' | 'compact';
-  alignment?: 'left' | 'center';
+  density?: "wide" | "compact";
+  alignment?: "left" | "center";
   nom?: string;
   moniteurs?: string[];
   statut?: string;
@@ -32,7 +32,7 @@ const statusPageSchema = new Schema<IStatusPage>(
     },
     owner: {
       type: Schema.Types.ObjectId,
-      ref: 'User',
+      ref: "Utilisateur",
       required: true,
       index: true,
     },
@@ -65,20 +65,20 @@ const statusPageSchema = new Schema<IStatusPage>(
     },
     density: {
       type: String,
-      enum: ['wide', 'compact'],
-      default: 'wide',
+      enum: ["wide", "compact"],
+      default: "wide",
     },
     alignment: {
       type: String,
-      enum: ['left', 'center'],
-      default: 'left',
+      enum: ["left", "center"],
+      default: "left",
     },
   },
   {
     timestamps: true,
-  }
+  },
 );
 
 statusPageSchema.index({ owner: 1, updatedAt: -1 });
 
-export default mongoose.model<IStatusPage>('StatusPage', statusPageSchema);
+export default mongoose.model<IStatusPage>("StatusPage", statusPageSchema);

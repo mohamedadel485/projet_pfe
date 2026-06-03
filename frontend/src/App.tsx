@@ -99,7 +99,7 @@ import {
   parseUptimePercent,
   type HistoryBarState as SharedHistoryBarState,
 } from "./lib/monitorHistory";
-import { isAdminRole, isUserRole } from "./lib/roles";
+import { isAdminRole, isUserRole, canAssignRole, canManageUser } from "./lib/roles";
 import {
   AlertTriangle,
   ArrowUpDown,
@@ -2022,9 +2022,12 @@ function App() {
       if (!adminUser || !isCurrentUserAdmin) {
         return { error: "Access restricted to admins." };
       }
-      if (role === "admin" && adminUser.role !== "super_admin") {
+      // Use role inheritance to check if user can assign the requested role
+      // Convert "member" to "user" for the backend
+      const normalizedRole = role === "member" ? "user" : role;
+      if (!canAssignRole(adminUser.role, normalizedRole)) {
         return {
-          error: "Only the super admin can invite another admin.",
+          error: "You do not have permission to invite with this role.",
         };
       }
 
@@ -2225,8 +2228,9 @@ function App() {
       if (targetUser?.role === "super_admin") {
         return "The super admin cannot be removed.";
       }
-      if (targetUser?.role === "admin" && currentUser.role !== "super_admin") {
-        return "Only the super admin can remove an admin.";
+      // Use role inheritance to check if user can manage target user
+      if (targetUser && !canManageUser(currentUser.role, targetUser.role)) {
+        return "You do not have permission to remove this user.";
       }
       if (userId === currentUser.id) {
         return "You cannot remove yourself.";
@@ -2266,11 +2270,13 @@ function App() {
       if (targetUser?.role === "super_admin") {
         return "The super admin role cannot be changed.";
       }
-      if (targetUser?.role === "admin" && currentUser.role !== "super_admin") {
-        return "Only the super admin can modify an admin.";
+      // Use role inheritance to check if user can manage target user
+      if (targetUser && !canManageUser(currentUser.role, targetUser.role)) {
+        return "You do not have permission to modify this user.";
       }
-      if (nextRole === "admin" && currentUser.role !== "super_admin") {
-        return "Only the super admin can assign the admin role.";
+      // Use role inheritance to check if user can assign the requested role
+      if (!canAssignRole(currentUser.role, nextRole)) {
+        return "You do not have permission to assign this role.";
       }
       if (userId === currentUser.id) {
         return "You cannot change your own role.";
@@ -2310,8 +2316,9 @@ function App() {
       if (targetUser?.role === "super_admin" && nextIsActive === false) {
         return "The super admin cannot be deactivated.";
       }
-      if (targetUser?.role === "admin" && currentUser.role !== "super_admin") {
-        return "Only the super admin can change an admin status.";
+      // Use role inheritance to check if user can manage target user
+      if (targetUser && !canManageUser(currentUser.role, targetUser.role)) {
+        return "You do not have permission to change this user's status.";
       }
       if (userId === currentUser.id && nextIsActive === false) {
         return "You cannot deactivate yourself.";
@@ -2359,14 +2366,16 @@ function App() {
       if (targetUser?.role === "super_admin") {
         return "Le super administrateur ne peut pas etre modifie.";
       }
-      if (targetUser?.role === "admin" && currentUser.role !== "super_admin") {
-        return "Seul le super administrateur peut modifier un administrateur.";
+      // Use role inheritance to check if user can manage target user
+      if (targetUser && !canManageUser(currentUser.role, targetUser.role)) {
+        return "Vous n'avez pas la permission de modifier cet utilisateur.";
       }
       if (userId === currentUser.id) {
         return "Vous ne pouvez pas modifier votre propre compte ici.";
       }
-      if (updates.role === "admin" && currentUser.role !== "super_admin") {
-        return "Seul le super administrateur peut attribuer le role admin.";
+      // Use role inheritance to check if user can assign the requested role
+      if (updates.role && !canAssignRole(currentUser.role, updates.role)) {
+        return "Vous n'avez pas la permission d'attribuer ce role.";
       }
 
       const payload: Partial<{

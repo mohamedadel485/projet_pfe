@@ -1,7 +1,6 @@
-import User, { type IUser, type UserRole } from "./User";
+import type { Utilisateur } from "./Utilisateur";
+import type { AdminRole } from "../utils/roles";
 
-export type Administrateur = IUser & {
-  role: Extract<UserRole, "admin" | "super_admin">;
-};
-
-export default User;
+export interface Administrateur extends Utilisateur {
+  role: AdminRole;
+}
