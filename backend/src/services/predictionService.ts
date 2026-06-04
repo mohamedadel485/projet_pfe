@@ -1,5 +1,5 @@
 import type { IIncident } from "../models/Incident";
-import type { IMonitor } from "../models/Monitor";
+import type { IMonitor } from "../models/Moniteur";
 import type { IMonitorLog } from "../models/MonitorLog";
 
 export type PredictionRiskLevel = "low" | "medium" | "high" | "critical";

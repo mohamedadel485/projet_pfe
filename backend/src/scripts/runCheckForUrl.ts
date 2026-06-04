@@ -1,6 +1,6 @@
 import path from "path";
 import dotenv from "dotenv";
-import Monitor from "../models/Monitor";
+import Monitor from "../models/Moniteur";
 import monitorService from "../services/monitorService";
 import { connectDB } from "../config/database";
 

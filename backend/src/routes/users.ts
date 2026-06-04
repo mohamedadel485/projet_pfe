@@ -6,6 +6,7 @@ import { body, validationResult } from "express-validator";
 import Utilisateur from "../models/Utilisateur";
 import { authenticate, isAdmin, AuthRequest } from "../middleware/auth";
 import { isUserRole, canManageUser, canAssignRole } from "../utils/roles";
+import { findUserByEmail, normalizeEmailAddress } from "../utils/email";
 
 const router = Router();
 
@@ -144,13 +145,14 @@ router.put(
       }
 
       // Vérifier si l'email est déjà utilisé par un autre compte
-      if (email && email !== user.email) {
-        const existingUser = await Utilisateur.findOne({ email });
-        if (existingUser) {
+      const normalizedEmail = typeof email === "string" ? normalizeEmailAddress(email) : "";
+      if (normalizedEmail && normalizedEmail !== normalizeEmailAddress(user.email)) {
+        const existingUser = await findUserByEmail(normalizedEmail);
+        if (existingUser && existingUser._id.toString() !== user._id.toString()) {
           res.status(400).json({ error: "Cet email est déjà utilisé" });
           return;
         }
-        user.email = email;
+        user.email = normalizedEmail;
       }
 
       if (name) user.name = name;
@@ -235,13 +237,14 @@ router.put(
       }
 
       // Vérifier si l'email est déjà utilisé
-      if (email && email !== user.email) {
-        const existingUser = await Utilisateur.findOne({ email });
-        if (existingUser) {
+      const normalizedEmail = typeof email === "string" ? normalizeEmailAddress(email) : "";
+      if (normalizedEmail && normalizedEmail !== normalizeEmailAddress(user.email)) {
+        const existingUser = await findUserByEmail(normalizedEmail);
+        if (existingUser && existingUser._id.toString() !== user._id.toString()) {
           res.status(400).json({ error: "Cet email est déjà utilisé" });
           return;
         }
-        user.email = email;
+        user.email = normalizedEmail;
       }
 
       if (user.role === "super_admin" && req.user!.role !== "super_admin") {

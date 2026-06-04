@@ -1,20 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Line } from "react-chartjs-2";
 import {
-  AlertTriangle,
   ArrowDownLeft,
   ArrowUpLeft,
   Bell,
-  Bot,
   CalendarClock,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
   ExternalLink,
-  Gauge,
   Minus,
   MoreVertical,
-  ShieldAlert,
   Upload,
   Users,
 } from "lucide-react";
@@ -22,14 +18,9 @@ import {
   fetchIncidents,
   fetchMaintenances,
   fetchMonitorLogs,
-  fetchMonitorPrediction,
-  isApiError,
   type BackendIncident,
   type BackendMaintenance,
   type BackendMonitorLog,
-  type BackendMonitorPrediction,
-  type BackendMonitorPredictionEntry,
-  type PredictionRiskLevel,
 } from "../../lib/api";
 import {
   HISTORY_BAR_COUNT,
@@ -161,33 +152,11 @@ const formatMs = (value: number | null): string => {
   return `${Math.round(value)} ms`;
 };
 
-const formatPredictionPercent = (value: number | null): string => {
-  if (value === null || !Number.isFinite(value)) return "n/a";
-  return `${value.toFixed(1)}%`;
-};
-
-const formatPredictionRiskLabel = (riskLevel: PredictionRiskLevel): string => {
-  switch (riskLevel) {
-    case "critical":
-      return "Critical";
-    case "high":
-      return "High";
-    case "medium":
-      return "Medium";
-    default:
-      return "Low";
+const mapErrorMessage = (reason: unknown): string => {
+  if (reason instanceof Error && reason.message.trim() !== "") {
+    return reason.message;
   }
-};
-
-const getPredictionIcon = (predictionType: BackendMonitorPredictionEntry["type"]) => {
-  switch (predictionType) {
-    case "ssl_expiry":
-      return <ShieldAlert size={14} />;
-    case "server_overload":
-      return <Gauge size={14} />;
-    default:
-      return <AlertTriangle size={14} />;
-  }
+  return "Unable to load monitor details.";
 };
 
 const getResponseRangeOption = (range: ResponseRange) =>
@@ -269,16 +238,6 @@ const parseIntervalToMinutes = (intervalLabel: string): number => {
   return 5;
 };
 
-const mapErrorMessage = (reason: unknown): string => {
-  if (isApiError(reason)) {
-    return reason.message || `API error (${reason.status})`;
-  }
-  if (reason instanceof Error && reason.message.trim() !== "") {
-    return reason.message;
-  }
-  return "Unable to load monitor details.";
-};
-
 function MonitorDetailsPage({
   monitor,
   onBack,
@@ -294,13 +253,8 @@ function MonitorDetailsPage({
   const [logs, setLogs] = useState<BackendMonitorLog[]>([]);
   const [incidents, setIncidents] = useState<BackendIncident[]>([]);
   const [maintenances, setMaintenances] = useState<BackendMaintenance[]>([]);
-  const [prediction, setPrediction] = useState<BackendMonitorPrediction | null>(
-    null,
-  );
   const [isDataLoading, setIsDataLoading] = useState(false);
-  const [isPredictionLoading, setIsPredictionLoading] = useState(false);
   const [dataError, setDataError] = useState<string | null>(null);
-  const [predictionError, setPredictionError] = useState<string | null>(null);
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
   const [responseRange, setResponseRange] = useState<ResponseRange>("24h");
   const [isResponseRangeMenuOpen, setIsResponseRangeMenuOpen] = useState(false);
@@ -370,21 +324,13 @@ function MonitorDetailsPage({
 
     const loadMonitorDetails = async (): Promise<void> => {
       setIsDataLoading(true);
-      setIsPredictionLoading(true);
       setDataError(null);
-      setPredictionError(null);
 
-      const [
-        logsResult,
-        incidentsResult,
-        maintenancesResult,
-        predictionResult,
-      ] =
+      const [logsResult, incidentsResult, maintenancesResult] =
         await Promise.allSettled([
           fetchMonitorLogs(monitor.id, undefined, { limit: 500 }),
           fetchIncidents(undefined, { limit: 500 }),
           fetchMaintenances(undefined, { monitorId: monitor.id }),
-          fetchMonitorPrediction(monitor.id),
         ]);
 
       if (isDisposed) return;
@@ -407,14 +353,6 @@ function MonitorDetailsPage({
         setMaintenances([]);
       }
 
-      if (predictionResult.status === "fulfilled") {
-        setPrediction(predictionResult.value.prediction);
-        setPredictionError(null);
-      } else {
-        setPrediction(null);
-        setPredictionError(mapErrorMessage(predictionResult.reason));
-      }
-
       const firstError =
         logsResult.status === "rejected"
           ? logsResult.reason
@@ -426,7 +364,6 @@ function MonitorDetailsPage({
 
       setDataError(firstError ? mapErrorMessage(firstError) : null);
       setIsDataLoading(false);
-      setIsPredictionLoading(false);
     };
 
     void loadMonitorDetails();
@@ -900,12 +837,6 @@ function MonitorDetailsPage({
     return formatShortDate(monitor.sslExpiryAt);
   }, [monitor.sslExpiryAt, monitor.sslExpiryCheckedAt, monitor.sslExpiryMode]);
 
-  const topPrediction = prediction?.predictions[0] ?? null;
-  const predictionSummary = prediction?.summary ?? null;
-  const generatedPredictionLabel = prediction?.generatedAt
-    ? formatDateTime(prediction.generatedAt)
-    : null;
-
   return (
     <section className="monitor-details-page">
       <div className="monitor-details-breadcrumb">
@@ -1065,113 +996,6 @@ function MonitorDetailsPage({
               <p>{monitor.uptime}</p>
               <span>{monitorIncidents.length} incidents total</span>
             </article>
-          </section>
-
-          <section className="monitor-details-ai-card">
-            <div className="monitor-details-ai-header">
-              <div className="monitor-details-ai-title">
-                <span className="monitor-details-ai-icon" aria-hidden="true">
-                  <Bot size={15} />
-                </span>
-                <div>
-                  <h3>AI prediction</h3>
-                  <p>
-                    {generatedPredictionLabel
-                      ? `Updated ${generatedPredictionLabel}`
-                      : "Short-term failure forecast"}
-                  </p>
-                </div>
-              </div>
-              {prediction ? (
-                <span
-                  className={`prediction-risk-pill ${prediction.overallRiskLevel}`}
-                >
-                  {formatPredictionRiskLabel(prediction.overallRiskLevel)} risk
-                </span>
-              ) : null}
-            </div>
-
-            {isPredictionLoading ? (
-              <p className="monitor-details-ai-placeholder">
-                Analyzing recent checks, incidents, and SSL signals...
-              </p>
-            ) : prediction ? (
-              <>
-                <p className="monitor-details-ai-summary">{predictionSummary}</p>
-
-                <div className="monitor-details-ai-signal-row">
-                  <span>{prediction.signals.recentChecks2h} checks / 2h</span>
-                  <span>
-                    {formatPredictionPercent(
-                      prediction.signals.recentFailureRate2h,
-                    )}{" "}
-                    failures / 2h
-                  </span>
-                  <span>
-                    Trend{" "}
-                    {prediction.signals.responseTimeTrendPercent === null
-                      ? "n/a"
-                      : `${prediction.signals.responseTimeTrendPercent > 0 ? "+" : ""}${prediction.signals.responseTimeTrendPercent.toFixed(1)}%`}
-                  </span>
-                  <span>
-                    {prediction.signals.daysUntilSslExpiry === null
-                      ? "SSL n/a"
-                      : `${prediction.signals.daysUntilSslExpiry.toFixed(1)} days to SSL expiry`}
-                  </span>
-                </div>
-
-                <div className="monitor-details-ai-grid">
-                  {prediction.predictions.map((entry) => (
-                    <article
-                      key={entry.type}
-                      className={`prediction-card ${entry.riskLevel}`}
-                    >
-                      <div className="prediction-card-header">
-                        <div className="prediction-card-title">
-                          <span className="prediction-card-icon" aria-hidden="true">
-                            {getPredictionIcon(entry.type)}
-                          </span>
-                          <strong>{entry.title}</strong>
-                        </div>
-                        <span className={`prediction-chip ${entry.riskLevel}`}>
-                          {formatPredictionRiskLabel(entry.riskLevel)}
-                        </span>
-                      </div>
-
-                      <p className="prediction-card-summary">{entry.summary}</p>
-
-                      <div className="prediction-card-meta">
-                        <span>Score {entry.riskScore}/100</span>
-                        <span>Confidence {entry.confidence}%</span>
-                        <span>{entry.forecastWindow}</span>
-                      </div>
-
-                      <div className="prediction-driver-list">
-                        {entry.drivers.map((driver) => (
-                          <div
-                            key={`${entry.type}-${driver.label}`}
-                            className={`prediction-driver ${driver.impact}`}
-                          >
-                            <span>{driver.label}</span>
-                            <strong>{driver.value}</strong>
-                          </div>
-                        ))}
-                      </div>
-
-                      <p className="prediction-card-recommendation">
-                        {entry.recommendation}
-                      </p>
-                    </article>
-                  ))}
-                </div>
-              </>
-            ) : predictionError ? (
-              <p className="monitor-details-ai-error">{predictionError}</p>
-            ) : (
-              <p className="monitor-details-ai-placeholder">
-                No prediction available yet.
-              </p>
-            )}
           </section>
 
           <section className="monitor-details-response">
@@ -1370,21 +1194,6 @@ function MonitorDetailsPage({
             <button type="button" onClick={onOpenMaintenanceInfo}>
               Set up maintenance
             </button>
-          </article>
-          <article className="monitor-side-card">
-            <h3>Top risk</h3>
-            {topPrediction ? (
-              <>
-                <p>{topPrediction.title}</p>
-                <p>{topPrediction.summary}</p>
-                <p>
-                  {formatPredictionRiskLabel(topPrediction.riskLevel)} risk,{" "}
-                  {topPrediction.confidence}% confidence
-                </p>
-              </>
-            ) : (
-              <p>No predictive signal available yet</p>
-            )}
           </article>
           <article className="monitor-side-card">
             <div className="monitor-side-card-head">

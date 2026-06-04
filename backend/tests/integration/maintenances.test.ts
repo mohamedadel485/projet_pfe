@@ -2,7 +2,7 @@ import jwt from 'jsonwebtoken';
 import request from 'supertest';
 import app from '../../src/server';
 import Maintenance from '../../src/models/Maintenance';
-import Monitor from '../../src/models/Monitor';
+import Monitor from '../../src/models/Moniteur';
 import User from '../../src/models/User';
 
 describe('Maintenances API Integration Tests', () => {

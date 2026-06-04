@@ -1,5 +1,5 @@
 import { MonitorService } from '../../src/services/monitorService';
-import Monitor, { IMonitor } from '../../src/models/Monitor';
+import Monitor, { IMonitor } from '../../src/models/Moniteur';
 import mongoose from 'mongoose';
 import dns from 'dns';
 

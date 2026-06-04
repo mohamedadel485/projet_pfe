@@ -1,5 +1,5 @@
 import Incident from '../models/Incident';
-import { IMonitor } from '../models/Monitor';
+import { IMonitor } from '../models/Moniteur';
 
 interface CheckResultLike {
   status: 'up' | 'down';

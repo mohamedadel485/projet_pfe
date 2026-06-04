@@ -13,6 +13,7 @@
     "start:background": "npm run build && pm2 start dist/server.js --name uptime-monitor-backend",
     "start:fg": "npm run start:foreground",
     "start:bg": "npm run start:background",
+    "db:init-collections": "ts-node src/scripts/initCollections.ts",
     "stop": "pm2 stop uptime-monitor-backend",
     "restart": "pm2 restart uptime-monitor-backend",
     "enable-autostart": "pm2 startup && pm2 save",

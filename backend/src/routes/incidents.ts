@@ -1,5 +1,5 @@
 import { Router, Response } from 'express';
-import Monitor from '../models/Monitor';
+import Monitor from '../models/Moniteur';
 import Incident from '../models/Incident';
 import MonitorLog from '../models/MonitorLog';
 import { authenticate, AuthRequest } from '../middleware/auth';

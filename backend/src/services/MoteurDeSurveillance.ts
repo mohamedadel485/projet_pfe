@@ -1,5 +1,5 @@
 import monitorService from "./monitorService";
-import type { IMonitor } from "../models/Monitor";
+import type { IMonitor } from "../models/Moniteur";
 import CertificatsSSL from "../models/CertificatsSSL";
 import Domaine from "../models/Domaine";
 import ErreurSSL from "../models/ErreurSSL";

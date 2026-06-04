@@ -3,7 +3,7 @@ import { body, validationResult } from 'express-validator';
 import bcrypt from 'bcryptjs';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import StatusPage from '../models/StatusPage';
-import Monitor from '../models/Monitor';
+import Monitor from '../models/Moniteur';
 import MonitorLog from '../models/MonitorLog';
 import Incident from '../models/Incident';
 

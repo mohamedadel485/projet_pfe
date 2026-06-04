@@ -1,5 +1,5 @@
 import mongoose from 'mongoose';
-import Monitor from '../models/Monitor';
+import Monitor from '../models/Moniteur';
 import Maintenance, { MaintenanceStatus } from '../models/Maintenance';
 
 const ACTIVE_MAINTENANCE_STATUSES: MaintenanceStatus[] = ['ongoing', 'paused'];

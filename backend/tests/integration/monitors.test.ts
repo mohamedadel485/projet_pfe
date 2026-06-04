@@ -3,7 +3,7 @@ import mongoose from 'mongoose';
 import jwt from 'jsonwebtoken';
 import app from '../../src/server';
 import User from '../../src/models/User';
-import Monitor from '../../src/models/Monitor';
+import Monitor from '../../src/models/Moniteur';
 
 describe('Monitors API Integration Tests', () => {
   let authToken: string;

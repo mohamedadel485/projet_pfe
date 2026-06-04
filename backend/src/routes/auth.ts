@@ -7,9 +7,10 @@ import Utilisateur from "../models/Utilisateur";
 import Invitation from "../models/Invitation";
 import DemandeCompte from "../models/DemandeCompte";
 import Tokens, { type TokenType } from "../models/Tokens";
-import Monitor from "../models/Monitor";
+import Monitor from "../models/Moniteur";
 import emailService from "../services/emailService";
 import { authenticate, AuthRequest } from "../middleware/auth";
+import { findUserByEmail, normalizeEmailAddress } from "../utils/email";
 import {
   buildAuthCookieClearOptions,
   buildAuthCookieOptions,
@@ -218,7 +219,7 @@ router.post(
       const rememberMe = parseRememberMe(rawRememberMe);
 
       // Vérifier si un utilisateur existe déjà
-      const existingUser = await Utilisateur.findOne({ email });
+      const existingUser = await findUserByEmail(email);
       if (existingUser) {
         res.status(400).json({ error: "Cet email est déjà utilisé" });
         return;
@@ -317,7 +318,7 @@ router.post(
       };
       const rememberMe = parseRememberMe(rawRememberMe);
 
-      const user = await Utilisateur.findOne({ email });
+      const user = await findUserByEmail(email);
       if (!user) {
         res.status(401).json({ error: "Email introuvable" });
         return;
@@ -429,8 +430,7 @@ router.post(
       };
       const rememberMe = parseRememberMe(rawRememberMe);
 
-      const normalizedEmail = email.trim().toLowerCase();
-      const user = await Utilisateur.findOne({ email: normalizedEmail });
+      const user = await findUserByEmail(email);
 
       if (!user || !user.isActive) {
         res.status(400).json({ error: "Code OTP invalide ou expire" });
@@ -521,8 +521,7 @@ router.post(
       }
 
       const { email } = req.body as { email: string };
-      const normalizedEmail = email.trim().toLowerCase();
-      const user = await Utilisateur.findOne({ email: normalizedEmail });
+      const user = await findUserByEmail(email);
 
       // Reponse volontairement generique pour ne pas exposer les comptes existants.
       if (!user || !user.isActive) {
@@ -601,10 +600,7 @@ router.post(
       }
 
       const { email } = req.body;
-      const normalizedEmail = String(email ?? "")
-        .trim()
-        .toLowerCase();
-      const user = await Utilisateur.findOne({ email: normalizedEmail });
+      const user = await findUserByEmail(email);
 
       res.json({ exists: !!user });
     } catch (error: any) {
@@ -659,8 +655,7 @@ router.post(
         newPassword: string;
       };
 
-      const normalizedEmail = email.trim().toLowerCase();
-      const user = await Utilisateur.findOne({ email: normalizedEmail });
+      const user = await findUserByEmail(email);
       if (!user || !user.isActive) {
         res.status(400).json({ error: "Code invalide ou expire" });
         return;
@@ -848,9 +843,7 @@ router.post(
       }
 
       // Vérifier si l'utilisateur existe déjà
-      const existingUser = await Utilisateur.findOne({
-        email: invitation.email,
-      });
+      const existingUser = await findUserByEmail(invitation.email);
       if (existingUser) {
         res.status(400).json({ error: "Un compte existe déjà avec cet email" });
         return;
@@ -1212,7 +1205,7 @@ router.post(
       }
 
       // VÃ©rifier si l'utilisateur existe dÃ©jÃ
-      const existingUser = await Utilisateur.findOne({ email: request.email });
+      const existingUser = await findUserByEmail(request.email);
       if (existingUser && !existingUser.isActive) {
         existingUser.isActive = true;
       }

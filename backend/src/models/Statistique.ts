@@ -1,4 +1,4 @@
-import type { IMonitor } from "./Monitor";
+import type { IMonitor } from "./Moniteur";
 
 export interface IStatistique {
   id: string;

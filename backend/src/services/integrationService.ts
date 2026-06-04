@@ -1,6 +1,6 @@
 import axios from 'axios';
 import Integration, { IntegrationEvent, IIntegration } from '../models/Integration';
-import { IMonitor } from '../models/Monitor';
+import { IMonitor } from '../models/Moniteur';
 
 interface CheckResultLike {
   status: 'up' | 'down';

@@ -1,7 +1,7 @@
 import { Router, Response, NextFunction } from 'express';
 import { body, param, query, validationResult } from 'express-validator';
 import Maintenance, { MaintenanceStatus } from '../models/Maintenance';
-import Monitor from '../models/Monitor';
+import Monitor from '../models/Moniteur';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import maintenanceService from '../services/maintenanceService';
 

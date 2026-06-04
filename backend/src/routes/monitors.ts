@@ -1,7 +1,7 @@
 import { Router, Response, NextFunction } from "express";
 import { body, validationResult } from "express-validator";
 import Utilisateur from "../models/Utilisateur";
-import Monitor from "../models/Monitor";
+import Monitor from "../models/Moniteur";
 import MonitorLog from "../models/MonitorLog";
 import Incident from "../models/Incident";
 import Integration from "../models/Integration";

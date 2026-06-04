@@ -5,6 +5,7 @@ import { Server } from "http";
 import path from "path";
 import fs from "fs";
 import { connectDB } from "./config/database";
+import { ensureMongoCollections } from "./config/mongoCollections";
 import {
   startCleanupScheduler,
   startMonitorScheduler,
@@ -374,6 +375,7 @@ export const startServer = async (): Promise<void> => {
     }
 
     await connectDB();
+    await ensureMongoCollections();
     startMonitorScheduler();
     startCleanupScheduler();
 

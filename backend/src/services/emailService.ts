@@ -435,9 +435,9 @@ export class EmailService {
             </span>
           </div>
           <p>Ce code expire dans ${process.env.LOGIN_OTP_EXPIRE_MINUTES ?? 10} minutes.</p>
-          <div style="text-align: center; margin-top: 16px;">
-            <a href="${process.env.FRONTEND_URL || "http://localhost:5173"}/login" style="background-color: #2563eb; color: white; padding: 10px 20px; text-decoration: none; border-radius: 6px; font-weight: 500;">Se connecter</a>
-          </div>
+          <p style="color: #666; font-size: 13px; margin-top: 16px;">
+            Retournez simplement sur la page de connexion et saisissez ce code.
+          </p>
           <p style="color: #666; font-size: 12px; margin-top: 16px;">
             Si vous n'êtes pas à l'origine de cette demande, ignorez cet email ou contactez votre administrateur.
           </p>

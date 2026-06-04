@@ -4,7 +4,7 @@ import http from "http";
 import https from "https";
 import net from "net";
 import tls from "tls";
-import Monitor, { IMonitor } from "../models/Monitor";
+import Monitor, { IMonitor } from "../models/Moniteur";
 import MonitorLog from "../models/MonitorLog";
 import incidentService from "./incidentService";
 import maintenanceService from "./maintenanceService";

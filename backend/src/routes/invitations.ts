@@ -1,12 +1,12 @@
 import { Router, Response } from "express";
 import { body, validationResult } from "express-validator";
 import crypto from "crypto";
-import Utilisateur from "../models/Utilisateur";
 import Invitation, { type InvitationRole } from "../models/Invitation";
-import Monitor from "../models/Monitor";
+import Monitor from "../models/Moniteur";
 import emailService from "../services/emailService";
 import { authenticate, isAdmin, AuthRequest } from "../middleware/auth";
 import { canAssignRole } from "../utils/roles";
+import { findUserByEmail } from "../utils/email";
 
 const router = Router();
 
@@ -111,7 +111,7 @@ router.post(
       }
 
       // Vérifier si l'utilisateur existe déjà
-      const existingUser = await Utilisateur.findOne({ email });
+      const existingUser = await findUserByEmail(email);
       if (existingUser) {
         res
           .status(400)

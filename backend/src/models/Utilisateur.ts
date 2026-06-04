@@ -49,7 +49,7 @@ export interface IUser extends Document {
 
 const userSchema = new Schema<IUser>(
   {
-    email: { type: String, required: true, unique: true },
+    email: { type: String, required: true, unique: true, lowercase: true, trim: true },
     password: { type: String, required: true },
     name: { type: String, required: true },
     avatar: { type: String, default: null },
@@ -216,6 +216,7 @@ userSchema.methods.superviserIntegration = async function (
   return Integration.find({ owner: this._id }).sort({ createdAt: -1 });
 };
 
-export default mongoose.model<IUser>("Utilisateur", userSchema);
+// The live database stores accounts in the legacy `users` collection.
+export default mongoose.model<IUser>("Utilisateur", userSchema, "users");
 
 export type Utilisateur = IUser;

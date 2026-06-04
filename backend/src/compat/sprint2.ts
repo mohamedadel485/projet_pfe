@@ -4,7 +4,7 @@ import Monitor, {
   type MonitorHttpMethodCompat,
   type MonitorProtocol,
   type MonitorStatus,
-} from "../models/Monitor";
+} from "../models/Moniteur";
 import StatusPage, { type IStatusPage } from "../models/StatusPage";
 import Incident, { type IIncident } from "../models/Incident";
 
