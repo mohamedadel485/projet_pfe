@@ -28,6 +28,43 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage });
 
+const resolveStoredAvatarFilePath = (avatar: string): string | null => {
+  const trimmedAvatar = avatar.trim();
+  if (trimmedAvatar === "") return null;
+
+  const pathname = /^https?:\/\//i.test(trimmedAvatar)
+    ? (() => {
+        try {
+          return new URL(trimmedAvatar).pathname;
+        } catch {
+          return "";
+        }
+      })()
+    : trimmedAvatar;
+
+  if (pathname === "") return null;
+
+  const relativePath = pathname.replace(/^\/?uploads\//, "");
+  if (relativePath === pathname) return null;
+
+  return path.join(uploadsRoot, relativePath);
+};
+
+const deleteStoredAvatarFile = (avatar?: string | null): void => {
+  if (typeof avatar !== "string" || avatar.trim() === "") return;
+
+  const avatarFilePath = resolveStoredAvatarFilePath(avatar);
+  if (!avatarFilePath) return;
+
+  try {
+    if (fs.existsSync(avatarFilePath)) {
+      fs.unlinkSync(avatarFilePath);
+    }
+  } catch {
+    // Ignore file removal errors so the API stays resilient.
+  }
+};
+
 const normalizeUserPayload = (
   req: any,
   _res: Response,
@@ -483,15 +520,7 @@ router.post(
       }
 
       // Remove previous avatar file if present
-      if ((user as any).avatar && typeof (user as any).avatar === "string") {
-        try {
-          const previous = (user as any).avatar.replace(/^\/?uploads\//, "");
-          const previousPath = path.join(uploadsRoot, previous);
-          if (fs.existsSync(previousPath)) fs.unlinkSync(previousPath);
-        } catch (e) {
-          // ignore remove errors
-        }
-      }
+      deleteStoredAvatarFile((user as any).avatar);
 
       // Store new avatar path (served under /uploads)
       const avatarPath = `/uploads/avatars/${file.filename}`;
@@ -507,6 +536,40 @@ router.post(
     } catch (error: any) {
       console.error("Erreur upload avatar:", error);
       res.status(500).json({ error: "Erreur lors de l upload de l avatar" });
+    }
+  },
+);
+
+/**
+ * DELETE /api/users/me/avatar
+ * Remove avatar for authenticated user
+ */
+router.delete(
+  "/me/avatar",
+  authenticate,
+  async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+      const userId = req.user!._id;
+      const user = await Utilisateur.findById(userId);
+      if (!user) {
+        res.status(404).json({ error: "Utilisateur non trouvé" });
+        return;
+      }
+
+      deleteStoredAvatarFile((user as any).avatar);
+      (user as any).avatar = null;
+      await user.save();
+
+      res.json({
+        message: "Avatar supprimé avec succès",
+        user: {
+          ...user.consulterProfil(),
+          isActive: user.isActive,
+        },
+      });
+    } catch (error: any) {
+      console.error("Erreur suppression avatar:", error);
+      res.status(500).json({ error: "Erreur lors de la suppression de l avatar" });
     }
   },
 );

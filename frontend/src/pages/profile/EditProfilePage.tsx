@@ -3,6 +3,7 @@ import {
   ApiError,
   AuthUser,
   changePassword,
+  resetAvatar,
   updateMe,
   uploadAvatar,
   isApiError,
@@ -80,6 +81,11 @@ const EditProfilePage: React.FC<Props> = ({
   const avatarSrc = resolveAvatarUrl(currentUser?.avatar);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const clearAvatarInput = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
 
   const passwordRules = [
     {
@@ -167,13 +173,14 @@ const EditProfilePage: React.FC<Props> = ({
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     setError(null);
-    const file = e.target.files?.[0];
+    const input = e.currentTarget;
+    const file = input.files?.[0];
     if (!file) return;
-    if (!authToken) {
-      setError(t("settings.errorAuthRequired"));
-      return;
-    }
     try {
+      if (!authToken) {
+        setError(t("settings.errorAuthRequired"));
+        return;
+      }
       setSaving(true);
       const resp = await uploadAvatar(file, authToken);
       const newUser: AuthUser = {
@@ -186,10 +193,44 @@ const EditProfilePage: React.FC<Props> = ({
       onUpdateUser(newUser);
       setSuccess(t("settings.successAvatarUpdated"));
     } catch (err) {
+      if (isApiError(err))
+        setError(err.message || t("settings.errorAvatarReset"));
+      else if (err instanceof Error) setError(err.message);
+      else setError(t("settings.errorAvatarReset"));
+    } finally {
+      clearAvatarInput();
+      setSaving(false);
+    }
+  };
+
+  const handleResetAvatar = async () => {
+    setError(null);
+    setSuccess(null);
+
+    try {
+      if (!authToken) {
+        setError(t("settings.errorAuthRequired"));
+        return;
+      }
+
+      setSaving(true);
+      const response = await resetAvatar(authToken);
+      const updated = response.user;
+      const authUser: AuthUser = {
+        id: String(updated.id),
+        email: updated.email,
+        name: updated.name,
+        role: updated.role,
+        avatar: updated.avatar ?? null,
+      };
+      onUpdateUser(authUser);
+      setSuccess(t("settings.successAvatarReset"));
+    } catch (err) {
       if (isApiError(err)) setError(err.message || t("settings.errorUpload"));
       else if (err instanceof Error) setError(err.message);
       else setError(t("settings.errorUpload"));
     } finally {
+      clearAvatarInput();
       setSaving(false);
     }
   };
@@ -330,19 +371,30 @@ const EditProfilePage: React.FC<Props> = ({
                   <strong>{currentUser?.name}</strong>
                   <span>{currentUser?.email}</span>
                 </div>
-                <label
-                  className="secondary-button settings-avatar-button"
-                  style={{ cursor: "pointer" }}
-                >
-                  {t("settings.changeAvatar")}
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/*"
-                    style={{ display: "none" }}
-                    onChange={handleFileChange}
-                  />
-                </label>
+                <div className="settings-avatar-actions">
+                  <label
+                    className="secondary-button settings-avatar-button"
+                    style={{ cursor: "pointer" }}
+                  >
+                    {t("settings.changeAvatar")}
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      disabled={saving || isChangingPassword}
+                      style={{ display: "none" }}
+                      onChange={handleFileChange}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    className="secondary-button settings-avatar-reset-button"
+                    onClick={handleResetAvatar}
+                    disabled={saving || isChangingPassword || !currentUser?.avatar}
+                  >
+                    {t("settings.resetAvatar")}
+                  </button>
+                </div>
               </div>
 
               <div className="settings-form-block">

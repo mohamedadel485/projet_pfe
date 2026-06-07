@@ -1531,6 +1531,14 @@ export const uploadAvatar = async (
   return res.json();
 };
 
+export const resetAvatar = (
+  token?: string,
+): Promise<UserMutationResponse> =>
+  request<UserMutationResponse>("/users/me/avatar", {
+    method: "DELETE",
+    token,
+  });
+
 export const deleteInvitation = (
   invitationId: string,
   token?: string,

@@ -2837,6 +2837,34 @@ input {
   width: 100%;
 }
 
+.settings-avatar-actions {
+  width: 100%;
+  display: grid;
+  gap: 8px;
+}
+
+.settings-avatar-reset-button {
+  width: 100%;
+  border-color: #f0c7c7;
+  background: #fff7f7;
+  color: #a33f3f;
+}
+
+.settings-avatar-reset-button:hover:not(:disabled) {
+  background: #fdecec;
+  border-color: #e6a8a8;
+}
+
+.settings-avatar-reset-button:focus-visible {
+  outline: 2px solid #f0b3b3;
+  outline-offset: 1px;
+}
+
+.settings-avatar-reset-button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 .settings-form-block,
 .settings-form-stack,
 .settings-theme-section {
