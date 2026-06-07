@@ -10,6 +10,7 @@ import {
   X,
 } from "lucide-react";
 import { useState } from "react";
+import { useAppLanguage } from "../../lib/language";
 
 interface TeamMember {
   id: string;
@@ -79,6 +80,7 @@ function TeamMembersManagementPage({
   onApproveRequest,
   onRejectRequest,
 }: TeamMembersManagementPageProps) {
+  const { language, t } = useAppLanguage();
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
   const [editingEmail, setEditingEmail] = useState("");
@@ -103,7 +105,8 @@ function TeamMembersManagementPage({
   });
 
   const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString("en-US");
+    const locale = language === "fr" ? "fr-FR" : language === "ar" ? "ar-TN" : "en-US";
+    return new Date(dateStr).toLocaleDateString(locale);
   };
 
   const getRoleLabel = (role: string) => {
@@ -113,12 +116,12 @@ function TeamMembersManagementPage({
       normalizedRole === "superadmin" ||
       normalizedRole === "super_admin"
     ) {
-      return "Super Admin";
+      return t("team.management.roleSuperAdmin");
     }
     if (normalizedRole === "admin") {
-      return "Admin";
+      return t("team.management.roleAdmin");
     }
-    return "Membre";
+    return t("team.management.roleMember");
   };
 
   const openEditUserModal = (user: TeamMember) => {
@@ -156,15 +159,15 @@ function TeamMembersManagementPage({
     const trimmedEmail = editingEmail.trim();
 
     if (trimmedName === "") {
-      setEditError("Le nom est requis.");
+      setEditError(t("team.management.editErrorName"));
       return;
     }
     if (trimmedEmail === "") {
-      setEditError("L'email est requis.");
+      setEditError(t("team.management.editErrorEmail"));
       return;
     }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
-      setEditError("Format d'email invalide.");
+      setEditError(t("team.management.editErrorInvalidEmail"));
       return;
     }
 
@@ -192,15 +195,15 @@ function TeamMembersManagementPage({
       {/* Header */}
       <div className="management-page-header">
         <div className="management-page-title">
-          <h1>Users & invitations</h1>
+          <h1>{t("team.management.title")}</h1>
           <p className="management-page-subtitle">
-            Manage accounts and track pending invitations.
+            {t("team.management.subtitle")}
           </p>
         </div>
         <div className="management-page-actions">
           <button type="button" className="btn-outline" onClick={onBack}>
             <ArrowLeft size={16} />
-            Back
+            {t("team.management.back")}
           </button>
           <button
             type="button"
@@ -208,7 +211,7 @@ function TeamMembersManagementPage({
             onClick={onInviteTeam}
           >
             <Plus size={16} />
-            Invite Team
+            {t("team.management.inviteTeam")}
           </button>
           {onManageRequests && (
             <button
@@ -217,7 +220,7 @@ function TeamMembersManagementPage({
               onClick={onManageRequests}
             >
               <UserCheck size={16} />
-              Requests
+              {t("team.management.requests")}
               {pendingRequests.length > 0 && (
                 <span className="btn-badge">{pendingRequests.length}</span>
               )}
@@ -229,19 +232,19 @@ function TeamMembersManagementPage({
       {/* Users Section */}
       <section className="management-card">
         <div className="management-card-header">
-          <h2>Users</h2>
+          <h2>{t("team.management.users")}</h2>
           <span className="count-badge">{users.length}</span>
         </div>
         <div className="management-table">
           <div className="table-row table-header-row">
-            <span>NAME</span>
-            <span>EMAIL</span>
-            <span>ROLE</span>
-            <span>STATUS</span>
-            <span>ACTIONS</span>
+            <span>{t("common.name").toUpperCase()}</span>
+            <span>{t("common.email").toUpperCase()}</span>
+            <span>{t("common.role").toUpperCase()}</span>
+            <span>{t("team.management.status").toUpperCase()}</span>
+            <span>{t("team.management.actions").toUpperCase()}</span>
           </div>
           {users.length === 0 ? (
-            <div className="empty-row">No users found</div>
+            <div className="empty-row">{t("team.management.noUsers")}</div>
           ) : (
             sortedUsers.map((user) => {
               const normalizedRole = String(user.role ?? "").toLowerCase();
@@ -265,18 +268,18 @@ function TeamMembersManagementPage({
                   <span className="cell-email">{user.email}</span>
                   <span className="cell-role">
                     {isTargetSuperAdmin ? (
-                      <span className="role-text role-super">Super Admin</span>
+                      <span className="role-text role-super">{t("team.management.roleSuperAdmin")}</span>
                     ) : isTargetAdmin ? (
-                      <span className="role-text role-admin">Admin</span>
+                      <span className="role-text role-admin">{t("team.management.roleAdmin")}</span>
                     ) : (
-                      <span className="role-text">Member</span>
+                      <span className="role-text">{t("team.management.roleMember")}</span>
                     )}
                   </span>
                   <span className="cell-status">
                     <span
                       className={`status-badge ${user.isActive ? "status-active" : "status-inactive"}`}
                     >
-                      {user.isActive ? "Active" : "Inactive"}
+                      {user.isActive ? t("team.management.active") : t("team.management.inactive")}
                     </span>
                   </span>
                   <span className="cell-actions">
@@ -286,7 +289,7 @@ function TeamMembersManagementPage({
                           type="button"
                           className="btn-icon"
                           onClick={() => openEditUserModal(user)}
-                          title="Editer l'utilisateur"
+                          title={t("team.management.editUserTitle")}
                         >
                           <MoreVertical size={16} />
                         </button>
@@ -296,11 +299,11 @@ function TeamMembersManagementPage({
                           onClick={() => {
                             // confirmation before delete
                             // eslint-disable-next-line no-restricted-globals
-                            if (window.confirm("Supprimer cet utilisateur ?")) {
+                            if (window.confirm(t("team.management.deleteUser"))) {
                               onDeleteUser(user.id);
                             }
                           }}
-                          title="Supprimer l'utilisateur"
+                          title={t("team.management.deleteUser")}
                         >
                           <Trash2 size={14} />
                         </button>
@@ -321,7 +324,7 @@ function TeamMembersManagementPage({
             onClick={(event) => event.stopPropagation()}
           >
             <div className="modal-header">
-              <h2>Editer l'utilisateur</h2>
+              <h2>{t("team.management.editUserTitle")}</h2>
               <button
                 type="button"
                 className="modal-close"
@@ -336,7 +339,7 @@ function TeamMembersManagementPage({
                 <>
                   <div className="form-section">
                     <label className="form-label" htmlFor="team-user-name">
-                      Nom
+                      {t("common.name")}
                     </label>
                     <input
                       id="team-user-name"
@@ -349,7 +352,7 @@ function TeamMembersManagementPage({
 
                   <div className="form-section">
                     <label className="form-label" htmlFor="team-user-email">
-                      Email
+                      {t("common.email")}
                     </label>
                     <input
                       id="team-user-email"
@@ -363,7 +366,7 @@ function TeamMembersManagementPage({
               ) : null}
 
               <div className="form-section">
-                <label className="form-label">Rôle</label>
+                <label className="form-label">{t("common.role")}</label>
                 <div className="role-options">
                   <button
                     type="button"
@@ -371,7 +374,7 @@ function TeamMembersManagementPage({
                     onClick={() => setEditingRole("user")}
                   >
                     <UserX size={16} />
-                    <span>Membre</span>
+                    <span>{t("team.management.roleMember")}</span>
                   </button>
                   <button
                     type="button"
@@ -379,7 +382,7 @@ function TeamMembersManagementPage({
                     onClick={() => setEditingRole("admin")}
                   >
                     <Shield size={16} />
-                    <span>Admin</span>
+                    <span>{t("team.management.roleAdmin")}</span>
                   </button>
                 </div>
                 <p className="team-user-edit-note">
@@ -396,7 +399,7 @@ function TeamMembersManagementPage({
                       setEditingIsActive(event.target.checked)
                     }
                   />
-                  <span>Compte actif</span>
+                  <span>{t("team.management.active")}</span>
                 </label>
               </div>
 
@@ -409,7 +412,7 @@ function TeamMembersManagementPage({
                   onClick={closeEditUserModal}
                   disabled={editSaving}
                 >
-                  Annuler
+                  {t("common.cancel")}
                 </button>
                 
                 <button
@@ -418,7 +421,7 @@ function TeamMembersManagementPage({
                   onClick={() => void handleSaveEditUser()}
                   disabled={editSaving}
                 >
-                  {editSaving ? "Enregistrement..." : "Enregistrer"}
+                  {editSaving ? t("common.saving") : t("common.save")}
                 </button>
               </div>
             </div>
@@ -429,19 +432,19 @@ function TeamMembersManagementPage({
       {/* Invitations Section */}
       <section className="management-card">
         <div className="management-card-header">
-          <h2>Invitations</h2>
+          <h2>{t("team.management.invitations")}</h2>
           <span className="count-badge">{invitations.length}</span>
         </div>
         <div className="management-table">
           <div className="table-row table-header-row">
-            <span>EMAIL</span>
-            <span>STATUS</span>
-            <span>CREATED</span>
-            <span>EXPIRES</span>
-            <span>ACTIONS</span>
+            <span>{t("common.email").toUpperCase()}</span>
+            <span>{t("team.management.status").toUpperCase()}</span>
+            <span>{t("team.management.created").toUpperCase()}</span>
+            <span>{t("team.management.expires").toUpperCase()}</span>
+            <span>{t("team.management.actions").toUpperCase()}</span>
           </div>
           {invitations.length === 0 ? (
-            <div className="empty-row">No invitation</div>
+            <div className="empty-row">{t("team.management.noInvitations")}</div>
           ) : (
             invitations.map((invitation) => (
               <div key={invitation.id} className="table-row">
@@ -452,10 +455,10 @@ function TeamMembersManagementPage({
                 <span className="cell-status">
                   <span className={`status-badge status-${invitation.status}`}>
                     {invitation.status === "accepted"
-                      ? "Accepted"
+                      ? t("team.management.accepted")
                       : invitation.status === "pending"
-                        ? "Pending"
-                        : "Expired"}
+                        ? t("team.management.pending")
+                        : t("team.management.expired")}
                   </span>
                 </span>
                 <span className="cell-date">
@@ -469,10 +472,10 @@ function TeamMembersManagementPage({
                     type="button"
                     className="btn-delete"
                     onClick={() => onDeleteInvitation(invitation.id)}
-                    title="Delete invitation"
+                    title={t("team.management.deleteInvitation")}
                   >
                     <Trash2 size={14} />
-                    Delete
+                    {t("team.management.deleteInvitation")}
                   </button>
                 </span>
               </div>
@@ -485,14 +488,14 @@ function TeamMembersManagementPage({
       {showInlineAccountRequests && pendingRequests.length > 0 && (
         <section className="management-card requests-section">
           <div className="management-card-header">
-            <h2>Account requests</h2>
+            <h2>{t("users.accountRequests")}</h2>
             <span className="count-badge has-requests">
               {pendingRequests.length}
             </span>
           </div>
           <div className="requests-list-compact">
             {isLoadingRequests ? (
-              <p className="loading-message">Loading...</p>
+              <p className="loading-message">{t("team.management.loading")}</p>
             ) : (
               pendingRequests.map((request) => (
                 <div key={request.id} className="request-item">
@@ -507,7 +510,7 @@ function TeamMembersManagementPage({
                       onClick={() => onApproveRequest(request.id)}
                     >
                       <UserCheck size={14} />
-                      Approve
+                      {t("team.management.approve")}
                     </button>
                     <button
                       type="button"
@@ -515,7 +518,7 @@ function TeamMembersManagementPage({
                       onClick={() => onRejectRequest(request.id)}
                     >
                       <UserX size={14} />
-                      Reject
+                      {t("team.management.reject")}
                     </button>
                   </div>
                 </div>

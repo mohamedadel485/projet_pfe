@@ -123,7 +123,7 @@
   align-items: center;
   gap: 8px;
   flex-wrap: nowrap;
-  margin-left: auto;
+  margin-inline-start: auto;
 }
 
 .monitor-details-actions .monitor-action-button {
@@ -200,7 +200,7 @@
 .monitor-details-more-menu-popover {
   position: absolute;
   top: calc(100% + 6px);
-  right: 0;
+  inset-inline-end: 0;
   min-width: 168px;
   border: 1px solid #d6e1f1;
   background: #fff;
@@ -218,7 +218,7 @@
   color: #4b6289;
   font-size: 0.72rem;
   font-weight: 600;
-  text-align: left;
+  text-align: start;
   padding: 8px 10px;
   cursor: pointer;
 }
@@ -295,7 +295,7 @@
   color: #5f7397;
   font-size: 0.72rem;
   font-weight: 700;
-  margin-left: auto;
+  margin-inline-start: auto;
 }
 
 .mini-history {
@@ -347,7 +347,7 @@
 }
 
 .range-cell + .range-cell {
-  border-left: 1px solid #e5edf9;
+  border-inline-start: 1px solid #e5edf9;
 }
 
 .range-cell h3 {
@@ -400,7 +400,7 @@
 }
 
 .range-picker-button svg:last-child {
-  margin-left: auto;
+  margin-inline-start: auto;
 }
 
 .monitor-details-ai-card {
@@ -710,7 +710,7 @@
 
 .response-range-menu-wrap {
   position: relative;
-  margin-left: auto;
+  margin-inline-start: auto;
   flex-shrink: 0;
 }
 
@@ -758,7 +758,7 @@
 .response-range-menu {
   position: absolute;
   top: calc(100% + 8px);
-  right: 0;
+  inset-inline-end: 0;
   min-width: 176px;
   border: 1px solid #d6e1f1;
   border-radius: 12px;
@@ -776,7 +776,7 @@
   color: #4b6289;
   font-size: 0.72rem;
   font-weight: 600;
-  text-align: left;
+  text-align: start;
   padding: 8px 10px;
   cursor: pointer;
 }
@@ -928,7 +928,7 @@
 }
 
 .response-chart-tooltip-status {
-  margin-left: auto;
+  margin-inline-start: auto;
   font-size: 0.7rem;
   font-weight: 700;
   color: #5b7096;
@@ -979,7 +979,7 @@
 }
 
 .response-metrics article + article {
-  border-left: 1px solid #e6edf8;
+  border-inline-start: 1px solid #e6edf8;
 }
 
 .metric-value {
@@ -1269,7 +1269,7 @@
   }
 
   .range-cell {
-    border-left: 0;
+    border-inline-start: 0;
     border-top: 1px solid #e5edf9;
   }
 
@@ -1279,7 +1279,7 @@
   }
 
   .range-cell:nth-child(odd) {
-    border-right: 1px solid #e5edf9;
+    border-inline-end: 1px solid #e5edf9;
   }
 
   .monitor-details-side {
@@ -1301,7 +1301,7 @@
   }
 
   .response-range-menu-wrap {
-    margin-left: 0;
+    margin-inline-start: 0;
   }
 
   .response-metrics {
@@ -1313,7 +1313,7 @@
   }
 
   .response-metrics article + article {
-    border-left: 0;
+    border-inline-start: 0;
     border-top: 1px solid #e6edf8;
   }
 
@@ -1327,11 +1327,11 @@
   }
 
   .range-cell {
-    border-right: 0;
+    border-inline-end: 0;
   }
 
   .range-cell:nth-child(odd) {
-    border-right: 0;
+    border-inline-end: 0;
   }
 
   .range-cell:first-child {

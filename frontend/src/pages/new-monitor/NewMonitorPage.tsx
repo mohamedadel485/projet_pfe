@@ -10,6 +10,7 @@ import { RiRepeatLine } from "react-icons/ri";
 import { useEffect, useMemo, useRef, useState } from "react";
 import "./NewMonitorPage.css";
 import { type MonitorIpVersion } from "../../lib/api";
+import { useAppLanguage } from "../../lib/language";
 
 type MonitorAuthType = "none" | "basic" | "bearer";
 type MonitorIpVersionUI =
@@ -104,6 +105,12 @@ const ipVersionOptions: MonitorIpVersionUI[] = [
   "IPv4 only",
   "IPv6 only",
 ];
+const ipVersionLabelKeys: Record<MonitorIpVersionUI, string> = {
+  "IPv4 / IPv6 (IPv4 Priority)": "newMonitor.ipVersionOptions.ipv4Ipv6Priority",
+  "IPv6 / IPv4 (IPv6 Priority)": "newMonitor.ipVersionOptions.ipv6Ipv4Priority",
+  "IPv4 only": "newMonitor.ipVersionOptions.ipv4Only",
+  "IPv6 only": "newMonitor.ipVersionOptions.ipv6Only",
+};
 const DEFAULT_REQUEST_BODY_TEMPLATE = '{ "key": "value" }';
 const DEFAULT_UP_STATUS_CODE_GROUPS: MonitorUpStatusCodeGroup[] = [
   "2xx",
@@ -139,8 +146,8 @@ type ResponseValidationType = "string" | "boolean" | "number";
 interface ProtocolOption {
   value: MonitorProtocol;
   badge: string;
-  title: string;
-  description: string;
+  titleKey: string;
+  descriptionKey: string;
   placeholder: string;
 }
 
@@ -148,33 +155,29 @@ const protocolOptions: ProtocolOption[] = [
   {
     value: "http",
     badge: "HTTP://",
-    title: "HTTP / website monitoring",
-    description:
-      "Use HTTP monitor to monitor your website, API endpoint, or anything running on HTTP.",
+    titleKey: "newMonitor.protocol.http.title",
+    descriptionKey: "newMonitor.protocol.http.description",
     placeholder: "http://",
   },
   {
     value: "https",
     badge: "HTTPS://",
-    title: "HTTPS / website monitoring",
-    description:
-      "Use HTTPS monitor to monitor your secure website, API endpoint, or HTTPS service.",
+    titleKey: "newMonitor.protocol.https.title",
+    descriptionKey: "newMonitor.protocol.https.description",
     placeholder: "https://",
   },
   {
     value: "ws",
     badge: "WS://",
-    title: "WS / websocket monitoring",
-    description:
-      "Use WebSocket monitor to monitor your WS endpoint and real-time socket availability.",
+    titleKey: "newMonitor.protocol.ws.title",
+    descriptionKey: "newMonitor.protocol.ws.description",
     placeholder: "ws://",
   },
   {
     value: "wss",
     badge: "WSS://",
-    title: "WSS / websocket monitoring",
-    description:
-      "Use secure WebSocket monitor to monitor your WSS endpoint with encrypted transport.",
+    titleKey: "newMonitor.protocol.wss.title",
+    descriptionKey: "newMonitor.protocol.wss.description",
     placeholder: "wss://",
   },
 ];
@@ -186,25 +189,25 @@ const protocolPrefixes: Record<MonitorProtocol, string> = {
   wss: "wss://",
 };
 
-const notificationChannelLabels: Record<NotificationChannel, string> = {
-  email: "E-mail",
-  sms: "SMS message",
-  voice: "Voice call",
-  push: "Mobile push",
+const notificationChannelLabelKeys: Record<NotificationChannel, string> = {
+  email: "newMonitor.notificationChannels.email",
+  sms: "newMonitor.notificationChannels.sms",
+  voice: "newMonitor.notificationChannels.voice",
+  push: "newMonitor.notificationChannels.push",
 };
 
-const repeatOptionLabels: Record<NotificationRepeat, string> = {
-  none: "No repeat",
-  "every-check": "Repeat every check",
-  hourly: "Repeat hourly",
-  daily: "Repeat daily",
+const repeatOptionLabelKeys: Record<NotificationRepeat, string> = {
+  none: "newMonitor.timing.noRepeat",
+  "every-check": "newMonitor.timing.repeatEveryCheck",
+  hourly: "newMonitor.timing.repeatHourly",
+  daily: "newMonitor.timing.repeatDaily",
 };
 
-const delayOptionLabels: Record<NotificationDelay, string> = {
-  none: "No delay",
-  "1m": "Delay 1 minute",
-  "5m": "Delay 5 minutes",
-  "15m": "Delay 15 minutes",
+const delayOptionLabelKeys: Record<NotificationDelay, string> = {
+  none: "newMonitor.timing.noDelay",
+  "1m": "newMonitor.timing.delay1Minute",
+  "5m": "newMonitor.timing.delay5Minutes",
+  "15m": "newMonitor.timing.delay15Minutes",
 };
 
 const phoneCountryOptions = `
@@ -663,6 +666,7 @@ function NewMonitorPage({
   initialUpStatusCodeGroups,
   notificationEmail,
 }: NewMonitorPageProps) {
+  const { t, language } = useAppLanguage();
   const initialMonitorUrl =
     initialUrl ?? protocolPrefixes[initialProtocol ?? "https"];
   const [selectedIntervalIndex, setSelectedIntervalIndex] = useState(() =>
@@ -810,17 +814,27 @@ function NewMonitorPage({
   const detailsSectionRef = useRef<HTMLElement | null>(null);
   const integrationsSectionRef = useRef<HTMLElement | null>(null);
   const maintenanceSectionRef = useRef<HTMLElement | null>(null);
+  const translatedProtocolOptions = useMemo(
+    () =>
+      protocolOptions.map((option) => ({
+        ...option,
+        title: t(option.titleKey),
+        description: t(option.descriptionKey),
+      })),
+    [t],
+  );
   const resolvedNotificationEmail =
-    (notificationEmail ?? "").trim() || "No email connected";
+    (notificationEmail ?? "").trim() || t("newMonitor.noEmailConnected");
   const selectedIntervalLabel = useMemo(
     () => intervalOptions[selectedIntervalIndex] ?? intervalOptions[2],
     [selectedIntervalIndex],
   );
   const selectedProtocolOption = useMemo(
     () =>
-      protocolOptions.find((option) => option.value === selectedProtocol) ??
-      protocolOptions[0],
-    [selectedProtocol],
+      translatedProtocolOptions.find(
+        (option) => option.value === selectedProtocol,
+      ) ?? translatedProtocolOptions[0],
+    [selectedProtocol, translatedProtocolOptions],
   );
   const intervalProgress = useMemo(() => {
     if (intervalOptions.length <= 1) return 0;
@@ -1057,7 +1071,7 @@ function NewMonitorPage({
     if (normalizedLocalNumber === "") {
       return {
         isValid: false,
-        error: "Phone number is required.",
+        error: t("newMonitor.phoneErrors.required"),
         normalizedPhone: "",
       };
     }
@@ -1065,7 +1079,7 @@ function NewMonitorPage({
     if (!/^[0-9\s\-()]+$/.test(normalizedLocalNumber)) {
       return {
         isValid: false,
-        error: 'Use digits only (spaces, "-" and parentheses are allowed).',
+        error: t("newMonitor.phoneErrors.digitsOnly"),
         normalizedPhone: "",
       };
     }
@@ -1076,7 +1090,7 @@ function NewMonitorPage({
     if (localDigits.length < 6 || localDigits.length > 14) {
       return {
         isValid: false,
-        error: "Phone number must contain between 6 and 14 digits.",
+        error: t("newMonitor.phoneErrors.length"),
         normalizedPhone: "",
       };
     }
@@ -1084,7 +1098,7 @@ function NewMonitorPage({
     if (/^0+$/.test(localDigits)) {
       return {
         isValid: false,
-        error: "Phone number is invalid.",
+        error: t("newMonitor.phoneErrors.invalid"),
         normalizedPhone: "",
       };
     }
@@ -1093,7 +1107,7 @@ function NewMonitorPage({
     if (totalDigits < 8 || totalDigits > 15) {
       return {
         isValid: false,
-        error: "Phone number must match international format.",
+        error: t("newMonitor.phoneErrors.internationalFormat"),
         normalizedPhone: "",
       };
     }
@@ -1162,7 +1176,7 @@ function NewMonitorPage({
     );
 
     if (!validation.isValid) {
-      setPhoneDraftError(validation.error ?? "Phone number is invalid.");
+      setPhoneDraftError(validation.error ?? t("newMonitor.phoneErrors.invalid"));
       return;
     }
 
@@ -1226,18 +1240,28 @@ function NewMonitorPage({
     }));
   };
 
+  const localizeSentenceCase = (value: string): string =>
+    language === "ar" ? value : value.toLowerCase();
+
   const formatNotificationTiming = (timing: NotificationTiming): string => {
-    const delayLabel = delayOptionLabels[timing.delay];
-    const repeatLabel = repeatOptionLabels[timing.repeat];
+    const delayLabel = t(delayOptionLabelKeys[timing.delay]);
+    const repeatLabel = t(repeatOptionLabelKeys[timing.repeat]);
 
     if (timing.delay === "none" && timing.repeat === "none") {
-      return "No delay, no repeat";
+      return t("newMonitor.timing.noDelayNoRepeat");
     }
 
-    return `${delayLabel}, ${repeatLabel.toLowerCase()}`;
+    return t("newMonitor.timing.summary", {
+      delay: delayLabel,
+      repeat: localizeSentenceCase(repeatLabel),
+    });
   };
 
-  const timingPreview = `${notificationChannelLabels[timingModalChannel]} alerts will use ${delayOptionLabels[timingDelayDraft]} and ${repeatOptionLabels[timingRepeatDraft].toLowerCase()}.`;
+  const timingPreview = t("newMonitor.timing.preview", {
+    channel: t(notificationChannelLabelKeys[timingModalChannel]),
+    delay: t(delayOptionLabelKeys[timingDelayDraft]),
+    repeat: localizeSentenceCase(t(repeatOptionLabelKeys[timingRepeatDraft])),
+  });
   const methodsWithBody = new Set(["POST", "PUT", "PATCH"]);
   const isBodySupportedForSelectedMethod =
     methodsWithBody.has(selectedHttpMethod);
@@ -1276,10 +1300,10 @@ function NewMonitorPage({
           className="new-monitor-breadcrumb-link"
           onClick={onBack}
         >
-          Monitoring
+          {t("menu.monitoring")}
         </button>
         <ChevronRight size={14} />
-        <span>Monitoring</span>
+        <span>{t("menu.monitoring")}</span>
       </div>
 
       <div className="new-monitor-content-grid">
@@ -1314,7 +1338,7 @@ function NewMonitorPage({
                     type="button"
                     aria-haspopup="listbox"
                     aria-expanded={isProtocolMenuOpen}
-                    aria-label="Select monitor protocol"
+                    aria-label={t("newMonitor.aria.selectProtocol")}
                     onClick={(event) => {
                       event.stopPropagation();
                       toggleProtocolMenu();
@@ -1331,9 +1355,9 @@ function NewMonitorPage({
                 <div
                   className="new-monitor-type-panel"
                   role="listbox"
-                  aria-label="Monitor protocol"
+                  aria-label={t("newMonitor.aria.monitorProtocol")}
                 >
-                  {protocolOptions.map((option) => (
+                  {translatedProtocolOptions.map((option) => (
                     <button
                       key={option.value}
                       type="button"
@@ -1362,12 +1386,12 @@ function NewMonitorPage({
             <div className="new-monitor-separator" />
 
             <div className="new-monitor-field">
-              <label htmlFor="new-monitor-name">Monitor name</label>
+              <label htmlFor="new-monitor-name">{t("newMonitor.monitorNameLabel")}</label>
               <input
                 id="new-monitor-name"
                 className="new-monitor-input"
                 type="text"
-                placeholder="My service"
+                placeholder={t("newMonitor.monitorNamePlaceholder")}
                 value={monitorName}
                 onChange={(event) => setMonitorName(event.target.value)}
                 disabled={isCreating}
@@ -1377,7 +1401,7 @@ function NewMonitorPage({
             <div className="new-monitor-separator" />
 
             <div className="new-monitor-field">
-              <label htmlFor="new-monitor-url">URL to monitor</label>
+              <label htmlFor="new-monitor-url">{t("newMonitor.urlToMonitorLabel")}</label>
               <input
                 id="new-monitor-url"
                 className="new-monitor-input"
@@ -1395,7 +1419,7 @@ function NewMonitorPage({
               className="new-monitor-notify"
               ref={integrationsSectionRef}
             >
-              <h3>How will we notify you ?</h3>
+              <h3>{t("newMonitor.howWillWeNotifyYou")}</h3>
               <div className="new-monitor-notify-grid">
                 <article className="notify-option">
                   <label>
@@ -1404,7 +1428,7 @@ function NewMonitorPage({
                       checked={enabledNotificationChannels.email}
                       onChange={() => handleToggleNotificationChannel("email")}
                     />
-                    <span>E-mail</span>
+                    <span>{t(notificationChannelLabelKeys.email)}</span>
                   </label>
                   <p className="notify-option-value">
                     {resolvedNotificationEmail}
@@ -1432,7 +1456,7 @@ function NewMonitorPage({
                       checked={enabledNotificationChannels.sms}
                       onChange={() => handleToggleNotificationChannel("sms")}
                     />
-                    <span>SMS message</span>
+                    <span>{t(notificationChannelLabelKeys.sms)}</span>
                   </label>
                   {notificationPhoneNumber.trim() === "" ? (
                     <button
@@ -1440,7 +1464,7 @@ function NewMonitorPage({
                       className="notify-phone-action"
                       onClick={() => openPhoneModal("sms")}
                     >
-                      Add phone number
+                      {t("newMonitor.addPhoneNumber")}
                     </button>
                   ) : (
                     <p className="notify-option-value">
@@ -1470,7 +1494,7 @@ function NewMonitorPage({
                       checked={enabledNotificationChannels.voice}
                       onChange={() => handleToggleNotificationChannel("voice")}
                     />
-                    <span>Voice call</span>
+                    <span>{t(notificationChannelLabelKeys.voice)}</span>
                   </label>
                   {notificationPhoneNumber.trim() === "" ? (
                     <button
@@ -1478,7 +1502,7 @@ function NewMonitorPage({
                       className="notify-phone-action"
                       onClick={() => openPhoneModal("voice")}
                     >
-                      Add phone number
+                      {t("newMonitor.addPhoneNumber")}
                     </button>
                   ) : (
                     <p className="notify-option-value">
@@ -1508,10 +1532,10 @@ function NewMonitorPage({
                       checked={enabledNotificationChannels.push}
                       onChange={() => handleToggleNotificationChannel("push")}
                     />
-                    <span>Mobile push</span>
+                    <span>{t(notificationChannelLabelKeys.push)}</span>
                   </label>
                   <p className="notify-option-value">
-                    Download app for{" "}
+                    {t("newMonitor.downloadAppFor")}{" "}
                     <a
                       className="notify-inline-link"
                       href="https://apps.apple.com/"
@@ -1548,7 +1572,7 @@ function NewMonitorPage({
                 </article>
               </div>
               <p className="notify-option-footnote">
-                You can set up notifications for{" "}
+                {t("newMonitor.notificationFootnote.prefix")}{" "}
                 <button
                   type="button"
                   className="notify-inline-action"
@@ -1556,19 +1580,19 @@ function NewMonitorPage({
                     scrollToSection("integrations");
                   }}
                 >
-                  Integrations & Team
+                  {t("newMonitor.integrationsTeam")}
                 </button>{" "}
-                in the specific tab and edit it later
+                {t("newMonitor.notificationFootnote.suffix")}
               </p>
             </section>
           </section>
 
           <section className="new-monitor-card" ref={maintenanceSectionRef}>
-            <h3>Monitor interval</h3>
+            <h3>{t("newMonitor.monitorInterval")}</h3>
             <p className="monitor-interval-description">
-              Your monitor will be checked every{" "}
-              <strong>{selectedIntervalLabel}</strong>. We recommend to use at
-              least 1-minute checks
+              {t("newMonitor.monitorIntervalDescription.prefix")}{" "}
+              <strong>{selectedIntervalLabel}</strong>
+              {t("newMonitor.monitorIntervalDescription.suffix")}
             </p>
 
             <div className="monitor-interval-slider-wrap">
@@ -1606,7 +1630,7 @@ function NewMonitorPage({
                     size={15}
                     className={`ssl-domain-toggle-icon ${isSslDomainOpen ? "open" : "closed"}`}
                   />
-                  <span>SSL certificate and domain checks</span>
+                  <span>{t("newMonitor.sslCertificateAndDomainChecks")}</span>
                 </button>
               </div>
 
@@ -1617,7 +1641,7 @@ function NewMonitorPage({
                       htmlFor="ssl-check-mode"
                       className="ssl-select-label"
                     >
-                      Check ssl errors
+                      {t("newMonitor.checkSslErrors")}
                     </label>
                     <div className="ssl-select-wrap">
                       <select
@@ -1632,8 +1656,8 @@ function NewMonitorPage({
                           )
                         }
                       >
-                        <option value="disabled">Disabled</option>
-                        <option value="enabled">Enabled</option>
+                        <option value="disabled">{t("common.disabled")}</option>
+                        <option value="enabled">{t("common.enabled")}</option>
                       </select>
                       <ChevronDown size={12} />
                     </div>
@@ -1644,7 +1668,7 @@ function NewMonitorPage({
                       htmlFor="ssl-expiry-mode"
                       className="ssl-select-label"
                     >
-                      SSL expiry reminders
+                      {t("newMonitor.sslExpiryReminders")}
                     </label>
                     <div className="ssl-select-wrap">
                       <select
@@ -1659,8 +1683,8 @@ function NewMonitorPage({
                           )
                         }
                       >
-                        <option value="disabled">Disabled</option>
-                        <option value="enabled">Enabled</option>
+                        <option value="disabled">{t("common.disabled")}</option>
+                        <option value="enabled">{t("common.enabled")}</option>
                       </select>
                       <ChevronDown size={12} />
                     </div>
@@ -1671,7 +1695,7 @@ function NewMonitorPage({
                       htmlFor="domain-expiry-mode"
                       className="ssl-select-label"
                     >
-                      Domain expiry reminders
+                      {t("newMonitor.domainExpiryReminders")}
                     </label>
                     <div className="ssl-select-wrap">
                       <select
@@ -1686,8 +1710,8 @@ function NewMonitorPage({
                           )
                         }
                       >
-                        <option value="disabled">Disabled</option>
-                        <option value="enabled">Enabled</option>
+                        <option value="disabled">{t("common.disabled")}</option>
+                        <option value="enabled">{t("common.enabled")}</option>
                       </select>
                       <ChevronDown size={12} />
                     </div>
@@ -1705,23 +1729,19 @@ function NewMonitorPage({
                 size={14}
                 className={`advanced-toggle-icon ${isAdvancedOpen ? "open" : "closed"}`}
               />
-              <span>Advanced settings</span>
+              <span>{t("newMonitor.advancedSettings")}</span>
             </button>
 
             {isAdvancedOpen && (
               <section className="advanced-settings-panel">
                 <div className="advanced-block">
-                  <h4>Request timeout</h4>
+                  <h4>{t("newMonitor.requestTimeout")}</h4>
                   <p className="advanced-muted-text">
-                    The request timeout is{" "}
+                    {t("newMonitor.requestTimeoutDescription.prefix")}{" "}
                     <strong>
-                      {timeoutOptions[selectedTimeoutIndex].replace(
-                        "s",
-                        " seconds",
-                      )}
+                      {timeoutOptions[selectedTimeoutIndex]}
                     </strong>
-                    . The shorter the timeout the earlier we mark website as
-                    down.
+                    {t("newMonitor.requestTimeoutDescription.suffix")}
                   </p>
                   <div className="advanced-timeout-slider-wrap">
                     <input
@@ -1764,15 +1784,12 @@ function NewMonitorPage({
                         aria-hidden="true"
                       />
                       <span className="advanced-row-title">
-                        Slow response time alert
+                        {t("newMonitor.slowResponseTimeAlert")}
                       </span>
                     </label>
                   </div>
                   <p className="advanced-muted-text">
-                    You&apos;ll receive a notification if the response time
-                    exceeds your set threshold. Once it drops back below the
-                    threshold, you&apos;ll be notified again, and the incident
-                    will be marked as resolved.
+                    {t("newMonitor.slowResponseAlertDescription")}
                   </p>
                   <div className="advanced-threshold-input-wrap">
                     <input
@@ -1784,17 +1801,16 @@ function NewMonitorPage({
                       }
                       disabled={!slowResponseAlert}
                     />
-                    <span>milliseconds</span>
+                    <span>{t("newMonitor.milliseconds")}</span>
                   </div>
                 </div>
 
                 <div className="advanced-divider" />
 
                 <div className="advanced-block">
-                  <h4>Internet Protocol version</h4>
+                  <h4>{t("newMonitor.internetProtocolVersion")}</h4>
                   <p className="advanced-muted-text">
-                    Default uses IPv4 first, then IPv6 only if IPv4 isn&apos;t
-                    available.
+                    {t("newMonitor.internetProtocolVersionDescription")}
                   </p>
                   <div className="advanced-select-wrap">
                     <select
@@ -1808,7 +1824,7 @@ function NewMonitorPage({
                     >
                       {ipVersionOptions.map((ipVersion) => (
                         <option key={ipVersion} value={ipVersion}>
-                          {ipVersion}
+                          {t(ipVersionLabelKeys[ipVersion])}
                         </option>
                       ))}
                     </select>
@@ -1828,16 +1844,16 @@ function NewMonitorPage({
                         setFollowRedirections(event.target.checked)
                       }
                     />
-                    <span
-                      className="advanced-switch-track"
-                      aria-hidden="true"
-                    />
-                    <span className="advanced-row-title">
-                      Follow redirections
-                    </span>
+                      <span
+                        className="advanced-switch-track"
+                        aria-hidden="true"
+                      />
+                      <span className="advanced-row-title">
+                      {t("newMonitor.followRedirections")}
+                      </span>
                   </label>
                   <p className="advanced-muted-text">
-                    If disabled, we return redirections HTTP codes (3xx).
+                    {t("newMonitor.followRedirectionsDescription")}
                   </p>
                 </div>
 
@@ -1845,11 +1861,10 @@ function NewMonitorPage({
 
                 <div className="advanced-block">
                   <div className="advanced-row-top">
-                    <h4>Up HTTP status codes</h4>
+                    <h4>{t("newMonitor.upHttpStatusCodes")}</h4>
                   </div>
                   <p className="advanced-muted-text">
-                    We will create incident when we receive HTTP status code
-                    other than defined below.
+                    {t("newMonitor.upHttpStatusCodesDescription")}
                   </p>
                   <div className="advanced-status-codes-box">
                     <button
@@ -1877,8 +1892,8 @@ function NewMonitorPage({
 
                 <div className="advanced-block">
                   <div className="advanced-auth-head">
-                    <h4>Auth. type</h4>
-                    <h4>Auth. credentials</h4>
+                    <h4>{t("newMonitor.authType")}</h4>
+                    <h4>{t("newMonitor.authCredentials")}</h4>
                   </div>
                   <div className="advanced-auth-grid">
                     <div className="advanced-select-wrap">
@@ -1895,16 +1910,16 @@ function NewMonitorPage({
                           )
                         }
                       >
-                        <option value="none">None</option>
-                        <option value="basic">Basic</option>
-                        <option value="bearer">Bearer Token</option>
+                        <option value="none">{t("newMonitor.auth.none")}</option>
+                        <option value="basic">{t("newMonitor.auth.basic")}</option>
+                        <option value="bearer">{t("newMonitor.auth.bearerToken")}</option>
                       </select>
                       <ChevronDown size={14} />
                     </div>
                     <input
                       className="advanced-input"
                       type="text"
-                      placeholder="Username"
+                      placeholder={t("newMonitor.usernamePlaceholder")}
                       value={authUsername}
                       onChange={(event) => setAuthUsername(event.target.value)}
                     />
@@ -1912,7 +1927,7 @@ function NewMonitorPage({
                       <input
                         className="advanced-input"
                         type="password"
-                        placeholder="Password"
+                        placeholder={t("newMonitor.passwordPlaceholder")}
                         value={authPassword}
                         onChange={(event) =>
                           setAuthPassword(event.target.value)
@@ -1927,12 +1942,10 @@ function NewMonitorPage({
 
                 <div className="advanced-block">
                   <div className="advanced-row-top">
-                    <h4>HTTP method</h4>
+                    <h4>{t("newMonitor.httpMethod")}</h4>
                   </div>
                   <p className="advanced-muted-text">
-                    We suggest using GET to match the default behavior used by
-                    UptimeRobot and Uptime Kuma. Use HEAD only when you
-                    specifically need a header-only check.
+                    {t("newMonitor.httpMethodDescription")}
                   </p>
                   <div className="advanced-methods-tabs">
                     {httpMethods.map((method) => (
@@ -1952,7 +1965,7 @@ function NewMonitorPage({
 
                 <div className="advanced-block">
                   <div className="advanced-row-top">
-                    <h4>Request body</h4>
+                    <h4>{t("newMonitor.requestBody")}</h4>
                   </div>
                   <textarea
                     className="advanced-textarea"
@@ -1969,17 +1982,19 @@ function NewMonitorPage({
                       disabled={!isBodySupportedForSelectedMethod}
                     />
                     <span
-                      className="advanced-switch-track"
-                      aria-hidden="true"
-                    />
-                    <span className="advanced-row-title">
-                      Send as JSON (application/json)
-                    </span>
+                        className="advanced-switch-track"
+                        aria-hidden="true"
+                      />
+                      <span className="advanced-row-title">
+                      {t("newMonitor.sendAsJson")}
+                      </span>
                   </label>
                   <p className="advanced-muted-text">
                     {isBodySupportedForSelectedMethod
-                      ? "Data will be sent as a standard POST (application/x-www-form-urlencoded) unless you check the JSON option."
-                      : `Request body is disabled for ${selectedHttpMethod}. Use POST, PUT or PATCH to send a body.`}
+                      ? t("newMonitor.requestBodyEnabledDescription")
+                      : t("newMonitor.requestBodyDisabledDescription", {
+                          method: selectedHttpMethod,
+                        })}
                   </p>
                 </div>
 
@@ -1987,14 +2002,14 @@ function NewMonitorPage({
 
                 <div className="advanced-block">
                   <div className="advanced-row-top">
-                    <h4>Request headers</h4>
+                    <h4>{t("newMonitor.requestHeaders")}</h4>
                   </div>
                   {requestHeaders.map((header) => (
                     <div className="advanced-headers-grid" key={header.id}>
                       <input
                         className="advanced-input"
                         type="text"
-                        placeholder="Header key"
+                        placeholder={t("newMonitor.headerKeyPlaceholder")}
                         value={header.key}
                         onChange={(event) =>
                           updateRequestHeader(
@@ -2007,7 +2022,7 @@ function NewMonitorPage({
                       <input
                         className="advanced-input"
                         type="text"
-                        placeholder="Header value"
+                        placeholder={t("newMonitor.headerValuePlaceholder")}
                         value={header.value}
                         onChange={(event) =>
                           updateRequestHeader(
@@ -2020,7 +2035,7 @@ function NewMonitorPage({
                       <button
                         type="button"
                         className="advanced-header-delete"
-                        aria-label="Delete header row"
+                        aria-label={t("newMonitor.deleteHeaderRow")}
                         onClick={() => removeRequestHeader(header.id)}
                       >
                         <Trash2 size={12} />
@@ -2032,7 +2047,7 @@ function NewMonitorPage({
                     className="advanced-header-add"
                     onClick={addRequestHeader}
                   >
-                    + Add header
+                    + {t("newMonitor.addHeader")}
                   </button>
                 </div>
 
@@ -2044,28 +2059,28 @@ function NewMonitorPage({
                     className="advanced-validation-add"
                     onClick={() => setIsResponseValidationEnabled(true)}
                   >
-                    + Add validations
+                    + {t("newMonitor.addValidations")}
                   </button>
                 ) : (
                   <div className="advanced-block">
                     <div className="advanced-row-top advanced-row-top-split">
-                      <h4>Validation</h4>
+                      <h4>{t("newMonitor.validation")}</h4>
                       <button
                         type="button"
                         className="advanced-validation-remove"
                         onClick={() => setIsResponseValidationEnabled(false)}
                       >
-                        Remove
+                        {t("common.remove")}
                       </button>
                     </div>
                     <p className="advanced-muted-text">
-                      Validate response JSON field <strong>status</strong> by
-                      value or by type.
+                      {t("newMonitor.validationDescription")} <strong>status</strong>{' '}
+                      {t("newMonitor.validationDescriptionSuffix")}
                     </p>
 
                     <div className="advanced-validation-grid">
                       <div className="advanced-validation-field-name">
-                        <label>Field</label>
+                        <label>{t("newMonitor.validationField")}</label>
                         <input
                           className="advanced-input"
                           type="text"
@@ -2075,7 +2090,7 @@ function NewMonitorPage({
                       </div>
 
                       <label className="advanced-validation-mode">
-                        <span>Mode</span>
+                        <span>{t("newMonitor.validationMode")}</span>
                         <select
                           className="advanced-select"
                           value={responseValidationMode}
@@ -2084,19 +2099,19 @@ function NewMonitorPage({
                               event.target.value === "type" ? "type" : "value",
                             )
                           }
-                        >
-                          <option value="value">of value</option>
-                          <option value="type">of type</option>
+                          >
+                          <option value="value">{t("newMonitor.validationModeValue")}</option>
+                          <option value="type">{t("newMonitor.validationModeType")}</option>
                         </select>
                       </label>
 
                       {responseValidationMode === "value" ? (
                         <label className="advanced-validation-expected">
-                          <span>Expected value</span>
+                          <span>{t("newMonitor.expectedValue")}</span>
                           <input
                             className="advanced-input"
                             type="text"
-                            placeholder='e.g. "up"'
+                            placeholder={t("newMonitor.expectedValuePlaceholder")}
                             value={responseValidationValue}
                             onChange={(event) =>
                               setResponseValidationValue(event.target.value)
@@ -2105,7 +2120,7 @@ function NewMonitorPage({
                         </label>
                       ) : (
                         <label className="advanced-validation-expected">
-                          <span>Expected type</span>
+                          <span>{t("newMonitor.expectedType")}</span>
                           <select
                             className="advanced-select"
                             value={responseValidationType}
@@ -2119,9 +2134,9 @@ function NewMonitorPage({
                               )
                             }
                           >
-                            <option value="string">string</option>
-                            <option value="boolean">boolean</option>
-                            <option value="number">number</option>
+                            <option value="string">{t("newMonitor.validationTypeString")}</option>
+                            <option value="boolean">{t("newMonitor.validationTypeBoolean")}</option>
+                            <option value="number">{t("newMonitor.validationTypeNumber")}</option>
                           </select>
                         </label>
                       )}
@@ -2132,16 +2147,15 @@ function NewMonitorPage({
             )}
 
             <div className="new-monitor-field tags-field">
-              <label htmlFor="new-monitor-tags">Add tags</label>
+              <label htmlFor="new-monitor-tags">{t("newMonitor.addTags")}</label>
               <p className="tag-help">
-                Optional. We use this to group monitors, so you are able to
-                easily manage them in bulk or organize on status pages.
+                {t("newMonitor.tagsHelp")}
               </p>
               <input
                 id="new-monitor-tags"
                 className="new-monitor-input"
                 type="text"
-                placeholder="Add tag ..."
+                placeholder={t("newMonitor.tagPlaceholder")}
                 value={tagsText}
                 onChange={(event) => setTagsText(event.target.value)}
               />
@@ -2157,7 +2171,7 @@ function NewMonitorPage({
               onClick={handleCreateMonitor}
               disabled={isCreateDisabled}
             >
-              {isCreating ? "Creating..." : "Create monitor"}
+              {isCreating ? t("common.creating") : t("newMonitor.createMonitor")}
             </button>
           </section>
         </div>
@@ -2170,7 +2184,7 @@ function NewMonitorPage({
               scrollToSection("details");
             }}
           >
-            Monitor details
+            {t("newMonitor.side.details")}
           </button>
           <button
             type="button"
@@ -2179,7 +2193,7 @@ function NewMonitorPage({
               scrollToSection("integrations");
             }}
           >
-            Integrations & Team
+            {t("newMonitor.side.integrationsTeam")}
           </button>
           <button
             type="button"
@@ -2188,7 +2202,7 @@ function NewMonitorPage({
               scrollToSection("maintenance");
             }}
           >
-            Maintenance info
+            {t("newMonitor.side.maintenanceInfo")}
           </button>
         </aside>
       </div>
@@ -2214,20 +2228,20 @@ function NewMonitorPage({
                 type="button"
                 className="new-monitor-modal-close new-monitor-phone-modal-close"
                 onClick={closePhoneModal}
-                aria-label="Close"
+                aria-label={t("common.close")}
               >
                 <X size={16} />
               </button>
               <span className="new-monitor-phone-modal-icon" aria-hidden="true">
                 <Smartphone size={30} />
               </span>
-              <h3 id="add-phone-number-title">Add your phone number</h3>
+              <h3 id="add-phone-number-title">{t("newMonitor.phoneModalTitle")}</h3>
             </div>
 
             <div className="new-monitor-phone-modal-body">
-              <h4>Enter your number</h4>
+              <h4>{t("newMonitor.phoneModalEnterNumber")}</h4>
               <p className="new-monitor-phone-modal-copy">
-                We use this for SMS and voice call notifications.
+                {t("newMonitor.phoneModalCopy")}
               </p>
 
               <div
@@ -2288,7 +2302,7 @@ function NewMonitorPage({
                       <input
                         type="text"
                         className="new-monitor-phone-country-search-input"
-                        placeholder="Search country or code"
+                        placeholder={t("newMonitor.searchCountryOrCode")}
                         value={phoneCountrySearchQuery}
                         onChange={(event) =>
                           setPhoneCountrySearchQuery(event.target.value)
@@ -2299,7 +2313,7 @@ function NewMonitorPage({
                     <div
                       className="new-monitor-phone-country-options"
                       role="listbox"
-                      aria-label="Country codes"
+                      aria-label={t("newMonitor.countryCodes")}
                     >
                       {filteredPhoneCountryOptions.length > 0 ? (
                         filteredPhoneCountryOptions.map((countryOption) => (
@@ -2335,7 +2349,7 @@ function NewMonitorPage({
                         ))
                       ) : (
                         <p className="new-monitor-phone-country-empty">
-                          No countries found.
+                          {t("newMonitor.noCountriesFound")}
                         </p>
                       )}
                     </div>
@@ -2350,7 +2364,7 @@ function NewMonitorPage({
               </p>
 
               <p className="new-monitor-phone-step-note">
-                In the next step we will send you the confirmation code.
+                {t("newMonitor.phoneStepNote")}
               </p>
 
               <div className="new-monitor-phone-divider" />
@@ -2361,7 +2375,7 @@ function NewMonitorPage({
                   className="new-monitor-modal-cancel"
                   onClick={closePhoneModal}
                 >
-                  Cancel
+                  {t("common.cancel")}
                 </button>
                 <button
                   type="button"
@@ -2369,7 +2383,7 @@ function NewMonitorPage({
                   onClick={savePhoneNumber}
                   disabled={phoneLocalNumberDraft.trim() === ""}
                 >
-                  Next: Confirm
+                  {t("newMonitor.nextConfirm")}
                 </button>
               </div>
             </div>
@@ -2395,21 +2409,21 @@ function NewMonitorPage({
           >
             <div className="new-monitor-modal-header">
               <h3 id="notification-timing-title">
-                Notification Repeat and Delay
+                {t("newMonitor.notificationRepeatAndDelay")}
               </h3>
               <button
                 type="button"
                 className="new-monitor-modal-close"
                 onClick={closeTimingModal}
-                aria-label="Close"
+                aria-label={t("common.close")}
               >
                 <X size={16} />
               </button>
             </div>
 
             <p className="new-monitor-modal-copy">
-              Currently editing settings for{" "}
-              <strong>{notificationChannelLabels[timingModalChannel]}</strong>.
+              {t("newMonitor.currentlyEditingSettingsFor")}{" "}
+              <strong>{t(notificationChannelLabelKeys[timingModalChannel])}</strong>.
             </p>
 
             <div className="new-monitor-timing-grid">
@@ -2417,7 +2431,7 @@ function NewMonitorPage({
                 className="new-monitor-modal-field"
                 htmlFor="notification-repeat-select"
               >
-                <span>Repeat notification</span>
+                <span>{t("newMonitor.repeatNotification")}</span>
                 <select
                   id="notification-repeat-select"
                   value={timingRepeatDraft}
@@ -2427,10 +2441,10 @@ function NewMonitorPage({
                     )
                   }
                 >
-                  <option value="none">No repeat</option>
-                  <option value="every-check">Repeat every check</option>
-                  <option value="hourly">Repeat hourly</option>
-                  <option value="daily">Repeat daily</option>
+                  <option value="none">{t(repeatOptionLabelKeys.none)}</option>
+                  <option value="every-check">{t(repeatOptionLabelKeys["every-check"])}</option>
+                  <option value="hourly">{t(repeatOptionLabelKeys.hourly)}</option>
+                  <option value="daily">{t(repeatOptionLabelKeys.daily)}</option>
                 </select>
               </label>
 
@@ -2438,7 +2452,7 @@ function NewMonitorPage({
                 className="new-monitor-modal-field"
                 htmlFor="notification-delay-select"
               >
-                <span>Delay notification</span>
+                <span>{t("newMonitor.delayNotification")}</span>
                 <select
                   id="notification-delay-select"
                   value={timingDelayDraft}
@@ -2446,16 +2460,16 @@ function NewMonitorPage({
                     setTimingDelayDraft(event.target.value as NotificationDelay)
                   }
                 >
-                  <option value="none">No delay</option>
-                  <option value="1m">Delay 1 minute</option>
-                  <option value="5m">Delay 5 minutes</option>
-                  <option value="15m">Delay 15 minutes</option>
+                  <option value="none">{t(delayOptionLabelKeys.none)}</option>
+                  <option value="1m">{t(delayOptionLabelKeys["1m"])}</option>
+                  <option value="5m">{t(delayOptionLabelKeys["5m"])}</option>
+                  <option value="15m">{t(delayOptionLabelKeys["15m"])}</option>
                 </select>
               </label>
             </div>
 
             <article className="new-monitor-notification-preview">
-              <h4>Notification preview</h4>
+              <h4>{t("newMonitor.notificationPreview")}</h4>
               <p>{timingPreview}</p>
             </article>
 
@@ -2465,14 +2479,14 @@ function NewMonitorPage({
                 className="new-monitor-modal-cancel"
                 onClick={closeTimingModal}
               >
-                Cancel
+                {t("common.cancel")}
               </button>
               <button
                 type="button"
                 className="new-monitor-modal-confirm"
                 onClick={saveTimingSettings}
               >
-                Save
+                {t("common.save")}
               </button>
             </div>
           </div>

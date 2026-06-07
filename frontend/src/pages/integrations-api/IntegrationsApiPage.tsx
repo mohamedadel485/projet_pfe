@@ -11,6 +11,7 @@ import {
   type IntegrationEvent,
   type IntegrationProvider,
 } from '../../lib/api';
+import { useAppLanguage } from '../../lib/language';
 import './IntegrationsApiPage.css';
 
 type IntegrationCategory = 'All' | 'Chat platforms' | 'Webhooks' | 'Connectors & Incident manag.' | 'Push notifications' | 'API';
@@ -43,33 +44,6 @@ interface IntegrationEventOption {
   value: IntegrationEventSelection;
 }
 
-const integrationCards: IntegrationCard[] = [
-  {
-    id: 'slack',
-    name: 'Slack',
-    description: 'Slack messages are a great way to inform the entire team of a downtime.',
-    categories: ['Chat platforms'],
-    icon: 'slack',
-    isAvailable: true,
-  },
-  {
-    id: 'telegram',
-    name: 'Telegram',
-    description: 'Telegram messages are a great way to inform the entire team of a downtime.',
-    categories: ['Chat platforms'],
-    icon: 'telegram',
-    isAvailable: true,
-  },
-  {
-    id: 'webhook',
-    name: 'Webhook',
-    description: 'Webhook calls are a great way to connect your incident workflow and automations.',
-    categories: ['Webhooks', 'Connectors & Incident manag.'],
-    icon: 'webhook',
-    isAvailable: true,
-  },
-];
-
 const integrationCategories: IntegrationCategory[] = [
   'All',
   'Chat platforms',
@@ -85,32 +59,8 @@ const integrationEventOptions: IntegrationEventOption[] = [
   { label: 'Down events only', value: 'down-only' },
 ];
 
-const modalPresetByIcon: Record<IntegrationIcon, IntegrationModalPreset> = {
-  slack: {
-    endpointLabel: 'Slack webhook URL',
-    endpointHint: 'Generate it from your Slack app Incoming Webhooks configuration.',
-    endpointPlaceholder: 'https://hooks.slack.com/services/',
-    customLabel: 'Custom value',
-    customHint: 'Optional. Additional text appended to each notification message.',
-  },
-  telegram: {
-    endpointLabel: 'Telegram Bot API URL',
-    endpointHint:
-      'Use your Telegram bot sendMessage endpoint, for example https://api.telegram.org/bot<TOKEN>/sendMessage. Add the bot to your channel and use the channel ID or @username below.',
-    endpointPlaceholder: 'https://api.telegram.org/bot<token>/sendMessage',
-    customLabel: 'Channel chat ID or @username',
-    customHint: 'Required for Telegram. Example: @uptimewarden_alerts or -1001234567890.',
-  },
-  webhook: {
-    endpointLabel: 'Webhook URL',
-    endpointHint: 'Endpoint that will receive alert payloads from your monitors.',
-    endpointPlaceholder: 'https://example.com/webhook',
-    customLabel: 'Custom value',
-    customHint: 'Optional. Value added to each payload for filtering/routing.',
-  },
-};
-
 function IntegrationsApiPage({ onOpenIntegrationsTeam: _onOpenIntegrationsTeam }: IntegrationsApiPageProps) {
+  const { t } = useAppLanguage();
   const [query, setQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState<IntegrationCategory>('All');
   const [savedIntegrations, setSavedIntegrations] = useState<BackendIntegration[]>([]);
@@ -126,10 +76,84 @@ function IntegrationsApiPage({ onOpenIntegrationsTeam: _onOpenIntegrationsTeam }
   const [isSubmitting, setIsSubmitting] = useState(false);
   const endpointInputRef = useRef<HTMLInputElement | null>(null);
   const successTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const integrationCategoryLabels = useMemo<Record<IntegrationCategory, string>>(
+    () => ({
+      All: t('integrations.category.all'),
+      'Chat platforms': t('integrations.category.chatPlatforms'),
+      Webhooks: t('integrations.category.webhooks'),
+      'Connectors & Incident manag.': t('integrations.category.connectorsIncidentManagement'),
+      'Push notifications': t('integrations.category.pushNotifications'),
+      API: t('integrations.category.api'),
+    }),
+    [t],
+  );
+  const integrationEventLabels = useMemo<Record<IntegrationEventSelection, string>>(
+    () => ({
+      'up-and-down': t('integrations.events.upAndDown'),
+      'up-only': t('integrations.events.upOnly'),
+      'down-only': t('integrations.events.downOnly'),
+    }),
+    [t],
+  );
+  const integrationCardsWithCopy = useMemo<IntegrationCard[]>(
+    () => [
+      {
+        id: 'slack',
+        name: 'Slack',
+        description: t('integrations.cards.slack.description'),
+        categories: ['Chat platforms'],
+        icon: 'slack',
+        isAvailable: true,
+      },
+      {
+        id: 'telegram',
+        name: 'Telegram',
+        description: t('integrations.cards.telegram.description'),
+        categories: ['Chat platforms'],
+        icon: 'telegram',
+        isAvailable: true,
+      },
+      {
+        id: 'webhook',
+        name: 'Webhook',
+        description: t('integrations.cards.webhook.description'),
+        categories: ['Webhooks', 'Connectors & Incident manag.'],
+        icon: 'webhook',
+        isAvailable: true,
+      },
+    ],
+    [t],
+  );
+  const modalPresetByIconWithCopy = useMemo<Record<IntegrationIcon, IntegrationModalPreset>>(
+    () => ({
+      slack: {
+        endpointLabel: t('integrations.modal.slack.endpointLabel'),
+        endpointHint: t('integrations.modal.slack.endpointHint'),
+        endpointPlaceholder: t('integrations.modal.slack.endpointPlaceholder'),
+        customLabel: t('integrations.modal.slack.customLabel'),
+        customHint: t('integrations.modal.slack.customHint'),
+      },
+      telegram: {
+        endpointLabel: t('integrations.modal.telegram.endpointLabel'),
+        endpointHint: t('integrations.modal.telegram.endpointHint'),
+        endpointPlaceholder: t('integrations.modal.telegram.endpointPlaceholder'),
+        customLabel: t('integrations.modal.telegram.customLabel'),
+        customHint: t('integrations.modal.telegram.customHint'),
+      },
+      webhook: {
+        endpointLabel: t('integrations.modal.webhook.endpointLabel'),
+        endpointHint: t('integrations.modal.webhook.endpointHint'),
+        endpointPlaceholder: t('integrations.modal.webhook.endpointPlaceholder'),
+        customLabel: t('integrations.modal.webhook.customLabel'),
+        customHint: t('integrations.modal.webhook.customHint'),
+      },
+    }),
+    [t],
+  );
 
   const visibleCards = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
-    return integrationCards.filter((card) => {
+    return integrationCardsWithCopy.filter((card) => {
       const matchesCategory = activeCategory === 'All' || card.categories.includes(activeCategory);
       const matchesQuery =
         normalizedQuery.length === 0 ||
@@ -138,12 +162,12 @@ function IntegrationsApiPage({ onOpenIntegrationsTeam: _onOpenIntegrationsTeam }
 
       return matchesCategory && matchesQuery;
     });
-  }, [activeCategory, query]);
+  }, [activeCategory, integrationCardsWithCopy, query]);
 
   const activePreset = useMemo(() => {
     if (!activeCard) return null;
-    return modalPresetByIcon[activeCard.icon];
-  }, [activeCard]);
+    return modalPresetByIconWithCopy[activeCard.icon];
+  }, [activeCard, modalPresetByIconWithCopy]);
 
   const renderCardIcon = (icon: IntegrationIcon) => {
     if (icon === 'slack') {
@@ -187,12 +211,12 @@ function IntegrationsApiPage({ onOpenIntegrationsTeam: _onOpenIntegrationsTeam }
       if (error instanceof Error && error.message.trim() !== '') {
         setIntegrationsLoadError(error.message);
       } else {
-        setIntegrationsLoadError('Unable to load integrations.');
+        setIntegrationsLoadError(t('integrations.loadError'));
       }
     } finally {
       setIsIntegrationsLoading(false);
     }
-  }, []);
+  }, [t]);
 
   const handleCreateIntegration = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -203,7 +227,7 @@ function IntegrationsApiPage({ onOpenIntegrationsTeam: _onOpenIntegrationsTeam }
     }
 
     if (activeCard?.icon === 'telegram' && !customValue.trim()) {
-      setSubmitError('Telegram requires a channel chat ID or @username.');
+      setSubmitError(t('integrations.telegramMissingCustomValue'));
       return;
     }
 
@@ -224,7 +248,7 @@ function IntegrationsApiPage({ onOpenIntegrationsTeam: _onOpenIntegrationsTeam }
       });
 
       await loadIntegrations();
-      setCreateSuccessMessage(response.message || `${activeCard.name} integration created.`);
+      setCreateSuccessMessage(response.message || t('integrations.createSuccessFallback', { name: activeCard.name }));
       if (successTimerRef.current) {
         clearTimeout(successTimerRef.current);
       }
@@ -237,7 +261,7 @@ function IntegrationsApiPage({ onOpenIntegrationsTeam: _onOpenIntegrationsTeam }
       if (error instanceof Error && error.message.trim() !== '') {
         setSubmitError(error.message);
       } else {
-        setSubmitError('Unable to create integration.');
+        setSubmitError(t('integrations.createError'));
       }
     } finally {
       setIsSubmitting(false);
@@ -277,9 +301,9 @@ function IntegrationsApiPage({ onOpenIntegrationsTeam: _onOpenIntegrationsTeam }
   }, []);
 
   const formatEventsLabel = (events: IntegrationEvent[]): string => {
-    if (events.includes('up') && events.includes('down')) return 'Up, Down';
-    if (events.includes('up')) return 'Up only';
-    if (events.includes('down')) return 'Down only';
+    if (events.includes('up') && events.includes('down')) return integrationEventLabels['up-and-down'];
+    if (events.includes('up')) return integrationEventLabels['up-only'];
+    if (events.includes('down')) return integrationEventLabels['down-only'];
     return '-';
   };
 
@@ -289,7 +313,7 @@ function IntegrationsApiPage({ onOpenIntegrationsTeam: _onOpenIntegrationsTeam }
   const handleDeleteIntegration = async (integrationId: string) => {
     if (deletingIntegrationId) return;
 
-    const shouldDelete = window.confirm('Delete this integration?');
+    const shouldDelete = window.confirm(t('integrations.deleteConfirm'));
     if (!shouldDelete) return;
 
     try {
@@ -302,7 +326,7 @@ function IntegrationsApiPage({ onOpenIntegrationsTeam: _onOpenIntegrationsTeam }
       if (error instanceof Error && error.message.trim() !== '') {
         setIntegrationsLoadError(error.message);
       } else {
-        setIntegrationsLoadError('Unable to delete integration.');
+        setIntegrationsLoadError(t('integrations.deleteError'));
       }
     } finally {
       setDeletingIntegrationId(null);
@@ -312,7 +336,7 @@ function IntegrationsApiPage({ onOpenIntegrationsTeam: _onOpenIntegrationsTeam }
   return (
     <section className="integrations-api-page">
       <header className="integrations-api-header">
-        <h1>Edit Status pages</h1>
+        <h1>{t('menu.integrationsApi')}</h1>
       </header>
 
       <div className="integrations-api-layout">
@@ -325,7 +349,7 @@ function IntegrationsApiPage({ onOpenIntegrationsTeam: _onOpenIntegrationsTeam }
             <Search size={14} />
             <input
               type="text"
-              placeholder="Search by integration type"
+              placeholder={t('integrations.searchPlaceholder')}
               value={query}
               onChange={(event) => setQuery(event.target.value)}
             />
@@ -355,10 +379,10 @@ function IntegrationsApiPage({ onOpenIntegrationsTeam: _onOpenIntegrationsTeam }
                   {card.isAvailable ? (
                     <>
                       <Plus size={12} />
-                      Add
+                      {t('integrations.add')}
                     </>
                   ) : (
-                    'Coming soon'
+                    t('integrations.comingSoon')
                   )}
                 </button>
               </article>
@@ -366,25 +390,25 @@ function IntegrationsApiPage({ onOpenIntegrationsTeam: _onOpenIntegrationsTeam }
 
             {visibleCards.length === 0 && (
               <div className="integrations-api-empty">
-                <p>No integration found for this filter.</p>
+                <p>{t('integrations.emptyFilter')}</p>
               </div>
             )}
           </div>
 
           <section className="integrations-api-configured">
             <header className="integrations-api-configured-head">
-              <h2>Configured integrations</h2>
+              <h2>{t('integrations.sectionConfigured')}</h2>
               <button type="button" onClick={() => void loadIntegrations()} disabled={isIntegrationsLoading}>
-                Refresh
+                {t('integrations.refresh')}
               </button>
             </header>
 
             {isIntegrationsLoading ? (
-              <p className="integrations-api-configured-feedback">Loading integrations...</p>
+              <p className="integrations-api-configured-feedback">{t('integrations.loading')}</p>
             ) : integrationsLoadError ? (
               <p className="integrations-api-configured-feedback error">{integrationsLoadError}</p>
             ) : savedIntegrations.length === 0 ? (
-              <p className="integrations-api-configured-feedback">No integration configured yet.</p>
+              <p className="integrations-api-configured-feedback">{t('integrations.emptyConfigured')}</p>
             ) : (
               <div className="integrations-api-configured-list">
                 {savedIntegrations.map((integration) => (
@@ -398,12 +422,12 @@ function IntegrationsApiPage({ onOpenIntegrationsTeam: _onOpenIntegrationsTeam }
                           <h3>{formatProviderLabel(integration.type)}</h3>
                           <p className="endpoint">{integration.endpointUrl}</p>
                           <p>
-                            Events: <strong>{formatEventsLabel(integration.events)}</strong>
+                            {t('integrations.eventsLabel')}: <strong>{formatEventsLabel(integration.events)}</strong>
                           </p>
                           <p>
-                            Last sent:{' '}
+                            {t('integrations.lastSentLabel')}{' '}
                             <strong>
-                              {integration.lastTriggeredAt ? new Date(integration.lastTriggeredAt).toLocaleString() : 'Never'}
+                              {integration.lastTriggeredAt ? new Date(integration.lastTriggeredAt).toLocaleString() : t('integrations.never')}
                             </strong>
                           </p>
                         </div>
@@ -418,7 +442,7 @@ function IntegrationsApiPage({ onOpenIntegrationsTeam: _onOpenIntegrationsTeam }
                           disabled={deletingIntegrationId !== null}
                         >
                           <Trash2 size={13} />
-                          {deletingIntegrationId === integration._id ? 'Deleting...' : 'Delete'}
+                          {deletingIntegrationId === integration._id ? t('integrations.deleting') : t('integrations.delete')}
                         </button>
                       </div>
                     </div>
@@ -437,7 +461,7 @@ function IntegrationsApiPage({ onOpenIntegrationsTeam: _onOpenIntegrationsTeam }
               className={`integrations-api-filter ${activeCategory === category ? 'active' : ''}`}
               onClick={() => setActiveCategory(category)}
             >
-              {category}
+              {integrationCategoryLabels[category]}
             </button>
           ))}
         </aside>
@@ -462,10 +486,10 @@ function IntegrationsApiPage({ onOpenIntegrationsTeam: _onOpenIntegrationsTeam }
                   {renderCardIcon(activeCard.icon)}
                 </span>
                 <h2 id="integration-modal-title">
-                  Add <span>{activeCard.name}</span> integration
+                  {t('integrations.modalTitle', { name: activeCard.name })}
                 </h2>
               </div>
-              <button type="button" aria-label="Close integration modal" onClick={closeIntegrationModal}>
+              <button type="button" aria-label={t('integrations.closeModal')} onClick={closeIntegrationModal}>
                 <X size={16} />
               </button>
             </header>
@@ -491,14 +515,18 @@ function IntegrationsApiPage({ onOpenIntegrationsTeam: _onOpenIntegrationsTeam }
                 <input
                   id="integration-custom-value"
                   type="text"
-                  placeholder={activeCard.icon === 'telegram' ? '@uptimewarden_alerts' : 'e.g.'}
+                  placeholder={
+                    activeCard.icon === 'telegram'
+                      ? t('integrations.modal.telegram.placeholderExample')
+                      : t('integrations.placeholderExample')
+                  }
                   value={customValue}
                   onChange={(event) => setCustomValue(event.target.value)}
                 />
               </div>
 
               <div className="integrations-modal-field">
-                <label htmlFor="integration-events">Events to notify about</label>
+                <label htmlFor="integration-events">{t('integrations.eventsToNotify')}</label>
                 <div className="integrations-modal-select-shell">
                   <select
                     id="integration-events"
@@ -507,7 +535,7 @@ function IntegrationsApiPage({ onOpenIntegrationsTeam: _onOpenIntegrationsTeam }
                   >
                     {integrationEventOptions.map((option) => (
                       <option key={option.value} value={option.value}>
-                        {option.label}
+                        {integrationEventLabels[option.value]}
                       </option>
                     ))}
                   </select>
@@ -524,10 +552,10 @@ function IntegrationsApiPage({ onOpenIntegrationsTeam: _onOpenIntegrationsTeam }
                   onClick={closeIntegrationModal}
                   disabled={isSubmitting}
                 >
-                  Cancel
+                  {t('common.cancel')}
                 </button>
                 <button type="submit" className="integrations-modal-submit" disabled={isSubmitting}>
-                  {isSubmitting ? 'Creating...' : 'Create integration'}
+                  {isSubmitting ? t('integrations.creating') : t('integrations.create')}
                 </button>
               </footer>
             </form>

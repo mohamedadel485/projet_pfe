@@ -1,6 +1,7 @@
 import { ChevronRight, Globe, Network, Plus, Sparkles, Trash2, Users } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { CreateIntegrationInput, CreateMonitorInput, IntegrationEvent, IntegrationProvider } from '../../lib/api';
+import { useAppLanguage } from '../../lib/language';
 import './MonitorWizardPage.css';
 
 type WizardStep = 0 | 1 | 2;
@@ -42,7 +43,11 @@ interface MonitorWizardPageProps {
   onSubmitWizard: (payload: MonitorWizardSubmission) => Promise<string | null>;
 }
 
-const wizardSteps = ['Monitor suggestions', 'Monitoring details', 'Notify team & integrations'];
+const wizardStepKeys = [
+  'monitorWizard.steps.suggestions',
+  'monitorWizard.steps.details',
+  'monitorWizard.steps.notify',
+] as const;
 const httpMethodOptions: MonitorHttpMethod[] = ['GET', 'HEAD', 'POST', 'PUT', 'DELETE'];
 const intervalOptions = [1, 5, 10, 30, 60];
 const timeoutOptions = [5, 15, 30, 45, 60];
@@ -84,21 +89,28 @@ const makeMonitorDraft = (source: SuggestedMonitor, index: number): MonitorDraft
   httpMethod: 'GET',
 });
 
-const buildSuggestedMonitors = (origin: string): SuggestedMonitor[] => [
+const buildSuggestedMonitors = (
+  origin: string,
+  copy: {
+    mainWebsite: { title: string; hint: string };
+    healthEndpoint: { title: string; hint: string };
+    authenticationFlow: { title: string; hint: string };
+  },
+): SuggestedMonitor[] => [
   {
-    title: 'Main website',
+    title: copy.mainWebsite.title,
     endpoint: origin,
-    hint: 'Track homepage availability and TLS errors.',
+    hint: copy.mainWebsite.hint,
   },
   {
-    title: 'Health endpoint',
+    title: copy.healthEndpoint.title,
     endpoint: `${origin}/api/health`,
-    hint: 'Detect backend outage before users are impacted.',
+    hint: copy.healthEndpoint.hint,
   },
   {
-    title: 'Authentication flow',
+    title: copy.authenticationFlow.title,
     endpoint: `${origin}/login`,
-    hint: 'Validate user sign-in entry point.',
+    hint: copy.authenticationFlow.hint,
   },
 ];
 
@@ -145,6 +157,7 @@ const formatIntegrationLabel = (provider: IntegrationProvider): string =>
   provider.charAt(0).toUpperCase() + provider.slice(1);
 
 function MonitorWizardPage({ onBack, canInviteTeam, onSubmitWizard }: MonitorWizardPageProps) {
+  const { t } = useAppLanguage();
   const [activeStep, setActiveStep] = useState<WizardStep>(0);
   const [websiteInput, setWebsiteInput] = useState('');
   const [websiteError, setWebsiteError] = useState<string | null>(null);
@@ -167,37 +180,38 @@ function MonitorWizardPage({ onBack, canInviteTeam, onSubmitWizard }: MonitorWiz
   const hasSuggestions = suggestedMonitors.length > 0;
   const enabledMonitors = useMemo(() => monitorDrafts.filter((monitor) => monitor.enabled), [monitorDrafts]);
   const parsedInviteEmails = useMemo(() => parseInviteEmails(teamInvitesInput), [teamInvitesInput]);
+  const wizardSteps = useMemo(() => wizardStepKeys.map((stepKey) => t(stepKey)), [t]);
 
   const validateEnabledMonitors = (): string | null => {
     if (enabledMonitors.length === 0) {
-      return 'Select at least one monitor to continue.';
+      return t('monitorWizard.errors.selectAtLeastOneMonitor');
     }
 
     for (const monitor of enabledMonitors) {
       if (monitor.name.trim() === '') {
-        return 'Each enabled monitor must have a name.';
+        return t('monitorWizard.errors.eachEnabledMonitorMustHaveAName');
       }
 
       if (monitor.url.trim() === '') {
-        return 'Each enabled monitor must have a URL.';
+        return t('monitorWizard.errors.eachEnabledMonitorMustHaveAUrl');
       }
 
       try {
         const parsedUrl = new URL(monitor.url.trim());
         const protocol = parsedUrl.protocol.toLowerCase();
         if (!['http:', 'https:', 'ws:', 'wss:'].includes(protocol)) {
-          return `Unsupported protocol for ${monitor.name}.`;
+          return t('monitorWizard.errors.unsupportedProtocolFor', { name: monitor.name });
         }
       } catch {
-        return `Invalid URL for ${monitor.name}.`;
+        return t('monitorWizard.errors.invalidUrlFor', { name: monitor.name });
       }
 
       if (!Number.isFinite(monitor.interval) || monitor.interval < 1) {
-        return `Invalid interval for ${monitor.name}.`;
+        return t('monitorWizard.errors.invalidIntervalFor', { name: monitor.name });
       }
 
       if (!Number.isFinite(monitor.timeout) || monitor.timeout < 5) {
-        return `Invalid timeout for ${monitor.name}.`;
+        return t('monitorWizard.errors.invalidTimeoutFor', { name: monitor.name });
       }
     }
 
@@ -208,7 +222,7 @@ function MonitorWizardPage({ onBack, canInviteTeam, onSubmitWizard }: MonitorWiz
     const parsedUrl = parseWebsiteUrl(websiteInput);
 
     if (!parsedUrl) {
-      setWebsiteError('URL is required');
+      setWebsiteError(t('monitorWizard.errors.websiteRequired'));
       setSuggestedMonitors([]);
       setCriticalPages([]);
       setRunningPorts([]);
@@ -219,7 +233,20 @@ function MonitorWizardPage({ onBack, canInviteTeam, onSubmitWizard }: MonitorWiz
 
     const protocol = parsedUrl.protocol.toLowerCase();
     const defaultPorts = protocol === 'http:' ? [80, 443, 8080] : [443, 80, 8443];
-    const suggestions = buildSuggestedMonitors(parsedUrl.origin);
+    const suggestions = buildSuggestedMonitors(parsedUrl.origin, {
+      mainWebsite: {
+        title: t('monitorWizard.suggestions.mainWebsite.title'),
+        hint: t('monitorWizard.suggestions.mainWebsite.hint'),
+      },
+      healthEndpoint: {
+        title: t('monitorWizard.suggestions.healthEndpoint.title'),
+        hint: t('monitorWizard.suggestions.healthEndpoint.hint'),
+      },
+      authenticationFlow: {
+        title: t('monitorWizard.suggestions.authenticationFlow.title'),
+        hint: t('monitorWizard.suggestions.authenticationFlow.hint'),
+      },
+    });
 
     setWebsiteError(null);
     setSubmitError(null);
@@ -254,7 +281,7 @@ function MonitorWizardPage({ onBack, canInviteTeam, onSubmitWizard }: MonitorWiz
       {
         id: `wizard-monitor-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
         enabled: true,
-        name: 'Custom monitor',
+        name: t('monitorWizard.customMonitor'),
         url: normalizeWebsiteInput(websiteInput),
         type: 'https',
         interval: 5,
@@ -313,35 +340,35 @@ function MonitorWizardPage({ onBack, canInviteTeam, onSubmitWizard }: MonitorWiz
     }
 
     if (parsedInviteEmails.invalid.length > 0) {
-      setSubmitError(`Invalid emails: ${parsedInviteEmails.invalid.join(', ')}`);
+      setSubmitError(t('monitorWizard.errors.invalidEmails', { emails: parsedInviteEmails.invalid.join(', ') }));
       return;
     }
 
     if (parsedInviteEmails.valid.length > 0 && !canInviteTeam) {
-      setSubmitError('Only admins can invite team members.');
+      setSubmitError(t('monitorWizard.errors.onlyAdminsCanInviteTeamMembers'));
       return;
     }
 
     let integrationPayload: CreateIntegrationInput | null = null;
     if (integrationEnabled) {
       if (integrationEndpoint.trim() === '') {
-        setSubmitError('Integration endpoint URL is required.');
+        setSubmitError(t('monitorWizard.errors.integrationEndpointRequired'));
         return;
       }
 
       try {
         const parsedEndpoint = new URL(integrationEndpoint.trim());
         if (!['http:', 'https:'].includes(parsedEndpoint.protocol.toLowerCase())) {
-          setSubmitError('Integration endpoint must start with http:// or https://.');
+          setSubmitError(t('monitorWizard.errors.integrationEndpointMustStartWithHttpOrHttps'));
           return;
         }
       } catch {
-        setSubmitError('Integration endpoint URL is invalid.');
+        setSubmitError(t('monitorWizard.errors.integrationEndpointInvalid'));
         return;
       }
 
       if (integrationEvents.length === 0) {
-        setSubmitError('Select at least one integration event.');
+        setSubmitError(t('monitorWizard.errors.selectAtLeastOneIntegrationEvent'));
         return;
       }
 
@@ -387,32 +414,32 @@ function MonitorWizardPage({ onBack, canInviteTeam, onSubmitWizard }: MonitorWiz
     <section className="monitor-wizard-page">
       <div className="monitor-wizard-breadcrumb">
         <button type="button" className="monitor-wizard-breadcrumb-link" onClick={onBack}>
-          Monitoring
+          {t('menu.monitoring')}
         </button>
         <ChevronRight size={14} />
-        <span>Monitor wizard</span>
+        <span>{t('monitorWizard.breadcrumb')}</span>
       </div>
 
       <div className="monitor-wizard-layout">
         <div className="monitor-wizard-main">
-          <h1>Monitoring wizard</h1>
+          <h1>{t('monitorWizard.title')}</h1>
 
           {activeStep === 0 ? (
             <section className="monitor-wizard-card">
-              <h2>What&apos;s your website?</h2>
-              <p>We use your main domain to suggest monitor targets and priorities.</p>
+              <h2>{t('monitorWizard.websiteQuestion')}</h2>
+              <p>{t('monitorWizard.websiteHint')}</p>
               <div className="monitor-wizard-input-row">
                 <label className={`monitor-wizard-input-shell ${websiteError ? 'error' : ''}`}>
                   <input
                     type="text"
-                    placeholder="E.g. domain.com"
+                    placeholder={t('monitorWizard.websitePlaceholder')}
                     value={websiteInput}
                     onChange={(event) => setWebsiteInput(event.target.value)}
                   />
                 </label>
                 <button type="button" className="monitor-wizard-suggest-btn" onClick={handleSuggestMonitors}>
                   <Sparkles size={14} />
-                  <span>Suggest monitors</span>
+                  <span>{t('monitorWizard.suggestMonitors')}</span>
                 </button>
               </div>
               {websiteError ? <p className="monitor-wizard-error">{websiteError}</p> : null}
@@ -428,17 +455,19 @@ function MonitorWizardPage({ onBack, canInviteTeam, onSubmitWizard }: MonitorWiz
                   ))
                 ) : (
                   <p className="monitor-wizard-empty">
-                    Enter your main domain and click <strong>Suggest monitors</strong> to auto-fill recommendations.
+                    {t('monitorWizard.emptySuggestions.prefix')}{' '}
+                    <strong>{t('monitorWizard.suggestMonitors')}</strong>{' '}
+                    {t('monitorWizard.emptySuggestions.suffix')}
                   </p>
                 )}
               </div>
 
               <div className="monitor-wizard-actions">
                 <button type="button" className="monitor-wizard-secondary-btn" onClick={onBack}>
-                  Cancel
+                  {t('common.cancel')}
                 </button>
                 <button type="button" className="monitor-wizard-primary-btn" onClick={handleSuggestMonitors}>
-                  Continue
+                  {t('common.next')}
                 </button>
               </div>
             </section>
@@ -449,9 +478,9 @@ function MonitorWizardPage({ onBack, canInviteTeam, onSubmitWizard }: MonitorWiz
               <section className="monitor-wizard-card">
                 <div className="monitor-wizard-section-title">
                   <Globe size={16} />
-                  <h2>Monitoring details</h2>
+                  <h2>{t('monitorWizard.monitoringDetails')}</h2>
                 </div>
-                <p>Edit monitors before creation. Keep only the endpoints you want to track now.</p>
+                <p>{t('monitorWizard.monitoringDetailsDescription')}</p>
 
                 <div className="monitor-wizard-details-list">
                   {monitorDrafts.map((monitor) => (
@@ -463,7 +492,7 @@ function MonitorWizardPage({ onBack, canInviteTeam, onSubmitWizard }: MonitorWiz
                             checked={monitor.enabled}
                             onChange={(event) => updateMonitorDraft(monitor.id, 'enabled', event.target.checked)}
                           />
-                          <span>Enabled</span>
+                          <span>{t('common.enabled')}</span>
                         </label>
                         <button type="button" className="wizard-monitor-delete" onClick={() => handleRemoveMonitor(monitor.id)}>
                           <Trash2 size={14} />
@@ -472,7 +501,7 @@ function MonitorWizardPage({ onBack, canInviteTeam, onSubmitWizard }: MonitorWiz
 
                       <div className="wizard-monitor-grid">
                         <label>
-                          <span>Name</span>
+                          <span>{t('common.name')}</span>
                           <input
                             type="text"
                             value={monitor.name}
@@ -480,7 +509,7 @@ function MonitorWizardPage({ onBack, canInviteTeam, onSubmitWizard }: MonitorWiz
                           />
                         </label>
                         <label className="wide">
-                          <span>URL</span>
+                          <span>{t('monitorWizard.url')}</span>
                           <input
                             type="text"
                             value={monitor.url}
@@ -488,7 +517,7 @@ function MonitorWizardPage({ onBack, canInviteTeam, onSubmitWizard }: MonitorWiz
                           />
                         </label>
                         <label>
-                          <span>Method</span>
+                          <span>{t('monitorWizard.method')}</span>
                           <select
                             value={monitor.httpMethod}
                             onChange={(event) => updateMonitorDraft(monitor.id, 'httpMethod', event.target.value)}
@@ -501,27 +530,27 @@ function MonitorWizardPage({ onBack, canInviteTeam, onSubmitWizard }: MonitorWiz
                           </select>
                         </label>
                         <label>
-                          <span>Interval</span>
+                          <span>{t('monitorWizard.interval')}</span>
                           <select
                             value={monitor.interval}
                             onChange={(event) => updateMonitorDraft(monitor.id, 'interval', Number(event.target.value))}
                           >
                             {intervalOptions.map((interval) => (
                               <option key={interval} value={interval}>
-                                {interval} min
+                                {t('monitorWizard.intervalValue', { interval })}
                               </option>
                             ))}
                           </select>
                         </label>
                         <label>
-                          <span>Timeout</span>
+                          <span>{t('monitorWizard.timeout')}</span>
                           <select
                             value={monitor.timeout}
                             onChange={(event) => updateMonitorDraft(monitor.id, 'timeout', Number(event.target.value))}
                           >
                             {timeoutOptions.map((timeout) => (
                               <option key={timeout} value={timeout}>
-                                {timeout} sec
+                                {t('monitorWizard.timeoutValue', { timeout })}
                               </option>
                             ))}
                           </select>
@@ -533,7 +562,7 @@ function MonitorWizardPage({ onBack, canInviteTeam, onSubmitWizard }: MonitorWiz
 
                 <button type="button" className="monitor-wizard-secondary-btn inline" onClick={handleAddCustomMonitor}>
                   <Plus size={14} />
-                  Add custom monitor
+                  {t('monitorWizard.addCustomMonitor')}
                 </button>
 
                 {detailsError ? <p className="monitor-wizard-error">{detailsError}</p> : null}
@@ -542,13 +571,13 @@ function MonitorWizardPage({ onBack, canInviteTeam, onSubmitWizard }: MonitorWiz
               <section className="monitor-wizard-card">
                 <div className="monitor-wizard-section-title">
                   <Network size={16} />
-                  <h2>Auto-discovered context</h2>
+                  <h2>{t('monitorWizard.autoDiscoveredContext')}</h2>
                 </div>
-                <p>Use these recommendations as a guide while finalizing monitor details.</p>
+                <p>{t('monitorWizard.autoDiscoveredDescription')}</p>
 
                 <div className="wizard-auto-columns">
                   <div>
-                    <h3>Critical pages</h3>
+                    <h3>{t('monitorWizard.criticalPages')}</h3>
                     <div className="monitor-wizard-chip-list">
                       {criticalPages.map((pageUrl) => (
                         <span className="monitor-wizard-chip" key={pageUrl}>
@@ -558,17 +587,17 @@ function MonitorWizardPage({ onBack, canInviteTeam, onSubmitWizard }: MonitorWiz
                     </div>
                   </div>
                   <div>
-                    <h3>Running ports</h3>
+                    <h3>{t('monitorWizard.runningPorts')}</h3>
                     <div className="monitor-wizard-chip-list">
                       {runningPorts.map((port) => (
                         <span className="monitor-wizard-chip" key={port}>
-                          Port {port}
+                          {t('monitorWizard.port', { port })}
                         </span>
                       ))}
                     </div>
                   </div>
                   <div>
-                    <h3>Sub domains</h3>
+                    <h3>{t('monitorWizard.subDomains')}</h3>
                     <div className="monitor-wizard-chip-list">
                       {subDomains.map((subDomain) => (
                         <span className="monitor-wizard-chip" key={subDomain}>
@@ -582,10 +611,10 @@ function MonitorWizardPage({ onBack, canInviteTeam, onSubmitWizard }: MonitorWiz
 
               <div className="monitor-wizard-actions">
                 <button type="button" className="monitor-wizard-secondary-btn" onClick={() => goToStep(0)}>
-                  Back
+                  {t('common.back')}
                 </button>
                 <button type="button" className="monitor-wizard-primary-btn" onClick={() => goToStep(2)}>
-                  Continue
+                  {t('common.next')}
                 </button>
               </div>
             </>
@@ -596,9 +625,9 @@ function MonitorWizardPage({ onBack, canInviteTeam, onSubmitWizard }: MonitorWiz
               <section className="monitor-wizard-card">
                 <div className="monitor-wizard-section-title">
                   <Users size={16} />
-                  <h2>Notify team & integrations</h2>
+                  <h2>{t('monitorWizard.notifyTeamIntegrations')}</h2>
                 </div>
-                <p>Configure who is notified and where alerts should be delivered.</p>
+                <p>{t('monitorWizard.notifyDescription')}</p>
 
                 <label className="wizard-toggle">
                   <input
@@ -606,23 +635,23 @@ function MonitorWizardPage({ onBack, canInviteTeam, onSubmitWizard }: MonitorWiz
                     checked={emailNotificationsEnabled}
                     onChange={(event) => setEmailNotificationsEnabled(event.target.checked)}
                   />
-                  <span>Enable email notifications for this workspace</span>
+                  <span>{t('monitorWizard.enableEmailNotifications')}</span>
                 </label>
 
                 <label className="wizard-field">
-                  <span>Invite teammates (emails separated by comma or new line)</span>
+                  <span>{t('monitorWizard.inviteTeammates')}</span>
                   <textarea
                     value={teamInvitesInput}
                     onChange={(event) => setTeamInvitesInput(event.target.value)}
-                    placeholder="alice@company.com, bob@company.com"
+                    placeholder={t('monitorWizard.inviteTeammatesPlaceholder')}
                     disabled={!canInviteTeam}
                   />
                 </label>
                 {!canInviteTeam ? (
-                  <p className="wizard-hint">Only admins can send team invitations.</p>
+                  <p className="wizard-hint">{t('monitorWizard.onlyAdminsCanSendInvitations')}</p>
                 ) : (
                   <p className="wizard-hint">
-                    {parsedInviteEmails.valid.length} valid invite(s) prepared.
+                    {t('monitorWizard.validInvitesPrepared', { count: parsedInviteEmails.valid.length })}
                   </p>
                 )}
 
@@ -633,13 +662,13 @@ function MonitorWizardPage({ onBack, canInviteTeam, onSubmitWizard }: MonitorWiz
                       checked={integrationEnabled}
                       onChange={(event) => setIntegrationEnabled(event.target.checked)}
                     />
-                    <span>Create an integration now</span>
+                    <span>{t('monitorWizard.createIntegrationNow')}</span>
                   </label>
 
                   {integrationEnabled ? (
                     <div className="wizard-integration-fields">
                       <label>
-                        <span>Provider</span>
+                        <span>{t('monitorWizard.provider')}</span>
                         <select
                           value={integrationType}
                           onChange={(event) => setIntegrationType(event.target.value as IntegrationProvider)}
@@ -653,22 +682,22 @@ function MonitorWizardPage({ onBack, canInviteTeam, onSubmitWizard }: MonitorWiz
                       </label>
 
                       <label>
-                        <span>Endpoint URL</span>
+                        <span>{t('monitorWizard.endpointUrl')}</span>
                         <input
                           type="text"
-                          placeholder="https://example.com/webhook"
+                          placeholder={t('monitorWizard.endpointUrlPlaceholder')}
                           value={integrationEndpoint}
                           onChange={(event) => setIntegrationEndpoint(event.target.value)}
                         />
                       </label>
 
                       <label>
-                        <span>Custom value (optional)</span>
+                        <span>{t('monitorWizard.customValueOptional')}</span>
                         <input
                           type="text"
                           value={integrationCustomValue}
                           onChange={(event) => setIntegrationCustomValue(event.target.value)}
-                          placeholder="Team A alerts"
+                          placeholder={t('monitorWizard.customValuePlaceholder')}
                         />
                       </label>
 
@@ -679,7 +708,7 @@ function MonitorWizardPage({ onBack, canInviteTeam, onSubmitWizard }: MonitorWiz
                             checked={integrationEvents.includes('down')}
                             onChange={() => toggleIntegrationEvent('down')}
                           />
-                          <span>Down events</span>
+                          <span>{t('monitorWizard.downEvents')}</span>
                         </label>
                         <label className="wizard-toggle">
                           <input
@@ -687,7 +716,7 @@ function MonitorWizardPage({ onBack, canInviteTeam, onSubmitWizard }: MonitorWiz
                             checked={integrationEvents.includes('up')}
                             onChange={() => toggleIntegrationEvent('up')}
                           />
-                          <span>Up events</span>
+                          <span>{t('monitorWizard.upEvents')}</span>
                         </label>
                       </div>
                     </div>
@@ -699,21 +728,23 @@ function MonitorWizardPage({ onBack, canInviteTeam, onSubmitWizard }: MonitorWiz
 
               <div className="monitor-wizard-actions">
                 <button type="button" className="monitor-wizard-secondary-btn" onClick={() => goToStep(1)} disabled={isSubmitting}>
-                  Back
+                  {t('common.back')}
                 </button>
                 <button type="button" className="monitor-wizard-primary-btn" onClick={() => void handleSubmitWizard()} disabled={isSubmitting}>
-                  {isSubmitting ? 'Creating...' : `Create ${enabledMonitors.length} monitor(s)`}
+                  {isSubmitting
+                    ? t('common.creating')
+                    : t('monitorWizard.createMonitors', { count: enabledMonitors.length })}
                 </button>
               </div>
             </>
           ) : null}
         </div>
 
-        <aside className="monitor-wizard-steps-card" aria-label="Wizard steps">
+        <aside className="monitor-wizard-steps-card" aria-label={t('monitorWizard.stepsLabel')}>
           <ol>
             {wizardSteps.map((step, index) => (
               <li
-                key={step}
+                key={wizardStepKeys[index]}
                 className={activeStep === index ? 'active' : ''}
               >
                 <button

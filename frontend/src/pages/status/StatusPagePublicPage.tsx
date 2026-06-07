@@ -12,6 +12,7 @@ import {
   type PublicStatusPageResponse,
 } from '../../lib/api';
 import { ensureChartsRegistered } from '../../lib/charts';
+import { useAppLanguage } from '../../lib/language';
 import {
   readCachedPublicStatusPage,
   readStoredStatusPageMonitorIds,
@@ -57,6 +58,11 @@ interface ResponseChartPoint {
   checkedAt: string | null;
 }
 
+type TranslateFn = (
+  key: string,
+  values?: Record<string, string | number | boolean | null | undefined>,
+) => string;
+
 const parseDateMs = (value?: string | null): number => {
   if (!value) return 0;
   const parsed = Date.parse(value);
@@ -84,12 +90,12 @@ const getLocalDayStartMs = (value?: string | Date | null): number => {
   return date.getTime();
 };
 
-const formatChartTooltipDateTime = (value?: string | null): string => {
+const formatChartTooltipDateTime = (value?: string | null, locale = 'en-US'): string => {
   const timestamp = parseDateMs(value);
   if (timestamp === 0) return '-';
 
   const date = new Date(timestamp);
-  const formatter = new Intl.DateTimeFormat('en-US', {
+  const formatter = new Intl.DateTimeFormat(locale, {
     month: 'short',
     day: 'numeric',
     year: '2-digit',
@@ -122,12 +128,12 @@ const formatChartTooltipDateTime = (value?: string | null): string => {
   return `${month} ${day}, '${year}, ${hour}:${minute}${dayPeriod} ${timeZoneName || fallbackTimeZone}`;
 };
 
-const formatDateTime = (value?: string | null): string => {
+const formatDateTime = (value?: string | null, locale = 'en-US'): string => {
   const timestamp = parseDateMs(value);
   if (timestamp === 0) return '-';
 
   return new Date(timestamp)
-    .toLocaleString('en-US', {
+    .toLocaleString(locale, {
       month: 'short',
       day: 'numeric',
       year: 'numeric',
@@ -138,12 +144,12 @@ const formatDateTime = (value?: string | null): string => {
     .replace(/\s(AM|PM)$/i, '$1');
 };
 
-const formatSparklineTooltipDate = (value?: string | null): string => {
+const formatSparklineTooltipDate = (value?: string | null, locale = 'en-US'): string => {
   const timestamp = parseDateMs(value);
   if (timestamp === 0) return '-';
 
   return new Date(timestamp)
-    .toLocaleString('en-US', {
+    .toLocaleString(locale, {
       month: 'short',
       day: 'numeric',
       hour: 'numeric',
@@ -153,18 +159,22 @@ const formatSparklineTooltipDate = (value?: string | null): string => {
     .replace(/\s(AM|PM)$/i, '$1');
 };
 
-const formatShortDate = (value?: string | null): string => {
+const formatShortDate = (value?: string | null, locale = 'en-US'): string => {
   const timestamp = parseDateMs(value);
   if (timestamp === 0) return '-';
 
-  return new Date(timestamp).toLocaleDateString('en-US', {
+  return new Date(timestamp).toLocaleDateString(locale, {
     month: 'short',
     day: 'numeric',
     year: 'numeric',
   });
 };
 
-const buildResponseChartWindowLabel = (logsNewestFirst: BackendMonitorLog[]): string => {
+const buildResponseChartWindowLabel = (
+  logsNewestFirst: BackendMonitorLog[],
+  t: TranslateFn,
+  locale: string,
+): string => {
   const validLogsOldestFirst = [...logsNewestFirst]
     .filter(
       (log) =>
@@ -174,7 +184,7 @@ const buildResponseChartWindowLabel = (logsNewestFirst: BackendMonitorLog[]): st
     .sort((a, b) => parseDateMs(a.checkedAt) - parseDateMs(b.checkedAt));
 
   if (validLogsOldestFirst.length === 0) {
-    return 'Last 90 days';
+    return t('statusPublic.window.last90Days');
   }
 
   const firstLogDayMs = getLocalDayStartMs(validLogsOldestFirst[0].checkedAt);
@@ -182,10 +192,12 @@ const buildResponseChartWindowLabel = (logsNewestFirst: BackendMonitorLog[]): st
   const availableDayCount = Math.max(1, Math.floor((lastLogDayMs - firstLogDayMs) / DAY_MS) + 1);
 
   if (availableDayCount >= RESPONSE_CHART_MAX_DAY_COUNT) {
-    return 'Last 90 days';
+    return t('statusPublic.window.last90Days');
   }
 
-  return `Since ${formatShortDate(validLogsOldestFirst[0].checkedAt)}`;
+  return t('statusPublic.window.since', {
+    date: formatShortDate(validLogsOldestFirst[0].checkedAt, locale),
+  });
 };
 
 const formatDurationMs = (value: number): string => {
@@ -466,26 +478,36 @@ const getMonitorHealthLabel = (monitorStatus: BackendMonitor['status']): PublicH
   return 'operational';
 };
 
-const formatHealthLabel = (healthLabel: PublicHealthLabel) => {
-  if (healthLabel === 'operational') return 'Operational';
-  if (healthLabel === 'degraded') return 'Degraded';
-  if (healthLabel === 'paused') return 'Paused';
-  return 'Pending';
+const formatHealthLabel = (healthLabel: PublicHealthLabel, t: TranslateFn) => {
+  if (healthLabel === 'operational') return t('statusPublic.health.operational');
+  if (healthLabel === 'degraded') return t('statusPublic.health.degraded');
+  if (healthLabel === 'paused') return t('statusPublic.health.paused');
+  return t('statusPublic.health.pending');
 };
 
-const buildRecentEvents = (incidents: BackendIncident[]): StatusEvent[] => {
+const buildRecentEvents = (incidents: BackendIncident[], t: TranslateFn, locale: string): StatusEvent[] => {
   const sortedIncidents = [...incidents].sort(
     (a, b) => parseDateMs(b.startedAt ?? b.checkedAt) - parseDateMs(a.startedAt ?? a.checkedAt),
   );
 
   return sortedIncidents.slice(0, 6).map((incident) => {
     const isResolved = incident.status === 'up';
-    const monitorName = incident.monitor?.name?.trim() || 'Monitor';
-    const title = isResolved ? `${monitorName} is running again` : `${monitorName} is degraded`;
+    const monitorName = incident.monitor?.name?.trim() || t('statusPublic.monitorFallback');
+    const title = isResolved
+      ? t('statusPublic.event.runningAgain', { monitor: monitorName })
+      : t('statusPublic.event.degraded', { monitor: monitorName });
     const details = isResolved
-      ? `Recovered after ${formatDurationMs(incident.durationMs ?? incident.responseTime)}.`
-      : incident.errorMessage?.trim() || (incident.statusCode ? `HTTP ${incident.statusCode}` : 'Connection issue detected.');
-    const at = formatDateTime(isResolved ? incident.resolvedAt ?? incident.checkedAt : incident.startedAt ?? incident.checkedAt);
+      ? t('statusPublic.event.recoveredAfter', {
+          duration: formatDurationMs(incident.durationMs ?? incident.responseTime),
+        })
+      : incident.errorMessage?.trim() ||
+        (incident.statusCode
+          ? t('statusPublic.event.httpStatus', { code: incident.statusCode })
+          : t('statusPublic.event.connectionIssue'));
+    const at = formatDateTime(
+      isResolved ? incident.resolvedAt ?? incident.checkedAt : incident.startedAt ?? incident.checkedAt,
+      locale,
+    );
 
     return {
       id: `${incident._id}-${incident.status}`,
@@ -505,33 +527,42 @@ const getOverallHealthLabel = (monitorEntries: PublicMonitorEntry[]): PublicHeal
   return 'operational';
 };
 
-const getOverallSummaryTitle = (monitorEntries: PublicMonitorEntry[], overallHealthLabel: PublicHealthLabel) => {
+const getOverallSummaryTitle = (
+  monitorEntries: PublicMonitorEntry[],
+  overallHealthLabel: PublicHealthLabel,
+  t: TranslateFn,
+) => {
   if (monitorEntries.length <= 1) {
     const singleMonitor = monitorEntries[0];
-    if (!singleMonitor) return 'Status unavailable';
-    return `${singleMonitor.monitor.name} is ${formatHealthLabel(overallHealthLabel)}`;
+    if (!singleMonitor) return t('statusPublic.summary.unavailable');
+    return t('statusPublic.summary.singleMonitor', {
+      name: singleMonitor.monitor.name,
+      status: formatHealthLabel(overallHealthLabel, t),
+    });
   }
 
-  if (overallHealthLabel === 'operational') return 'All systems Operational';
+  if (overallHealthLabel === 'operational') return t('statusPublic.summary.allSystemsOperational');
   if (overallHealthLabel === 'degraded') {
     const degradedCount = monitorEntries.filter((entry) => entry.healthLabel === 'degraded').length;
-    return `${degradedCount} system${degradedCount > 1 ? 's' : ''} Degraded`;
+    return t('statusPublic.summary.allSystemsDegraded', { count: degradedCount });
   }
-  if (overallHealthLabel === 'paused') return 'All systems Paused';
-  return 'Some systems Pending';
+  if (overallHealthLabel === 'paused') return t('statusPublic.summary.allSystemsPaused');
+  return t('statusPublic.summary.someSystemsPending');
 };
 
 function StatusPagePublicPage({
   statusPageId,
   authToken,
 }: StatusPagePublicPageProps) {
+  const { t, language } = useAppLanguage();
+  const dateLocale = language === 'fr' ? 'fr-FR' : language === 'ar' ? 'ar-TN' : 'en-US';
   const storedStatusPageSettings = useMemo(() => readStoredStatusPageSettings(statusPageId), [statusPageId]);
   const isLocalStatusPage = useMemo(() => {
     if (statusPageId === 'new') return true;
     return readLocalStatusPageSummaries().some((summary) => summary.id === statusPageId);
   }, [statusPageId]);
   const storedStatusPageMonitorIds = useMemo(() => readStoredStatusPageMonitorIds(statusPageId), [statusPageId]);
-  const configuredPageName = storedStatusPageSettings.pageName?.trim() || 'Status page';
+  const configuredPageName = storedStatusPageSettings.pageName?.trim() || t('statusPublic.defaultPageName');
   const savedPassword = typeof storedStatusPageSettings.password === 'string' ? storedStatusPageSettings.password : '';
   const configuredPasswordEnabled =
     typeof storedStatusPageSettings.passwordEnabled === 'boolean'
@@ -556,7 +587,7 @@ function StatusPagePublicPage({
     const nextPageName =
       storedStatusPageSettings.pageName?.trim() ||
       response.statusPage?.pageName?.trim() ||
-      (nextPublishedMonitors.length === 1 ? nextPublishedMonitors[0].name : 'Service status');
+      (nextPublishedMonitors.length === 1 ? nextPublishedMonitors[0].name : t('statusPublic.serviceStatus'));
 
     const nextLogsByMonitorId = Object.fromEntries(
       nextPublishedMonitors.map((monitor) => {
@@ -627,7 +658,7 @@ function StatusPagePublicPage({
             return true;
           }
 
-          setPageName(storedStatusPageSettings.pageName?.trim() || 'Status page');
+          setPageName(storedStatusPageSettings.pageName?.trim() || t('statusPublic.defaultPageName'));
           setPublishedMonitors([]);
           setMonitorLogsById({});
           setMonitorIncidentsById({});
@@ -650,7 +681,7 @@ function StatusPagePublicPage({
           }
 
           if (isLocalStatusPage) {
-            setPageName(storedStatusPageSettings.pageName?.trim() || 'Status page');
+            setPageName(storedStatusPageSettings.pageName?.trim() || t('statusPublic.defaultPageName'));
             setPublishedMonitors([]);
             setMonitorLogsById({});
             setMonitorIncidentsById({});
@@ -663,7 +694,7 @@ function StatusPagePublicPage({
         const mergedDraftData = mergePublicStatusPageResponses(successfulResponses);
         const nextPageName =
           storedStatusPageSettings.pageName?.trim() ||
-          (mergedDraftData.monitors.length === 1 ? mergedDraftData.monitors[0].name : 'Service status');
+          (mergedDraftData.monitors.length === 1 ? mergedDraftData.monitors[0].name : t('statusPublic.serviceStatus'));
 
         syncPublicStatusPageState({
           statusPage: {
@@ -716,7 +747,7 @@ function StatusPagePublicPage({
         }
 
         if (isLocalStatusPage) {
-          setPageName(storedStatusPageSettings.pageName?.trim() || 'Status page');
+          setPageName(storedStatusPageSettings.pageName?.trim() || t('statusPublic.defaultPageName'));
           setPublishedMonitors([]);
           setMonitorLogsById({});
           setMonitorIncidentsById({});
@@ -724,11 +755,11 @@ function StatusPagePublicPage({
         }
 
         if (isApiError(error)) {
-          setLoadError(error.message || 'Unable to load status page data.');
+          setLoadError(error.message || t('statusPublic.errors.load'));
         } else if (error instanceof Error && error.message.trim() !== '') {
           setLoadError(error.message);
         } else {
-          setLoadError('Unable to load status page data.');
+          setLoadError(t('statusPublic.errors.load'));
         }
 
         setPublishedMonitors([]);
@@ -747,12 +778,16 @@ function StatusPagePublicPage({
       cancelled = true;
     };
   }, [
+    authToken,
+    configuredPageName,
     configuredPassword,
     configuredPasswordEnabled,
+    dateLocale,
     isLocalStatusPage,
     statusPageId,
     storedStatusPageMonitorIds,
     storedStatusPageSettings.pageName,
+    t,
     unlockedPassword,
   ]);
 
@@ -783,21 +818,21 @@ function StatusPagePublicPage({
           lastChecked: logs[0]?.checkedAt ?? monitor.lastChecked ?? null,
           healthLabel: getMonitorHealthLabel(monitor.status),
           responseTrendPoints,
-          responseTrendLabel: buildResponseChartWindowLabel(logs),
+          responseTrendLabel: buildResponseChartWindowLabel(logs, t, dateLocale),
           responseTrendLatestMs,
         };
       }),
-    [monitorIncidentsById, monitorLogsById, publishedMonitors],
+    [dateLocale, monitorIncidentsById, monitorLogsById, publishedMonitors, t],
   );
 
   const primaryMonitorEntry = publishedMonitorEntries[0] ?? null;
   const primaryMonitor = primaryMonitorEntry?.monitor ?? null;
   const overallHealthLabel = getOverallHealthLabel(publishedMonitorEntries);
-  const overallSummaryTitle = getOverallSummaryTitle(publishedMonitorEntries, overallHealthLabel);
+  const overallSummaryTitle = getOverallSummaryTitle(publishedMonitorEntries, overallHealthLabel, t);
 
   const recentEvents = useMemo(
-    () => buildRecentEvents(publishedMonitorEntries.flatMap((entry) => entry.incidents)),
-    [publishedMonitorEntries],
+    () => buildRecentEvents(publishedMonitorEntries.flatMap((entry) => entry.incidents), t, dateLocale),
+    [dateLocale, publishedMonitorEntries, t],
   );
 
   const effectiveLastChecked = useMemo(() => {
@@ -840,7 +875,7 @@ function StatusPagePublicPage({
       labels: responseChartPoints.map((pt) => pt.checkedAt ?? ''),
       datasets: [
         {
-          label: 'Response time',
+          label: t('statusPublic.responseTime'),
           data: values,
           tension: 0.35,
           borderWidth: 2.4,
@@ -908,7 +943,7 @@ function StatusPagePublicPage({
             const value = item?.parsed?.y as number | undefined;
 
             tooltipEl.innerHTML = `
-              <span>${rawLabel ? formatChartTooltipDateTime(rawLabel) : '-'}</span>
+              <span>${rawLabel ? formatChartTooltipDateTime(rawLabel, dateLocale) : '-'}</span>
               <strong>${value === undefined ? '-' : `${Math.round(value)} ms`}</strong>
             `;
 
@@ -924,7 +959,7 @@ function StatusPagePublicPage({
           callbacks: {
             title: (items: any[]) => {
               const raw = items?.[0]?.label as string | undefined;
-              return raw ? formatChartTooltipDateTime(raw) : '-';
+              return raw ? formatChartTooltipDateTime(raw, dateLocale) : '-';
             },
             label: (item: any) => {
               const value = item.parsed?.y as number | undefined;
@@ -943,7 +978,7 @@ function StatusPagePublicPage({
         },
       },
     };
-  }, [mainResponseChartData]);
+  }, [dateLocale, mainResponseChartData]);
 
   const buildSparklineData = (points: ResponseChartPoint[], healthLabel: PublicHealthLabel) => {
     const values = points.map((pt) => Math.max(0, pt.responseTime));
@@ -953,7 +988,7 @@ function StatusPagePublicPage({
       labels: points.map((pt) => pt.checkedAt ?? ''),
       datasets: [
         {
-          label: 'Response trend',
+          label: t('statusPublic.responseTrend'),
           data: values,
           tension: 0.35,
           borderWidth: 2.05,
@@ -1022,7 +1057,7 @@ function StatusPagePublicPage({
             const value = item?.parsed?.y as number | undefined;
 
             tooltipEl.innerHTML = `
-              <span>${rawLabel ? formatSparklineTooltipDate(rawLabel) : '-'}</span>
+              <span>${rawLabel ? formatSparklineTooltipDate(rawLabel, dateLocale) : '-'}</span>
               <strong>${value === undefined ? '-' : `${Math.round(value)} ms`}</strong>
             `;
 
@@ -1050,11 +1085,11 @@ function StatusPagePublicPage({
         },
       },
     };
-  }, []);
+  }, [dateLocale]);
 
   const responseChartWindowLabel = useMemo(() => {
-    return buildResponseChartWindowLabel(primaryMonitorEntry?.logs ?? []);
-  }, [primaryMonitorEntry?.logs]);
+    return buildResponseChartWindowLabel(primaryMonitorEntry?.logs ?? [], t, dateLocale);
+  }, [dateLocale, primaryMonitorEntry?.logs, t]);
 
   const handleUnlockSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -1066,7 +1101,7 @@ function StatusPagePublicPage({
         return;
       }
 
-      setPasswordError('Incorrect password. Please try again.');
+      setPasswordError(t('statusPublic.errors.incorrectPassword'));
       return;
     }
 
@@ -1083,7 +1118,7 @@ function StatusPagePublicPage({
       setPasswordError(null);
     } catch (error) {
       if (isApiError(error)) {
-        setPasswordError(error.message || 'Incorrect password. Please try again.');
+        setPasswordError(error.message || t('statusPublic.errors.incorrectPassword'));
         return;
       }
 
@@ -1092,7 +1127,7 @@ function StatusPagePublicPage({
         return;
       }
 
-      setPasswordError('Incorrect password. Please try again.');
+      setPasswordError(t('statusPublic.errors.incorrectPassword'));
     }
   };
 
@@ -1106,8 +1141,8 @@ function StatusPagePublicPage({
                 <p className="status-public-page-name">{pageName}</p>
               </div>
               <div className="status-public-hero-side status-public-hero-right">
-                <h1>Service status</h1>
-                <p>Password protected page</p>
+                <h1>{t('statusPublic.serviceStatus')}</h1>
+                <p>{t('statusPublic.passwordProtectedPage')}</p>
               </div>
             </div>
           </section>
@@ -1118,14 +1153,14 @@ function StatusPagePublicPage({
                 <LockKeyhole size={22} />
               </span>
               <div>
-                <h2>Password protected</h2>
-                <p>Enter the password configured in global settings to view this status page.</p>
+                <h2>{t('statusPublic.passwordProtected')}</h2>
+                <p>{t('statusPublic.passwordProtectedDescription')}</p>
               </div>
             </div>
 
             <form className="status-public-lock-form" onSubmit={handleUnlockSubmit}>
               <label className="status-public-lock-field">
-                <span>Password</span>
+                <span>{t('statusPublic.passwordLabel')}</span>
                 <input
                   type="password"
                   value={passwordInput}
@@ -1135,13 +1170,13 @@ function StatusPagePublicPage({
                       setPasswordError(null);
                     }
                   }}
-                  placeholder="Enter password"
+                  placeholder={t('statusPublic.passwordPlaceholder')}
                   autoComplete="current-password"
                 />
               </label>
 
               <button type="submit" className="status-public-lock-submit">
-                Unlock status page
+                {t('statusPublic.unlockButton')}
               </button>
             </form>
 
@@ -1150,7 +1185,7 @@ function StatusPagePublicPage({
         </>
       ) : isLoading ? (
         <section className="status-public-card">
-          <p>Loading status page data...</p>
+          <p>{t('statusPublic.loading')}</p>
         </section>
       ) : loadError ? (
         <section className="status-public-card">
@@ -1158,7 +1193,7 @@ function StatusPagePublicPage({
         </section>
       ) : publishedMonitorEntries.length === 0 ? (
         <section className="status-public-card">
-          <p>No monitor available to publish on this status page.</p>
+          <p>{t('statusPublic.noMonitorAvailable')}</p>
         </section>
       ) : (
         <>
@@ -1168,10 +1203,10 @@ function StatusPagePublicPage({
                 <p className="status-public-page-name">{pageName}</p>
               </div>
               <div className="status-public-hero-side status-public-hero-right">
-                <h1>Service status</h1>
+                <h1>{t('statusPublic.serviceStatus')}</h1>
                 <p>
-                  Last updated {formatDateTime(effectiveLastChecked)}
-                  {nextUpdateMinutes ? ` | next update in ${nextUpdateMinutes} min` : ''}
+                  {t('statusPublic.lastUpdated', { date: formatDateTime(effectiveLastChecked, dateLocale) })}
+                  {nextUpdateMinutes ? ` | ${t('statusPublic.nextUpdateIn', { minutes: nextUpdateMinutes })}` : ''}
                 </p>
               </div>
             </div>
@@ -1182,16 +1217,11 @@ function StatusPagePublicPage({
               <span />
             </div>
             <div className="status-public-summary-copy">
-              <h2>
-                {overallSummaryTitle.split(' ').slice(0, -1).join(' ')}{' '}
-                <span className={`health-${overallHealthLabel}`}>
-                  {overallSummaryTitle.split(' ').slice(-1).join(' ')}
-                </span>
-              </h2>
+              <h2>{overallSummaryTitle}</h2>
               <p>
                 {publishedMonitorEntries.length === 1
-                  ? primaryMonitor?.url || 'Public monitor status'
-                  : `${publishedMonitorEntries.length} services published on this status page.`}
+                  ? primaryMonitor?.url || t('statusPublic.publicMonitorStatus')
+                  : t('statusPublic.servicesPublished', { count: publishedMonitorEntries.length })}
               </p>
             </div>
           </section>
@@ -1199,7 +1229,7 @@ function StatusPagePublicPage({
           {publishedMonitorEntries.length > 1 ? (
             <section className="status-public-card status-public-services-card">
               <h3>
-                Services <span>{publishedMonitorEntries.length} monitored</span>
+                {t('statusPublic.services')} <span>{t('statusPublic.monitored', { count: publishedMonitorEntries.length })}</span>
               </h3>
               <div className="status-public-services-list">
                 {publishedMonitorEntries.map((entry) => (
@@ -1211,7 +1241,7 @@ function StatusPagePublicPage({
                       </div>
                       <div className={`status-public-service-state ${entry.healthLabel}`}>
                         <span className="status-public-service-state-dot" />
-                        <span>{formatHealthLabel(entry.healthLabel)}</span>
+                        <span>{formatHealthLabel(entry.healthLabel, t)}</span>
                       </div>
                     </div>
 
@@ -1223,7 +1253,7 @@ function StatusPagePublicPage({
 
                     <div className="status-public-service-trend">
                       <div className="status-public-service-trend-head">
-                        <span>Response trend</span>
+                        <span>{t('statusPublic.responseTrend')}</span>
                         <small>
                           {entry.responseTrendLabel}
                           {entry.responseTrendLatestMs !== null ? ` | ${Math.round(entry.responseTrendLatestMs)} ms` : ''}
@@ -1256,7 +1286,7 @@ function StatusPagePublicPage({
             <>
               <section className="status-public-card status-public-card-uptime">
                 <h3>
-                  Uptime <span>{primaryMonitor.name} - Last 90 days</span>
+                  {t('statusPublic.uptime')} <span>{primaryMonitor.name} - {t('statusPublic.window.last90Days')}</span>
                 </h3>
                 <div className="status-public-card-inner status-public-uptime-inner">
                   <p className="status-public-kpi">{primaryMonitorEntry.uptimePercent.toFixed(3)}%</p>
@@ -1270,25 +1300,25 @@ function StatusPagePublicPage({
 
               <section className="status-public-card status-public-card-overall">
                 <h3>
-                  Overall Uptime <span>{primaryMonitor.name}</span>
+                  {t('statusPublic.overallUptime')} <span>{primaryMonitor.name}</span>
                 </h3>
                 <div className="status-public-card-inner status-public-overall-inner">
                   <div className="status-public-overall-metrics">
                     <article>
                       <strong>{(primaryUptime24h ?? primaryMonitorEntry.uptimePercent).toFixed(3)}%</strong>
-                      <span>Last 24 hours</span>
+                      <span>{t('statusPublic.last24Hours')}</span>
                     </article>
                     <article>
                       <strong>{(primaryUptime7d ?? primaryMonitorEntry.uptimePercent).toFixed(3)}%</strong>
-                      <span>Last 7 days</span>
+                      <span>{t('statusPublic.last7Days')}</span>
                     </article>
                     <article>
                       <strong>{(primaryUptime30d ?? primaryMonitorEntry.uptimePercent).toFixed(3)}%</strong>
-                      <span>Last 30 days</span>
+                      <span>{t('statusPublic.last30Days')}</span>
                     </article>
                     <article>
                       <strong>{(primaryUptime90d ?? primaryMonitorEntry.uptimePercent).toFixed(3)}%</strong>
-                      <span>Last 90 days</span>
+                      <span>{t('statusPublic.last90Days')}</span>
                     </article>
                   </div>
                 </div>
@@ -1296,7 +1326,7 @@ function StatusPagePublicPage({
 
               <section className="status-public-card status-public-card-response">
                 <h3>
-                  Response Time <span>{primaryMonitor.name} - {responseChartWindowLabel}</span>
+                  {t('statusPublic.responseTime')} <span>{primaryMonitor.name} - {responseChartWindowLabel}</span>
                 </h3>
                 <div className="status-public-card-inner status-public-response-inner">
                   <div className="status-public-chart">
@@ -1309,15 +1339,15 @@ function StatusPagePublicPage({
                   <div className="status-public-response-metrics">
                     <article>
                       <strong>{(primaryUptime24h ?? primaryMonitorEntry.uptimePercent).toFixed(3)}%</strong>
-                      <span>Last 24 hours</span>
+                      <span>{t('statusPublic.last24Hours')}</span>
                     </article>
                     <article>
                       <strong>{(primaryUptime7d ?? primaryMonitorEntry.uptimePercent).toFixed(3)}%</strong>
-                      <span>Last 7 days</span>
+                      <span>{t('statusPublic.last7Days')}</span>
                     </article>
                     <article>
                       <strong>{(primaryUptime30d ?? primaryMonitorEntry.uptimePercent).toFixed(3)}%</strong>
-                      <span>Last 30 days</span>
+                      <span>{t('statusPublic.last30Days')}</span>
                     </article>
                   </div>
                 </div>
@@ -1327,10 +1357,10 @@ function StatusPagePublicPage({
 
           <section className="status-public-card">
             <h3>
-              Recent events <span>{publishedMonitorEntries.length > 1 ? 'Across all services' : primaryMonitor?.name || ''}</span>
+              {t('statusPublic.recentEvents')} <span>{publishedMonitorEntries.length > 1 ? t('statusPublic.acrossAllServices') : primaryMonitor?.name || ''}</span>
             </h3>
             {recentEvents.length === 0 ? (
-              <p>No recent events.</p>
+              <p>{t('statusPublic.noRecentEvents')}</p>
             ) : (
               <ul className="status-public-events">
                 {recentEvents.map((eventItem) => (

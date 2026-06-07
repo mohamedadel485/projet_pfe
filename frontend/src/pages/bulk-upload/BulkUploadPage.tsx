@@ -1,6 +1,7 @@
 import { ChevronRight, Download, FileUp, Plus, Trash2, Upload } from 'lucide-react';
 import { useMemo, useRef, useState, type DragEvent } from 'react';
 import type { CreateIntegrationInput, CreateMonitorInput, IntegrationEvent, IntegrationProvider } from '../../lib/api';
+import { useAppLanguage } from '../../lib/language';
 import './BulkUploadPage.css';
 
 type BulkStep = 0 | 1 | 2;
@@ -35,7 +36,11 @@ interface BulkUploadPageProps {
   onSubmitBulkUpload: (payload: BulkUploadSubmission) => Promise<string | null>;
 }
 
-const bulkSteps = ['Import monitors', 'Review', 'Notify team member / Integrations'];
+const bulkStepKeys = [
+  'bulkUpload.steps.import',
+  'bulkUpload.steps.review',
+  'bulkUpload.steps.notify',
+] as const;
 const methodOptions: MonitorHttpMethod[] = ['GET', 'HEAD', 'POST', 'PUT', 'DELETE'];
 const monitorTypeOptions: Array<CreateMonitorInput['type']> = ['http', 'https', 'ws', 'wss'];
 const intervalOptions = [1, 5, 10, 30, 60];
@@ -60,13 +65,17 @@ const inferTypeFromUrl = (targetUrl: string): CreateMonitorInput['type'] => {
   return 'https';
 };
 
-const buildMonitorNameFromUrl = (targetUrl: string, fallbackIndex: number): string => {
+const buildMonitorNameFromUrl = (
+  targetUrl: string,
+  fallbackIndex: number,
+  t: (key: string, values?: Record<string, string | number | boolean | null | undefined>) => string,
+): string => {
   try {
     const parsedUrl = new URL(targetUrl);
     const path = parsedUrl.pathname && parsedUrl.pathname !== '/' ? parsedUrl.pathname : '';
     return `${parsedUrl.hostname}${path}`.slice(0, 80);
   } catch {
-    return `Monitor ${fallbackIndex}`;
+    return t('bulkUpload.monitorLabel', { index: fallbackIndex });
   }
 };
 
@@ -108,7 +117,10 @@ const parseValueAsInt = (rawValue: string, fallback: number): number => {
   return parsedValue;
 };
 
-const parseCsvText = (csvText: string): { rows: BulkUploadMonitorDraft[]; error: string | null } => {
+const parseCsvText = (
+  csvText: string,
+  t: (key: string, values?: Record<string, string | number | boolean | null | undefined>) => string,
+): { rows: BulkUploadMonitorDraft[]; error: string | null } => {
   const rawLines = csvText
     .replace(/\r\n/g, '\n')
     .replace(/\r/g, '\n')
@@ -119,7 +131,7 @@ const parseCsvText = (csvText: string): { rows: BulkUploadMonitorDraft[]; error:
   if (rawLines.length < 2) {
     return {
       rows: [],
-      error: 'CSV is empty or missing monitor rows.',
+      error: t('bulkUpload.errors.csvEmptyOrMissingRows'),
     };
   }
 
@@ -145,7 +157,7 @@ const parseCsvText = (csvText: string): { rows: BulkUploadMonitorDraft[]; error:
   if (urlIndex < 0) {
     return {
       rows: [],
-      error: 'CSV must contain a "url" column.',
+      error: t('bulkUpload.errors.csvMustContainUrlColumn'),
     };
   }
 
@@ -159,7 +171,7 @@ const parseCsvText = (csvText: string): { rows: BulkUploadMonitorDraft[]; error:
     const rawUrl = getCell(urlIndex).trim();
 
     if (rawUrl === '') {
-      errors.push(`Line ${lineNumber}: url is required.`);
+      errors.push(t('bulkUpload.errors.lineUrlRequired', { line: lineNumber }));
       continue;
     }
 
@@ -168,12 +180,12 @@ const parseCsvText = (csvText: string): { rows: BulkUploadMonitorDraft[]; error:
     try {
       parsedUrl = new URL(normalizedUrl);
     } catch {
-      errors.push(`Line ${lineNumber}: invalid URL "${rawUrl}".`);
+      errors.push(t('bulkUpload.errors.lineInvalidUrl', { line: lineNumber, url: rawUrl }));
       continue;
     }
 
     if (!['http:', 'https:', 'ws:', 'wss:'].includes(parsedUrl.protocol.toLowerCase())) {
-      errors.push(`Line ${lineNumber}: unsupported protocol in "${rawUrl}".`);
+      errors.push(t('bulkUpload.errors.lineUnsupportedProtocol', { line: lineNumber, url: rawUrl }));
       continue;
     }
 
@@ -183,7 +195,7 @@ const parseCsvText = (csvText: string): { rows: BulkUploadMonitorDraft[]; error:
       rawType === 'http' || rawType === 'https' || rawType === 'ws' || rawType === 'wss' ? rawType : inferredType;
 
     const rawName = getCell(nameIndex).trim();
-    const name = rawName !== '' ? rawName : buildMonitorNameFromUrl(parsedUrl.toString(), lineNumber);
+    const name = rawName !== '' ? rawName : buildMonitorNameFromUrl(parsedUrl.toString(), lineNumber, t);
 
     const intervalHeader = intervalIndex >= 0 ? headers[intervalIndex] : '';
     const rawInterval = parseValueAsInt(getCell(intervalIndex), 5);
@@ -195,11 +207,11 @@ const parseCsvText = (csvText: string): { rows: BulkUploadMonitorDraft[]; error:
     const timeout = parseValueAsInt(getCell(timeoutIndex), 30);
 
     if (!Number.isFinite(interval) || interval < 1) {
-      errors.push(`Line ${lineNumber}: interval must be >= 1.`);
+      errors.push(t('bulkUpload.errors.lineInvalidInterval', { line: lineNumber }));
       continue;
     }
     if (!Number.isFinite(timeout) || timeout < 5 || timeout > 300) {
-      errors.push(`Line ${lineNumber}: timeout must be between 5 and 300 seconds.`);
+      errors.push(t('bulkUpload.errors.lineInvalidTimeout', { line: lineNumber }));
       continue;
     }
 
@@ -223,7 +235,7 @@ const parseCsvText = (csvText: string): { rows: BulkUploadMonitorDraft[]; error:
   if (rows.length === 0) {
     return {
       rows: [],
-      error: errors[0] ?? 'No valid monitor row found in CSV.',
+      error: errors[0] ?? t('bulkUpload.errors.noValidMonitorRowFound'),
     };
   }
 
@@ -260,13 +272,8 @@ const parseInviteEmails = (rawValue: string): { valid: string[]; invalid: string
 const formatIntegrationLabel = (provider: IntegrationProvider): string =>
   provider.charAt(0).toUpperCase() + provider.slice(1);
 
-const templateCsv = [
-  'name,url,type,interval,timeout,httpMethod',
-  'Main website,https://example.com,https,5,30,GET',
-  'API health,https://example.com/api/health,https,1,30,GET',
-].join('\n');
-
 function BulkUploadPage({ onBack, canInviteTeam, onSubmitBulkUpload }: BulkUploadPageProps) {
+  const { t } = useAppLanguage();
   const [activeStep, setActiveStep] = useState<BulkStep>(0);
   const [uploadedFileName, setUploadedFileName] = useState('');
   const [rows, setRows] = useState<BulkUploadMonitorDraft[]>([]);
@@ -283,22 +290,23 @@ function BulkUploadPage({ onBack, canInviteTeam, onSubmitBulkUpload }: BulkUploa
   const [integrationEvents, setIntegrationEvents] = useState<IntegrationEvent[]>(['up', 'down']);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const parsedInviteEmails = useMemo(() => parseInviteEmails(teamInvitesInput), [teamInvitesInput]);
+  const bulkSteps = useMemo(() => bulkStepKeys.map((stepKey) => t(stepKey)), [t]);
 
   const processCsvFile = async (file: File) => {
     if (file.size > maxFileSize) {
-      setImportError('File is too large. Maximum size is 10MB.');
+      setImportError(t('bulkUpload.errors.fileTooLarge'));
       return;
     }
 
     const fileExtension = file.name.toLowerCase();
     const looksLikeCsv = file.type.includes('csv') || fileExtension.endsWith('.csv');
     if (!looksLikeCsv) {
-      setImportError('Only CSV files are accepted.');
+      setImportError(t('bulkUpload.errors.onlyCsvAccepted'));
       return;
     }
 
     const text = await file.text();
-    const parsed = parseCsvText(text);
+    const parsed = parseCsvText(text, t);
 
     if (parsed.error) {
       setImportError(parsed.error);
@@ -316,6 +324,11 @@ function BulkUploadPage({ onBack, canInviteTeam, onSubmitBulkUpload }: BulkUploa
   };
 
   const handleDownloadTemplate = () => {
+    const templateCsv = [
+      'name,url,type,interval,timeout,httpMethod',
+      `${t('bulkUpload.template.mainWebsite')},https://example.com,https,5,30,GET`,
+      `${t('bulkUpload.template.apiHealth')},https://example.com/api/health,https,1,30,GET`,
+    ].join('\n');
     const blob = new Blob([templateCsv], { type: 'text/csv;charset=utf-8;' });
     const downloadUrl = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
@@ -329,27 +342,27 @@ function BulkUploadPage({ onBack, canInviteTeam, onSubmitBulkUpload }: BulkUploa
 
   const validateRows = (): string | null => {
     if (rows.length === 0) {
-      return 'Upload at least one monitor.';
+      return t('bulkUpload.errors.uploadAtLeastOneMonitor');
     }
 
     for (const row of rows) {
-      if (row.name.trim() === '') return 'Each monitor must have a name.';
-      if (row.url.trim() === '') return 'Each monitor must have a URL.';
+      if (row.name.trim() === '') return t('bulkUpload.errors.eachMonitorMustHaveAName');
+      if (row.url.trim() === '') return t('bulkUpload.errors.eachMonitorMustHaveAUrl');
       try {
         const parsedUrl = new URL(row.url.trim());
         const protocol = parsedUrl.protocol.toLowerCase();
         if (!['http:', 'https:', 'ws:', 'wss:'].includes(protocol)) {
-          return `Unsupported protocol for ${row.name}.`;
+          return t('bulkUpload.errors.unsupportedProtocolFor', { name: row.name });
         }
       } catch {
-        return `Invalid URL for ${row.name}.`;
+        return t('bulkUpload.errors.invalidUrlFor', { name: row.name });
       }
 
       if (!Number.isFinite(row.interval) || row.interval < 1) {
-        return `Invalid interval for ${row.name}.`;
+        return t('bulkUpload.errors.invalidIntervalFor', { name: row.name });
       }
       if (!Number.isFinite(row.timeout) || row.timeout < 5 || row.timeout > 300) {
-        return `Invalid timeout for ${row.name}.`;
+        return t('bulkUpload.errors.invalidTimeoutFor', { name: row.name });
       }
     }
 
@@ -379,7 +392,7 @@ function BulkUploadPage({ onBack, canInviteTeam, onSubmitBulkUpload }: BulkUploa
       ...currentRows,
       {
         id: `bulk-monitor-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
-        name: 'New monitor',
+        name: t('bulkUpload.newMonitor'),
         url: 'https://',
         type: 'https',
         interval: 5,
@@ -435,12 +448,12 @@ function BulkUploadPage({ onBack, canInviteTeam, onSubmitBulkUpload }: BulkUploa
     }
 
     if (parsedInviteEmails.invalid.length > 0) {
-      setSubmitError(`Invalid emails: ${parsedInviteEmails.invalid.join(', ')}`);
+      setSubmitError(t('bulkUpload.errors.invalidEmails', { emails: parsedInviteEmails.invalid.join(', ') }));
       return;
     }
 
     if (parsedInviteEmails.valid.length > 0 && !canInviteTeam) {
-      setSubmitError('Only admins can invite team members.');
+      setSubmitError(t('bulkUpload.errors.onlyAdminsCanInviteTeamMembers'));
       return;
     }
 
@@ -448,23 +461,23 @@ function BulkUploadPage({ onBack, canInviteTeam, onSubmitBulkUpload }: BulkUploa
 
     if (integrationEnabled) {
       if (integrationEndpoint.trim() === '') {
-        setSubmitError('Integration endpoint URL is required.');
+        setSubmitError(t('bulkUpload.errors.integrationEndpointRequired'));
         return;
       }
 
       try {
         const parsedEndpoint = new URL(integrationEndpoint.trim());
         if (!['http:', 'https:'].includes(parsedEndpoint.protocol.toLowerCase())) {
-          setSubmitError('Integration endpoint must start with http:// or https://.');
+          setSubmitError(t('bulkUpload.errors.integrationEndpointMustStartWithHttpOrHttps'));
           return;
         }
       } catch {
-        setSubmitError('Integration endpoint URL is invalid.');
+        setSubmitError(t('bulkUpload.errors.integrationEndpointInvalid'));
         return;
       }
 
       if (integrationEvents.length === 0) {
-        setSubmitError('Select at least one integration event.');
+        setSubmitError(t('bulkUpload.errors.selectAtLeastOneIntegrationEvent'));
         return;
       }
 
@@ -506,25 +519,28 @@ function BulkUploadPage({ onBack, canInviteTeam, onSubmitBulkUpload }: BulkUploa
     <section className="bulk-upload-page">
       <div className="bulk-upload-breadcrumb">
         <button type="button" className="bulk-upload-breadcrumb-link" onClick={onBack}>
-          Monitoring
+          {t('menu.monitoring')}
         </button>
         <ChevronRight size={14} />
-        <span>Import monitors</span>
+        <span>{t('bulkUpload.breadcrumb')}</span>
       </div>
 
       <div className="bulk-upload-layout">
         <div className="bulk-upload-main">
-          <h1>Import monitors</h1>
+          <h1>{t('bulkUpload.title')}</h1>
 
           {activeStep === 0 ? (
             <>
               <section className="bulk-upload-card">
-                <h2>Start by downloading our template</h2>
-                <p>CSV columns supported: name, url, type, interval, timeout, httpMethod.</p>
-                <p>The only required field is <strong>url</strong>.</p>
+                <h2>{t('bulkUpload.downloadTemplateTitle')}</h2>
+                <p>{t('bulkUpload.csvColumnsSupported')}</p>
+                <p>
+                  {t('bulkUpload.onlyRequiredFieldPrefix')}{' '}
+                  <strong>{t('bulkUpload.onlyRequiredFieldValue')}</strong>.
+                </p>
                 <button type="button" className="bulk-upload-secondary-btn inline" onClick={handleDownloadTemplate}>
                   <Download size={14} />
-                  Download template file
+                  {t('bulkUpload.downloadTemplateFile')}
                 </button>
               </section>
 
@@ -539,8 +555,8 @@ function BulkUploadPage({ onBack, canInviteTeam, onSubmitBulkUpload }: BulkUploa
                   onDrop={handleDrop}
                 >
                   <FileUp size={20} />
-                  <h3>Drag & drop your .csv file here</h3>
-                  <p>or choose it from your hard drive (max 10MB)</p>
+                  <h3>{t('bulkUpload.dragDropTitle')}</h3>
+                  <p>{t('bulkUpload.dragDropDescription')}</p>
                   <button
                     type="button"
                     className="bulk-upload-primary-btn"
@@ -549,7 +565,7 @@ function BulkUploadPage({ onBack, canInviteTeam, onSubmitBulkUpload }: BulkUploa
                     }}
                   >
                     <Upload size={14} />
-                    Choose a file
+                    {t('bulkUpload.chooseFile')}
                   </button>
                   <input
                     ref={inputRef}
@@ -567,7 +583,8 @@ function BulkUploadPage({ onBack, canInviteTeam, onSubmitBulkUpload }: BulkUploa
 
                 {uploadedFileName ? (
                   <p className="bulk-upload-file-feedback">
-                    File loaded: <strong>{uploadedFileName}</strong> ({rows.length} monitors)
+                    {t('bulkUpload.fileLoadedPrefix')}{' '}
+                    <strong>{uploadedFileName}</strong> ({t('bulkUpload.fileLoadedCount', { count: rows.length })})
                   </p>
                 ) : null}
                 {importError ? <p className="bulk-upload-error">{importError}</p> : null}
@@ -575,10 +592,10 @@ function BulkUploadPage({ onBack, canInviteTeam, onSubmitBulkUpload }: BulkUploa
 
               <div className="bulk-upload-actions">
                 <button type="button" className="bulk-upload-secondary-btn" onClick={onBack}>
-                  Cancel
+                  {t('common.cancel')}
                 </button>
                 <button type="button" className="bulk-upload-primary-btn" onClick={() => goToStep(1)} disabled={rows.length === 0}>
-                  Continue
+                  {t('common.next')}
                 </button>
               </div>
             </>
@@ -587,34 +604,34 @@ function BulkUploadPage({ onBack, canInviteTeam, onSubmitBulkUpload }: BulkUploa
           {activeStep === 1 ? (
             <>
               <section className="bulk-upload-card">
-                <h2>Review imported monitors</h2>
-                <p>Adjust monitor details before creating them.</p>
+                <h2>{t('bulkUpload.reviewTitle')}</h2>
+                <p>{t('bulkUpload.reviewDescription')}</p>
 
                 <div className="bulk-upload-review-list">
                   {rows.length === 0 ? (
                     <p className="bulk-upload-empty-review">
-                      No monitors yet. Add a row manually or go back and import a CSV file.
+                      {t('bulkUpload.emptyReview')}
                     </p>
                   ) : null}
                   {rows.map((row) => (
                     <article className="bulk-upload-review-item" key={row.id}>
                       <div className="bulk-upload-review-head">
                         <strong>{row.name}</strong>
-                        <button type="button" onClick={() => removeRow(row.id)} aria-label="Remove monitor row">
+                        <button type="button" onClick={() => removeRow(row.id)} aria-label={t('bulkUpload.aria.removeMonitorRow')}>
                           <Trash2 size={14} />
                         </button>
                       </div>
                       <div className="bulk-upload-review-grid">
                         <label>
-                          <span>Name</span>
+                          <span>{t('common.name')}</span>
                           <input type="text" value={row.name} onChange={(event) => updateRow(row.id, 'name', event.target.value)} />
                         </label>
                         <label className="wide">
-                          <span>URL</span>
+                          <span>{t('bulkUpload.url')}</span>
                           <input type="text" value={row.url} onChange={(event) => updateRow(row.id, 'url', event.target.value)} />
                         </label>
                         <label>
-                          <span>Type</span>
+                          <span>{t('bulkUpload.type')}</span>
                           <select value={row.type} onChange={(event) => updateRow(row.id, 'type', event.target.value)}>
                             {monitorTypeOptions.map((typeOption) => (
                               <option key={typeOption} value={typeOption}>
@@ -624,7 +641,7 @@ function BulkUploadPage({ onBack, canInviteTeam, onSubmitBulkUpload }: BulkUploa
                           </select>
                         </label>
                         <label>
-                          <span>Method</span>
+                          <span>{t('bulkUpload.method')}</span>
                           <select value={row.httpMethod} onChange={(event) => updateRow(row.id, 'httpMethod', event.target.value)}>
                             {methodOptions.map((method) => (
                               <option key={method} value={method}>
@@ -634,21 +651,21 @@ function BulkUploadPage({ onBack, canInviteTeam, onSubmitBulkUpload }: BulkUploa
                           </select>
                         </label>
                         <label>
-                          <span>Interval</span>
+                          <span>{t('bulkUpload.interval')}</span>
                           <select value={row.interval} onChange={(event) => updateRow(row.id, 'interval', Number(event.target.value))}>
                             {intervalOptions.map((option) => (
                               <option key={option} value={option}>
-                                {option} min
+                                {t('bulkUpload.intervalValue', { interval: option })}
                               </option>
                             ))}
                           </select>
                         </label>
                         <label>
-                          <span>Timeout</span>
+                          <span>{t('bulkUpload.timeout')}</span>
                           <select value={row.timeout} onChange={(event) => updateRow(row.id, 'timeout', Number(event.target.value))}>
                             {timeoutOptions.map((option) => (
                               <option key={option} value={option}>
-                                {option} sec
+                                {t('bulkUpload.timeoutValue', { timeout: option })}
                               </option>
                             ))}
                           </select>
@@ -660,7 +677,7 @@ function BulkUploadPage({ onBack, canInviteTeam, onSubmitBulkUpload }: BulkUploa
 
                 <button type="button" className="bulk-upload-secondary-btn inline" onClick={addRow}>
                   <Plus size={14} />
-                  Add row
+                  {t('bulkUpload.addRow')}
                 </button>
 
                 {reviewError ? <p className="bulk-upload-error">{reviewError}</p> : null}
@@ -668,10 +685,10 @@ function BulkUploadPage({ onBack, canInviteTeam, onSubmitBulkUpload }: BulkUploa
 
               <div className="bulk-upload-actions">
                 <button type="button" className="bulk-upload-secondary-btn" onClick={() => goToStep(0)}>
-                  Back
+                  {t('common.back')}
                 </button>
                 <button type="button" className="bulk-upload-primary-btn" onClick={() => goToStep(2)}>
-                  Continue
+                  {t('common.next')}
                 </button>
               </div>
             </>
@@ -680,25 +697,25 @@ function BulkUploadPage({ onBack, canInviteTeam, onSubmitBulkUpload }: BulkUploa
           {activeStep === 2 ? (
             <>
               <section className="bulk-upload-card">
-                <h2>Notify team member / Integrations</h2>
-                <p>Optional step to invite teammates and configure notifications immediately.</p>
+                <h2>{t('bulkUpload.notifyTitle')}</h2>
+                <p>{t('bulkUpload.notifyDescription')}</p>
                 {rows.length === 0 ? (
-                  <p className="bulk-upload-hint">No monitors yet. Add monitors in Review before final creation.</p>
+                  <p className="bulk-upload-hint">{t('bulkUpload.noMonitorsYetInReview')}</p>
                 ) : null}
 
                 <label className="bulk-upload-field">
-                  <span>Invite teammates (emails separated by comma or new line)</span>
+                  <span>{t('bulkUpload.inviteTeammates')}</span>
                   <textarea
                     value={teamInvitesInput}
                     onChange={(event) => setTeamInvitesInput(event.target.value)}
-                    placeholder="alice@company.com, bob@company.com"
+                    placeholder={t('bulkUpload.inviteTeammatesPlaceholder')}
                     disabled={!canInviteTeam}
                   />
                 </label>
                 {!canInviteTeam ? (
-                  <p className="bulk-upload-hint">Only admins can send team invitations.</p>
+                  <p className="bulk-upload-hint">{t('bulkUpload.onlyAdminsCanSendInvitations')}</p>
                 ) : (
-                  <p className="bulk-upload-hint">{parsedInviteEmails.valid.length} valid invite(s) prepared.</p>
+                  <p className="bulk-upload-hint">{t('bulkUpload.validInvitesPrepared', { count: parsedInviteEmails.valid.length })}</p>
                 )}
 
                 <div className="bulk-upload-integration-block">
@@ -708,13 +725,13 @@ function BulkUploadPage({ onBack, canInviteTeam, onSubmitBulkUpload }: BulkUploa
                       checked={integrationEnabled}
                       onChange={(event) => setIntegrationEnabled(event.target.checked)}
                     />
-                    <span>Create an integration now</span>
+                    <span>{t('bulkUpload.createIntegrationNow')}</span>
                   </label>
 
                   {integrationEnabled ? (
                     <div className="bulk-upload-integration-grid">
                       <label>
-                        <span>Provider</span>
+                        <span>{t('bulkUpload.provider')}</span>
                         <select
                           value={integrationType}
                           onChange={(event) => setIntegrationType(event.target.value as IntegrationProvider)}
@@ -727,21 +744,21 @@ function BulkUploadPage({ onBack, canInviteTeam, onSubmitBulkUpload }: BulkUploa
                         </select>
                       </label>
                       <label>
-                        <span>Endpoint URL</span>
+                        <span>{t('bulkUpload.endpointUrl')}</span>
                         <input
                           type="text"
-                          placeholder="https://example.com/webhook"
+                          placeholder={t('bulkUpload.endpointUrlPlaceholder')}
                           value={integrationEndpoint}
                           onChange={(event) => setIntegrationEndpoint(event.target.value)}
                         />
                       </label>
                       <label>
-                        <span>Custom value (optional)</span>
+                        <span>{t('bulkUpload.customValueOptional')}</span>
                         <input
                           type="text"
                           value={integrationCustomValue}
                           onChange={(event) => setIntegrationCustomValue(event.target.value)}
-                          placeholder="Team A alerts"
+                          placeholder={t('bulkUpload.customValuePlaceholder')}
                         />
                       </label>
                       <div className="bulk-upload-events">
@@ -751,7 +768,7 @@ function BulkUploadPage({ onBack, canInviteTeam, onSubmitBulkUpload }: BulkUploa
                             checked={integrationEvents.includes('down')}
                             onChange={() => toggleIntegrationEvent('down')}
                           />
-                          <span>Down events</span>
+                          <span>{t('bulkUpload.downEvents')}</span>
                         </label>
                         <label className="bulk-upload-toggle">
                           <input
@@ -759,7 +776,7 @@ function BulkUploadPage({ onBack, canInviteTeam, onSubmitBulkUpload }: BulkUploa
                             checked={integrationEvents.includes('up')}
                             onChange={() => toggleIntegrationEvent('up')}
                           />
-                          <span>Up events</span>
+                          <span>{t('bulkUpload.upEvents')}</span>
                         </label>
                       </div>
                     </div>
@@ -771,7 +788,7 @@ function BulkUploadPage({ onBack, canInviteTeam, onSubmitBulkUpload }: BulkUploa
 
               <div className="bulk-upload-actions">
                 <button type="button" className="bulk-upload-secondary-btn" onClick={() => goToStep(1)} disabled={isSubmitting}>
-                  Back
+                  {t('common.back')}
                 </button>
                 <button
                   type="button"
@@ -779,17 +796,19 @@ function BulkUploadPage({ onBack, canInviteTeam, onSubmitBulkUpload }: BulkUploa
                   onClick={() => void handleSubmit()}
                   disabled={isSubmitting || rows.length === 0}
                 >
-                  {isSubmitting ? 'Creating...' : `Create ${rows.length} monitor(s)`}
+                  {isSubmitting
+                    ? t('common.creating')
+                    : t('bulkUpload.createMonitors', { count: rows.length })}
                 </button>
               </div>
             </>
           ) : null}
         </div>
 
-        <aside className="bulk-upload-steps-card" aria-label="Bulk upload steps">
+        <aside className="bulk-upload-steps-card" aria-label={t('bulkUpload.stepsLabel')}>
           <ol>
             {bulkSteps.map((step, index) => (
-              <li key={step} className={activeStep === index ? 'active' : ''}>
+              <li key={bulkStepKeys[index]} className={activeStep === index ? 'active' : ''}>
                 <button
                   type="button"
                   className="bulk-upload-step-button"
@@ -798,7 +817,7 @@ function BulkUploadPage({ onBack, canInviteTeam, onSubmitBulkUpload }: BulkUploa
                     if (index === 1) goToStep(1);
                     if (index === 2) goToStep(2);
                   }}
-                >
+                  >
                   <span className="bulk-upload-step-index">{index + 1}</span>
                   <span>{step}</span>
                 </button>

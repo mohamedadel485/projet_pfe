@@ -4,6 +4,7 @@ import {
   MONITOR_TRASH_TTL_MS,
   type DeletedMonitorTrashEntry,
 } from '../../lib/monitorTrash';
+import { useAppLanguage, type TranslationKey } from '../../lib/language';
 import './MonitorTrashPage.css';
 
 interface MonitorTrashPageProps {
@@ -14,19 +15,26 @@ interface MonitorTrashPageProps {
   restoringMonitorId?: string | null;
 }
 
-const formatTrashTimeRemaining = (expiresAt: number, now: number): string => {
+const formatTrashTimeRemaining = (
+  expiresAt: number,
+  now: number,
+  t: (
+    key: TranslationKey,
+    values?: Record<string, string | number | boolean | null | undefined>,
+  ) => string,
+): string => {
   const remainingMs = Math.max(0, expiresAt - now);
   const remainingMinutes = Math.ceil(remainingMs / 60000);
 
   if (remainingMinutes <= 0) {
-    return 'Expired';
+    return t("dashboard.trash.expired");
   }
 
   if (remainingMinutes === 1) {
-    return '1 min left';
+    return t("dashboard.trash.oneMinuteLeft");
   }
 
-  return `${remainingMinutes} min left`;
+  return t("dashboard.trash.minutesLeft", { minutes: remainingMinutes });
 };
 
 function MonitorTrashPage({
@@ -36,6 +44,7 @@ function MonitorTrashPage({
   onRestoreMonitor,
   restoringMonitorId,
 }: MonitorTrashPageProps) {
+  const { t } = useAppLanguage();
   const activeTrashEntries = useMemo(
     () => deletedMonitorTrash.filter((entry) => entry.expiresAt > trashClock),
     [deletedMonitorTrash, trashClock],
@@ -57,22 +66,23 @@ function MonitorTrashPage({
       <header className="monitor-trash-page-header">
         <nav aria-label="Breadcrumb" className="monitor-trash-page-breadcrumb">
           <button type="button" onClick={onBackToMonitoring}>
-            Monitoring
+            {t("menu.monitoring")}
           </button>
           <ChevronRight size={12} />
-          <span>Trash</span>
+          <span>{t("dashboard.trash.title")}</span>
         </nav>
 
         <div className="monitor-trash-page-hero">
           <div className="monitor-trash-page-title">
-            <span className="monitor-trash-page-icon" aria-hidden="true">
+              <span className="monitor-trash-page-icon" aria-hidden="true">
               <Trash2 size={22} />
             </span>
             <div className="monitor-trash-page-title-copy">
-              <h1>Trash</h1>
+              <h1>{t("dashboard.trash.title")}</h1>
               <p>
-                Deleted monitors stay here for{' '}
-                {MONITOR_TRASH_TTL_MS / 60000} minutes before they disappear.
+                {t("dashboard.trash.description", {
+                  minutes: MONITOR_TRASH_TTL_MS / 60000,
+                })}
               </p>
             </div>
           </div>
@@ -80,14 +90,14 @@ function MonitorTrashPage({
           <div className="monitor-trash-page-actions">
             <div className="monitor-trash-page-count">
               <strong>{activeTrashEntries.length}</strong>
-              <span>Deleted monitors</span>
+              <span>{t("dashboard.trash.deletedMonitors")}</span>
             </div>
             <button
               type="button"
               className="monitor-trash-page-back-button"
               onClick={onBackToMonitoring}
             >
-              Back to monitoring
+              {t("dashboard.trash.backToMonitoring")}
             </button>
           </div>
         </div>
@@ -100,11 +110,8 @@ function MonitorTrashPage({
               <Clock3 size={16} />
             </span>
             <div>
-              <strong>No deleted monitors</strong>
-              <p>
-                Restored or expired items will disappear from this page
-                automatically.
-              </p>
+              <strong>{t("dashboard.trash.empty")}</strong>
+              <p>{t("dashboard.trash.pageEmptyCopy")}</p>
             </div>
           </div>
         ) : (
@@ -123,7 +130,7 @@ function MonitorTrashPage({
                   <div className="monitor-trash-page-item-meta">
                     <span className="monitor-trash-page-expiry">
                       <Clock3 size={11} aria-hidden="true" />
-                      {formatTrashTimeRemaining(entry.expiresAt, trashClock)}
+                      {formatTrashTimeRemaining(entry.expiresAt, trashClock, t)}
                     </span>
                     <button
                       type="button"
@@ -134,7 +141,11 @@ function MonitorTrashPage({
                       disabled={isExpired || isRestoring}
                     >
                       <RotateCcw size={12} aria-hidden="true" />
-                      <span>{isRestoring ? 'Restoring...' : 'Restore'}</span>
+                      <span>
+                        {isRestoring
+                          ? t("dashboard.trash.restoring")
+                          : t("dashboard.trash.restore")}
+                      </span>
                     </button>
                   </div>
                 </article>

@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { ApiError, changePassword, isApiError } from "../../lib/api";
 import { Check, X } from "lucide-react";
+import { useAppLanguage } from "../../lib/language";
 
 interface PasswordRequirement {
   label: string;
@@ -8,6 +9,7 @@ interface PasswordRequirement {
 }
 
 const SettingsPage: React.FC = () => {
+  const { t } = useAppLanguage();
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -19,23 +21,23 @@ const SettingsPage: React.FC = () => {
   const passwordRequirements: PasswordRequirement[] = useMemo(() => {
     return [
       {
-        label: "At least 6 characters",
+        label: t("settings.passwordRuleLength"),
         isValid: newPassword.length >= 6,
       },
       {
-        label: "At least 1 uppercase letter",
+        label: t("settings.passwordRuleUppercase"),
         isValid: /[A-Z]/.test(newPassword),
       },
       {
-        label: "At least 1 number",
+        label: t("settings.passwordRuleNumber"),
         isValid: /\d/.test(newPassword),
       },
       {
-        label: "At least 1 special character (!@#$%^&*)",
+        label: t("settings.passwordRuleSpecial"),
         isValid: /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(newPassword),
       },
     ];
-  }, [newPassword]);
+  }, [newPassword, t]);
 
   const isPasswordValid = useMemo(() => {
     return passwordRequirements.every((req) => req.isValid);
@@ -57,24 +59,24 @@ const SettingsPage: React.FC = () => {
     setSuccessMessage(null);
 
     if (newPassword.length < 6) {
-      setErrorMessage("The new password must contain at least 6 characters.");
+      setErrorMessage(t("settings.errorPasswordMinLength"));
       return;
     }
 
     if (newPassword !== confirmPassword) {
-      setErrorMessage("Password confirmation does not match.");
+      setErrorMessage(t("settings.errorPasswordMismatch"));
       return;
     }
 
     if (currentPassword === newPassword) {
-      setErrorMessage("The new password must be different from the current one.");
+      setErrorMessage(t("settings.errorPasswordDifferent"));
       return;
     }
 
     setIsSubmitting(true);
     try {
       const response = await changePassword(currentPassword, newPassword);
-      setSuccessMessage(response.message || "Password changed successfully.");
+      setSuccessMessage(response.message || t("settings.successPasswordChanged"));
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
@@ -84,7 +86,7 @@ const SettingsPage: React.FC = () => {
       } else if (error instanceof ApiError) {
         setErrorMessage(error.message);
       } else {
-        setErrorMessage("Unable to change password.");
+        setErrorMessage(t("settings.errorChangePassword"));
       }
     } finally {
       setIsSubmitting(false);
@@ -94,7 +96,7 @@ const SettingsPage: React.FC = () => {
   return (
     <div className="panel-main">
       <header className="workspace-top">
-        <h1>Settings</h1>
+        <h1>{t("common.settings")}</h1>
         <div />
       </header>
 
@@ -107,11 +109,11 @@ const SettingsPage: React.FC = () => {
             marginBottom: "12px",
           }}
         >
-          Change password
+          {t("settings.changePassword")}
         </h2>
         <form onSubmit={handleSubmit}>
           <label className="form-label" htmlFor="current-password">
-            Current password
+            {t("settings.currentPassword")}
           </label>
           <input
             id="current-password"
@@ -127,7 +129,7 @@ const SettingsPage: React.FC = () => {
             htmlFor="new-password"
             style={{ marginTop: "12px" }}
           >
-            New password
+            {t("settings.newPassword")}
           </label>
           <input
             id="new-password"
@@ -160,7 +162,7 @@ const SettingsPage: React.FC = () => {
                   fontSize: "0.8rem",
                 }}
               >
-                Password requirements:
+                {t("settings.passwordGuidanceIntro")}
               </p>
               {passwordRequirements.map((req, index) => (
                 <div
@@ -190,7 +192,7 @@ const SettingsPage: React.FC = () => {
             htmlFor="confirm-password"
             style={{ marginTop: "12px" }}
           >
-            Confirm new password
+            {t("settings.confirmPassword")}
           </label>
           <input
             id="confirm-password"
@@ -207,7 +209,7 @@ const SettingsPage: React.FC = () => {
               className="form-error"
               style={{ marginTop: "8px", fontSize: "0.85rem" }}
             >
-              Passwords do not match
+              {t("settings.errorPasswordMismatch")}
             </p>
           )}
 
@@ -224,7 +226,7 @@ const SettingsPage: React.FC = () => {
                 cursor: canSubmit ? "pointer" : "not-allowed",
               }}
             >
-              {isSubmitting ? "Updating..." : "Change password"}
+              {isSubmitting ? t("settings.saving") : t("settings.changePassword")}
             </button>
           </div>
         </form>

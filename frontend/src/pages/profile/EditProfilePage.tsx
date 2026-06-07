@@ -8,10 +8,12 @@ import {
   isApiError,
   resolveAvatarUrl,
 } from "../../lib/api";
+import { useAppLanguage } from "../../lib/language";
+import LanguageSwitcher from "../../components/LanguageSwitcher";
 
 const THEME_CACHE_KEY = "uptimewarden_theme";
 type AppTheme = "light" | "dark";
-type SettingsSection = "profile" | "password" | "theme";
+type SettingsSection = "profile" | "password" | "theme" | "language";
 
 interface Props {
   authToken?: string | null;
@@ -30,6 +32,7 @@ const EditProfilePage: React.FC<Props> = ({
   onBack,
   onUpdateUser,
 }) => {
+  const { language, setLanguage, t } = useAppLanguage();
   const [name, setName] = useState(currentUser?.name ?? "");
   const [email, setEmail] = useState(currentUser?.email ?? "");
   const [saving, setSaving] = useState(false);
@@ -80,19 +83,19 @@ const EditProfilePage: React.FC<Props> = ({
 
   const passwordRules = [
     {
-      label: "At least 6 characters",
+      label: t("settings.passwordRuleLength"),
       valid: newPassword.length >= 6,
     },
     {
-      label: "At least one uppercase letter",
+      label: t("settings.passwordRuleUppercase"),
       valid: /[A-Z]/.test(newPassword),
     },
     {
-      label: "At least one number",
+      label: t("settings.passwordRuleNumber"),
       valid: /\d/.test(newPassword),
     },
     {
-      label: "At least one special character",
+      label: t("settings.passwordRuleSpecial"),
       valid: /[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/.test(newPassword),
     },
   ];
@@ -108,15 +111,15 @@ const EditProfilePage: React.FC<Props> = ({
     setSuccess(null);
 
     if (!authToken) {
-      setError("Authentication required.");
+      setError(t("settings.errorAuthRequired"));
       return;
     }
 
     const nextFieldErrors: { name?: string; email?: string } = {};
-    if (name.trim() === "") nextFieldErrors.name = "Name is required.";
-    if (email.trim() === "") nextFieldErrors.email = "Email is required.";
+    if (name.trim() === "") nextFieldErrors.name = t("settings.errorNameRequired");
+    if (email.trim() === "") nextFieldErrors.email = t("settings.errorEmailRequired");
     else if (!validateEmail(email.trim()))
-      nextFieldErrors.email = "Invalid email format.";
+      nextFieldErrors.email = t("settings.errorInvalidEmail");
 
     if (Object.keys(nextFieldErrors).length > 0) {
       setFieldErrors(nextFieldErrors);
@@ -141,17 +144,17 @@ const EditProfilePage: React.FC<Props> = ({
         avatar: currentUser?.avatar,
       };
       onUpdateUser(authUser);
-      setSuccess("Profile updated.");
+      setSuccess(t("settings.successProfileUpdated"));
       setTimeout(() => {
         onBack();
       }, 700);
     } catch (err) {
       if (isApiError(err)) {
-        setError(err.message || "Error while updating profile.");
+        setError(err.message || t("settings.errorProfileUpdate"));
       } else if (err instanceof Error) {
         setError(err.message);
       } else {
-        setError("Error while updating profile.");
+        setError(t("settings.errorProfileUpdate"));
       }
     } finally {
       setSaving(false);
@@ -167,7 +170,7 @@ const EditProfilePage: React.FC<Props> = ({
     const file = e.target.files?.[0];
     if (!file) return;
     if (!authToken) {
-      setError("Authentication required.");
+      setError(t("settings.errorAuthRequired"));
       return;
     }
     try {
@@ -181,11 +184,11 @@ const EditProfilePage: React.FC<Props> = ({
         avatar: resp.avatarUrl,
       };
       onUpdateUser(newUser);
-      setSuccess("Avatar updated.");
+      setSuccess(t("settings.successAvatarUpdated"));
     } catch (err) {
-      if (isApiError(err)) setError(err.message || "Upload error");
+      if (isApiError(err)) setError(err.message || t("settings.errorUpload"));
       else if (err instanceof Error) setError(err.message);
-      else setError("Upload error");
+      else setError(t("settings.errorUpload"));
     } finally {
       setSaving(false);
     }
@@ -199,43 +202,37 @@ const EditProfilePage: React.FC<Props> = ({
     setPasswordSuccess(null);
 
     if (currentPassword.trim() === "") {
-      setPasswordError("Current password is required.");
+      setPasswordError(t("settings.errorCurrentPasswordRequired"));
       return;
     }
 
     if (newPassword.length < 6) {
-      setPasswordError("The new password must contain at least 6 characters.");
+      setPasswordError(t("settings.errorPasswordMinLength"));
       return;
     }
 
     if (!/[A-Z]/.test(newPassword)) {
-      setPasswordError(
-        "The new password must contain at least one uppercase letter.",
-      );
+      setPasswordError(t("settings.errorPasswordUppercase"));
       return;
     }
 
     if (!/\d/.test(newPassword)) {
-      setPasswordError("The new password must contain at least one number.");
+      setPasswordError(t("settings.errorPasswordNumber"));
       return;
     }
 
     if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>/?]/.test(newPassword)) {
-      setPasswordError(
-        "The new password must contain at least one special character.",
-      );
+      setPasswordError(t("settings.errorPasswordSpecial"));
       return;
     }
 
     if (newPassword !== confirmPassword) {
-      setPasswordError("Password confirmation does not match.");
+      setPasswordError(t("settings.errorPasswordMismatch"));
       return;
     }
 
     if (currentPassword === newPassword) {
-      setPasswordError(
-        "The new password must be different from the current one.",
-      );
+      setPasswordError(t("settings.errorPasswordDifferent"));
       return;
     }
 
@@ -243,22 +240,20 @@ const EditProfilePage: React.FC<Props> = ({
     try {
       const response = await changePassword(currentPassword, newPassword);
       setPasswordSuccess(
-        response.message || "Password changed successfully.",
+        response.message || t("settings.successPasswordChanged"),
       );
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
     } catch (err) {
       if (isApiError(err)) {
-        setPasswordError(
-          err.message || "Unable to change password.",
-        );
+        setPasswordError(err.message || t("settings.errorChangePassword"));
       } else if (err instanceof ApiError) {
         setPasswordError(err.message);
       } else if (err instanceof Error) {
         setPasswordError(err.message);
       } else {
-        setPasswordError("Unable to change password.");
+        setPasswordError(t("settings.errorChangePassword"));
       }
     } finally {
       setIsChangingPassword(false);
@@ -267,17 +262,16 @@ const EditProfilePage: React.FC<Props> = ({
 
   return (
     <div className="panel-main settings-page-shell">
+      <LanguageSwitcher />
       <header className="workspace-top">
         <button type="button" className="settings-back-button" onClick={onBack}>
           <span aria-hidden="true">&larr;</span>
-          Back
+          {t("settings.back")}
         </button>
         <div>
-          <span className="profile-page-badge">SETTINGS</span>
-          <h1>Profile, password, and theme</h1>
-          <p>
-            Manage your profile, security, and the app appearance.
-          </p>
+          <span className="profile-page-badge">{t("settings.badge")}</span>
+          <h1>{t("settings.title")}</h1>
+          <p>{t("settings.subtitle")}</p>
         </div>
         <div />
       </header>
@@ -285,34 +279,42 @@ const EditProfilePage: React.FC<Props> = ({
       <div className="settings-layout">
         <aside className="panel-card settings-sidebar-card">
           <div className="settings-sidebar-header">
-            <strong>Settings menu</strong>
-            <span>Choose a section</span>
+            <strong>{t("settings.menuTitle")}</strong>
+            <span>{t("settings.menuHint")}</span>
           </div>
 
-          <nav className="settings-sidebar-nav" aria-label="Settings">
+          <nav className="settings-sidebar-nav" aria-label={t("common.settings")}>
             <button
               type="button"
               className={`settings-sidebar-item ${activeSection === "profile" ? "active" : ""}`}
               onClick={() => setActiveSection("profile")}
             >
-              <span>Profile</span>
-              <small>Name, email, avatar</small>
+              <span>{t("settings.sectionProfile")}</span>
+              <small>{t("settings.sectionProfileHint")}</small>
             </button>
             <button
               type="button"
               className={`settings-sidebar-item ${activeSection === "password" ? "active" : ""}`}
               onClick={() => setActiveSection("password")}
             >
-              <span>Password</span>
-              <small>Change your password</small>
+              <span>{t("settings.sectionPassword")}</span>
+              <small>{t("settings.sectionPasswordHint")}</small>
             </button>
             <button
               type="button"
               className={`settings-sidebar-item ${activeSection === "theme" ? "active" : ""}`}
               onClick={() => setActiveSection("theme")}
             >
-              <span>Theme</span>
-              <small>Light or dark</small>
+              <span>{t("settings.sectionTheme")}</span>
+              <small>{t("settings.sectionThemeHint")}</small>
+            </button>
+            <button
+              type="button"
+              className={`settings-sidebar-item ${activeSection === "language" ? "active" : ""}`}
+              onClick={() => setActiveSection("language")}
+            >
+              <span>{t("settings.sectionLanguage")}</span>
+              <small>{t("settings.sectionLanguageHint")}</small>
             </button>
           </nav>
         </aside>
@@ -322,7 +324,7 @@ const EditProfilePage: React.FC<Props> = ({
             <div className="settings-profile-grid">
               <div className="settings-avatar-block">
                 <div className="settings-avatar">
-                  {avatarSrc ? <img src={avatarSrc} alt="Avatar" /> : initials}
+                  {avatarSrc ? <img src={avatarSrc} alt={t("common.profile")} /> : initials}
                 </div>
                 <div className="settings-avatar-copy">
                   <strong>{currentUser?.name}</strong>
@@ -332,7 +334,7 @@ const EditProfilePage: React.FC<Props> = ({
                   className="secondary-button settings-avatar-button"
                   style={{ cursor: "pointer" }}
                 >
-                  Change avatar
+                  {t("settings.changeAvatar")}
                   <input
                     ref={fileInputRef}
                     type="file"
@@ -345,7 +347,7 @@ const EditProfilePage: React.FC<Props> = ({
 
               <div className="settings-form-block">
                 <div>
-                  <label className="form-label">Name</label>
+                  <label className="form-label">{t("settings.name")}</label>
                   <input
                     type="text"
                     value={name}
@@ -358,7 +360,7 @@ const EditProfilePage: React.FC<Props> = ({
                 </div>
 
                 <div>
-                  <label className="form-label">Email</label>
+                  <label className="form-label">{t("settings.email")}</label>
                   <input
                     type="email"
                     value={email}
@@ -380,7 +382,7 @@ const EditProfilePage: React.FC<Props> = ({
                     onClick={onBack}
                     disabled={saving || isChangingPassword}
                   >
-                    Cancel
+                    {t("settings.cancel")}
                   </button>
                   <button
                     type="button"
@@ -388,7 +390,7 @@ const EditProfilePage: React.FC<Props> = ({
                     onClick={handleSave}
                     disabled={saving || isChangingPassword}
                   >
-                    {saving ? "Saving..." : "Save"}
+                    {saving ? t("settings.saving") : t("settings.save")}
                   </button>
                 </div>
               </div>
@@ -396,8 +398,8 @@ const EditProfilePage: React.FC<Props> = ({
           ) : activeSection === "password" ? (
             <div className="settings-section-stack">
               <div className="settings-section-header">
-                <h2>Password change</h2>
-                <p>Strengthen the security of your account.</p>
+                <h2>{t("settings.passwordTitle")}</h2>
+                <p>{t("settings.passwordSubtitle")}</p>
               </div>
 
               <form
@@ -405,7 +407,7 @@ const EditProfilePage: React.FC<Props> = ({
                 onSubmit={handlePasswordChange}
               >
                 <label className="form-label" htmlFor="current-password">
-                  Current password
+                  {t("settings.currentPassword")}
                 </label>
                 <input
                   id="current-password"
@@ -424,7 +426,7 @@ const EditProfilePage: React.FC<Props> = ({
                   htmlFor="new-password"
                   style={{ marginTop: "12px" }}
                 >
-                  New password
+                  {t("settings.newPassword")}
                 </label>
                 <input
                   id="new-password"
@@ -444,7 +446,7 @@ const EditProfilePage: React.FC<Props> = ({
                     className="settings-password-guidance"
                     aria-live="polite"
                   >
-                    <p>The new password must meet these requirements:</p>
+                    <p>{t("settings.passwordGuidanceIntro")}</p>
                     <ul className="settings-password-rules">
                       {passwordRules.map((rule) => (
                         <li
@@ -455,7 +457,7 @@ const EditProfilePage: React.FC<Props> = ({
                             className="settings-password-rule-icon"
                             aria-hidden="true"
                           >
-                            {rule.valid ? "✓" : "•"}
+                            {rule.valid ? "+" : "-"}
                           </span>
                           <span>{rule.label}</span>
                         </li>
@@ -469,7 +471,7 @@ const EditProfilePage: React.FC<Props> = ({
                   htmlFor="confirm-password"
                   style={{ marginTop: "12px" }}
                 >
-                  Confirm new password
+                  {t("settings.confirmPassword")}
                 </label>
                 <input
                   id="confirm-password"
@@ -495,19 +497,17 @@ const EditProfilePage: React.FC<Props> = ({
                     disabled={isChangingPassword || saving || !passwordReady}
                   >
                     {isChangingPassword
-                      ? "Updating..."
-                      : "Change password"}
+                      ? t("common.saving")
+                      : t("settings.changePassword")}
                   </button>
                 </div>
               </form>
             </div>
-          ) : (
+          ) : activeSection === "theme" ? (
             <div className="settings-section-stack">
               <div className="settings-section-header">
-                <h2>App theme</h2>
-                <p>
-                  Choose the overall appearance that suits you best.
-                </p>
+                <h2>{t("settings.appTheme")}</h2>
+                <p>{t("settings.themeSubtitle")}</p>
               </div>
 
               <div className="settings-theme-grid">
@@ -521,8 +521,8 @@ const EditProfilePage: React.FC<Props> = ({
                     className="settings-theme-preview settings-theme-preview-light"
                     aria-hidden="true"
                   />
-                  <strong>Light</strong>
-                  <span>Bright background with soft contrast</span>
+                  <strong>{t("settings.light")}</strong>
+                  <span>{t("settings.lightDescription")}</span>
                 </button>
 
                 <button
@@ -535,10 +535,49 @@ const EditProfilePage: React.FC<Props> = ({
                     className="settings-theme-preview settings-theme-preview-dark"
                     aria-hidden="true"
                   />
-                  <strong>Dark</strong>
-                  <span>Calmer interface for long sessions</span>
+                  <strong>{t("settings.dark")}</strong>
+                  <span>{t("settings.darkDescription")}</span>
                 </button>
               </div>
+            </div>
+          ) : (
+            <div className="settings-section-stack">
+              <div className="settings-section-header">
+                <h2>{t("settings.languageTitle")}</h2>
+                <p>{t("settings.languageSubtitle")}</p>
+              </div>
+
+              <div className="settings-theme-grid">
+                <button
+                  type="button"
+                  className={`settings-theme-card ${language === "fr" ? "active" : ""}`}
+                  onClick={() => setLanguage("fr")}
+                  aria-pressed={language === "fr"}
+                >
+                  <span
+                    className="settings-theme-preview settings-theme-preview-light"
+                    aria-hidden="true"
+                  />
+                  <strong>{t("settings.languageFrench")}</strong>
+                  <span>{t("settings.languageFrenchDescription")}</span>
+                </button>
+
+                <button
+                  type="button"
+                  className={`settings-theme-card ${language === "ar" ? "active" : ""}`}
+                  onClick={() => setLanguage("ar")}
+                  aria-pressed={language === "ar"}
+                >
+                  <span
+                    className="settings-theme-preview settings-theme-preview-dark"
+                    aria-hidden="true"
+                  />
+                  <strong>{t("settings.languageArabic")}</strong>
+                  <span>{t("settings.languageArabicDescription")}</span>
+                </button>
+              </div>
+
+              <p className="profile-tip">{t("settings.languageNote")}</p>
             </div>
           )}
         </section>

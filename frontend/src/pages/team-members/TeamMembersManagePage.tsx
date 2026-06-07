@@ -1,7 +1,7 @@
 import { ArrowLeft, Mail, MoreVertical, Plus, Shield, Trash2, UserRoundCheck, UserRoundX } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { type EditableUserRole, type UserRole } from '../../lib/api';
-import { getUserRoleLabel } from '../../lib/roles';
+import { useAppLanguage } from '../../lib/language';
 import './TeamMembersManagePage.css';
 
 interface TeamMembersManagePageProps {
@@ -36,10 +36,10 @@ const getUserSortPriority = (role: UserRole): number => {
   return 1;
 };
 
-const formatDate = (value: string): string => {
+const formatDate = (value: string, locale = 'en-US'): string => {
   const parsed = Date.parse(value);
   if (Number.isNaN(parsed)) return '-';
-  return new Date(parsed).toLocaleDateString('en-US');
+  return new Date(parsed).toLocaleDateString(locale);
 };
 
 function TeamMembersManagePage({
@@ -53,6 +53,7 @@ function TeamMembersManagePage({
   onToggleUserActive,
   onDeleteInvitation,
 }: TeamMembersManagePageProps) {
+  const { language, t } = useAppLanguage();
   const sortedUsers = useMemo(
     () =>
       [...users].sort((a, b) => {
@@ -61,7 +62,7 @@ function TeamMembersManagePage({
           return priorityDifference;
         }
 
-        return a.name.localeCompare(b.name, 'fr', { sensitivity: 'base' });
+    return a.name.localeCompare(b.name, locale, { sensitivity: 'base' });
       }),
     [users],
   );
@@ -73,7 +74,17 @@ function TeamMembersManagePage({
   const [pendingInvitationId, setPendingInvitationId] = useState<string | null>(null);
   const [openUserMenuId, setOpenUserMenuId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
-  
+  const locale = language === 'fr' ? 'fr-FR' : language === 'ar' ? 'ar-TN' : 'en-US';
+
+  const getLocalizedUserRoleLabel = (role: UserRole): string => {
+    if (role === 'super_admin') {
+      return t('team.management.roleSuperAdmin');
+    }
+    if (role === 'admin') {
+      return t('team.management.roleAdmin');
+    }
+    return t('team.management.roleMember');
+  };
 
   useEffect(() => {
     const handleDocumentMouseDown = (event: MouseEvent) => {
@@ -100,7 +111,7 @@ function TeamMembersManagePage({
   const handleDeleteUser = async (userId: string) => {
     if (!onDeleteUser || pendingUserId || pendingInvitationId) return;
 
-    const shouldDelete = window.confirm('Delete this user?');
+    const shouldDelete = window.confirm(t('team.management.deleteUser'));
     if (!shouldDelete) return;
 
     setActionError(null);
@@ -148,7 +159,7 @@ function TeamMembersManagePage({
   const handleDeleteInvitation = async (invitationId: string) => {
     if (!onDeleteInvitation || pendingUserId || pendingInvitationId) return;
 
-    const shouldDelete = window.confirm('Delete this invitation?');
+    const shouldDelete = window.confirm(t('team.management.deleteInvitation'));
     if (!shouldDelete) return;
 
     setActionError(null);
@@ -167,18 +178,18 @@ function TeamMembersManagePage({
       <article className="team-members-manage-shell">
         <header className="team-members-manage-top">
           <div className="team-members-manage-title-wrap">
-            <h1>Users & invitations</h1>
-            <p>Manage accounts and track pending invitations.</p>
+            <h1>{t('team.management.title')}</h1>
+            <p>{t('team.management.subtitle')}</p>
           </div>
 
           <div className="team-members-manage-top-actions">
             <button type="button" className="team-members-manage-ghost" onClick={() => onBack?.()}>
               <ArrowLeft size={14} />
-              Back
+              {t('team.management.back')}
             </button>
             <button type="button" className="team-members-manage-primary" onClick={() => onInviteTeam?.()}>
               <Plus size={14} />
-              Invite Team
+              {t('team.management.inviteTeam')}
             </button>
           </div>
         </header>
@@ -188,20 +199,20 @@ function TeamMembersManagePage({
 
           <article className="team-members-manage-card">
             <header className="team-members-manage-card-header">
-              <h2>Users</h2>
+          <h2>{t('team.management.users')}</h2>
               <span>{sortedUsers.length}</span>
             </header>
 
             {sortedUsers.length === 0 ? (
-              <p className="team-members-manage-empty">No user available.</p>
+              <p className="team-members-manage-empty">{t('team.management.noUserAvailable')}</p>
             ) : (
               <div className="team-members-manage-table">
                 <div className="team-members-manage-row head">
-                  <span>Name</span>
-                  <span>Email</span>
-                  <span>Role</span>
-                  <span>Status</span>
-                  <span>Actions</span>
+                  <span>{t('common.name')}</span>
+                  <span>{t('common.email')}</span>
+                  <span>{t('common.role')}</span>
+                  <span>{t('team.management.status')}</span>
+                  <span>{t('team.management.actions')}</span>
                 </div>
                 {sortedUsers.map((user) => {
                   const isProtectedSuperAdmin = user.role === 'super_admin';
@@ -209,15 +220,15 @@ function TeamMembersManagePage({
                   <div className="team-members-manage-row" key={user.id}>
                     <span>{user.name}</span>
                     <span>{user.email}</span>
-                    <span>{getUserRoleLabel(user.role)}</span>
+                    <span>{getLocalizedUserRoleLabel(user.role)}</span>
                     <span className={user.isActive ? 'status-active' : 'status-inactive'}>
-                      {user.isActive ? 'Active' : 'Inactive'}
+                      {user.isActive ? t('team.management.active') : t('team.management.inactive')}
                     </span>
                     <span className="team-members-manage-actions">
                       {isProtectedSuperAdmin ? (
                         <span className="team-members-protected-badge">
                           <Shield size={12} />
-                          Protected
+                          {t('team.management.protected')}
                         </span>
                       ) : (
                         <div className="team-members-user-menu-wrap">
@@ -229,7 +240,7 @@ function TeamMembersManagePage({
                               setOpenUserMenuId((current) => (current === user.id ? null : user.id));
                             }}
                             disabled={pendingUserId !== null || pendingInvitationId !== null}
-                            aria-label="User actions"
+                            aria-label={t('team.management.userActions')}
                             aria-haspopup="menu"
                             aria-expanded={openUserMenuId === user.id}
                           >
@@ -248,12 +259,12 @@ function TeamMembersManagePage({
                                 disabled={user.id === currentUserId || pendingUserId === user.id}
                                 title={
                                   user.id === currentUserId
-                                    ? 'You cannot change your own role'
-                                    : 'Change role'
+                                    ? t('team.management.cannotChangeOwnRole')
+                                    : t('team.management.changeRole')
                                 }
                               >
                                 <Shield size={14} />
-                                {user.role === 'admin' ? 'Switch to Member' : 'Switch to Admin'}
+                                {user.role === 'admin' ? t('team.management.switchToMember') : t('team.management.switchToAdmin')}
                               </button>
 
                               <button
@@ -264,12 +275,12 @@ function TeamMembersManagePage({
                                 disabled={pendingUserId === user.id || (user.id === currentUserId && user.isActive)}
                                 title={
                                   user.id === currentUserId && user.isActive
-                                    ? 'You cannot deactivate yourself'
-                                    : 'Change status'
+                                    ? t('team.management.cannotDeactivateSelf')
+                                    : t('team.management.changeStatus')
                                 }
                               >
                                 {user.isActive ? <UserRoundX size={14} /> : <UserRoundCheck size={14} />}
-                                {user.isActive ? 'Disable' : 'Enable'}
+                                {user.isActive ? t('team.management.disable') : t('team.management.enable')}
                               </button>
 
                               <button
@@ -278,10 +289,10 @@ function TeamMembersManagePage({
                                 className="team-members-user-menu-item danger"
                                 onClick={() => void handleDeleteUser(user.id)}
                                 disabled={user.id === currentUserId || pendingUserId === user.id}
-                                title={user.id === currentUserId ? 'You cannot delete your own account' : 'Delete user'}
+                                title={user.id === currentUserId ? t('team.management.cannotDeleteOwnAccount') : t('team.management.deleteUser')}
                               >
                                 <Trash2 size={14} />
-                                {pendingUserId === user.id ? 'Deleting...' : 'Delete user'}
+                                {pendingUserId === user.id ? t('common.saving') : t('team.management.deleteUser')}
                               </button>
                             </div>
                           ) : null}
@@ -297,20 +308,20 @@ function TeamMembersManagePage({
 
           <article className="team-members-manage-card">
             <header className="team-members-manage-card-header">
-              <h2>Invitations</h2>
+              <h2>{t('team.management.invitations')}</h2>
               <span>{sortedInvitations.length}</span>
             </header>
 
             {sortedInvitations.length === 0 ? (
-              <p className="team-members-manage-empty">No invitations.</p>
+              <p className="team-members-manage-empty">{t('team.management.noInvitations')}</p>
             ) : (
               <div className="team-members-manage-table">
                 <div className="team-members-manage-row head invitations">
-                  <span>Email</span>
-                  <span>Status</span>
-                  <span>Created</span>
-                  <span>Expires</span>
-                  <span>Actions</span>
+                  <span>{t('common.email')}</span>
+                  <span>{t('team.management.status')}</span>
+                  <span>{t('team.management.created')}</span>
+                  <span>{t('team.management.expires')}</span>
+                  <span>{t('team.management.actions')}</span>
                 </div>
                 {sortedInvitations.map((invitation) => {
                   const expiresAtTs = Date.parse(invitation.expiresAt);
@@ -333,23 +344,23 @@ function TeamMembersManagePage({
                       </span>
                       <span className={`invitation-status ${effectiveStatus}`}>
                         {effectiveStatus === 'pending'
-                          ? 'Pending'
+                          ? t('team.management.pending')
                           : effectiveStatus === 'accepted'
-                            ? 'Accepted'
-                            : 'Expired'}
+                            ? t('team.management.accepted')
+                            : t('team.management.expired')}
                       </span>
-                      <span>{formatDate(invitation.createdAt)}</span>
-                      <span>{formatDate(invitation.expiresAt)}</span>
+                      <span>{formatDate(invitation.createdAt, locale)}</span>
+                      <span>{formatDate(invitation.expiresAt, locale)}</span>
                       <span className="team-members-manage-actions">
                         <button
                           type="button"
                           className="team-members-delete-button"
                           onClick={() => void handleDeleteInvitation(invitation.id)}
                           disabled={isInvitationActionDisabled}
-                          title={effectiveStatus === 'expired' ? 'Invitation expired' : 'Delete invitation'}
+                          title={effectiveStatus === 'expired' ? t('team.management.invitationExpired') : t('team.management.deleteInvitation')}
                         >
                           <Trash2 size={13} />
-                          {pendingInvitationId === invitation.id ? 'Deleting...' : 'Delete'}
+                          {pendingInvitationId === invitation.id ? t('team.management.deleting') : t('team.management.deleteInvitation')}
                         </button>
                       </span>
                     </div>

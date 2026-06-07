@@ -8,6 +8,7 @@ import {
   Monitor,
 } from "lucide-react";
 import { useState } from "react";
+import { useAppLanguage } from "../../lib/language";
 import "./TeamMembersPage.css";
 
 interface AccountRequest {
@@ -51,6 +52,7 @@ function AccountRequestsPage({
   onDeleteApprovedRequests,
   onDeleteRejectedRequests,
 }: AccountRequestsPageProps) {
+  const { language, t } = useAppLanguage();
   const pendingRequests = accountRequests.filter((r) => r.status === "pending");
   const approvedRequests = accountRequests.filter(
     (r) => r.status === "approved",
@@ -67,7 +69,8 @@ function AccountRequestsPage({
   const [selectedMonitors, setSelectedMonitors] = useState<string[]>([]);
 
   const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString("en-US");
+    const locale = language === "fr" ? "fr-FR" : language === "ar" ? "ar-TN" : "en-US";
+    return new Date(dateStr).toLocaleDateString(locale);
   };
 
   const handleOpenApproveModal = (requestId: string) => {
@@ -100,10 +103,10 @@ function AccountRequestsPage({
   };
 
   const getMonitorStatusLabel = (status: MonitorOption["status"]): string => {
-    if (status === "down") return "Down";
-    if (status === "paused") return "Paused";
-    if (status === "pending") return "Pending";
-    return "Up";
+    if (status === "down") return t("dashboard.monitor.status.down");
+    if (status === "paused") return t("dashboard.monitor.status.paused");
+    if (status === "pending") return t("dashboard.monitor.status.pending");
+    return t("dashboard.monitor.status.up");
   };
 
   return (
@@ -111,15 +114,15 @@ function AccountRequestsPage({
       {/* Header */}
       <div className="management-page-header">
         <div className="management-page-title">
-          <h1>Account creation requests</h1>
+          <h1>{t("team.requests.title")}</h1>
           <p className="management-page-subtitle">
-            Manage system access requests.
+            {t("team.requests.subtitle")}
           </p>
         </div>
         <div className="management-page-actions">
           <button type="button" className="btn-outline" onClick={onBack}>
             <ArrowLeft size={16} />
-            Back
+            {t("common.back")}
           </button>
         </div>
       </div>
@@ -127,16 +130,16 @@ function AccountRequestsPage({
       {/* Pending Requests Section */}
       <section className="management-card">
         <div className="management-card-header">
-          <h2>Pending requests</h2>
+          <h2>{t("team.requests.pending")}</h2>
           <span className="count-badge has-requests">
             {pendingRequests.length}
           </span>
         </div>
         <div className="requests-list-compact">
           {isLoadingRequests ? (
-            <p className="loading-message">Loading...</p>
+            <p className="loading-message">{t("team.requests.loading")}</p>
           ) : pendingRequests.length === 0 ? (
-            <p className="empty-row">No pending requests</p>
+            <p className="empty-row">{t("team.requests.noPending")}</p>
           ) : (
             pendingRequests.map((request) => (
               <div key={request.id} className="request-item">
@@ -155,7 +158,7 @@ function AccountRequestsPage({
                     onClick={() => handleOpenApproveModal(request.id)}
                   >
                     <UserCheck size={14} />
-                    Approve
+                    {t("team.requests.approve")}
                   </button>
                   <button
                     type="button"
@@ -163,7 +166,7 @@ function AccountRequestsPage({
                     onClick={() => onRejectRequest(request.id)}
                   >
                     <UserX size={14} />
-                    Reject
+                    {t("team.requests.reject")}
                   </button>
                 </div>
               </div>
@@ -176,7 +179,7 @@ function AccountRequestsPage({
       {approvedRequests.length > 0 && (
         <section className="management-card">
           <div className="management-card-header">
-            <h2>Approved requests</h2>
+            <h2>{t("team.requests.approved")}</h2>
             <div className="management-card-actions">
               <span className="count-badge">{approvedRequests.length}</span>
               {onDeleteApprovedRequests && (
@@ -185,10 +188,10 @@ function AccountRequestsPage({
                   className="btn-delete-sm"
                   onClick={onDeleteApprovedRequests}
                   disabled={isLoadingRequests}
-                  title="Delete all approved requests"
+                  title={t("team.requests.deleteAllApprovedTitle")}
                 >
                   <Trash2 size={14} />
-                  Delete all
+                  {t("team.requests.deleteAllApproved")}
                 </button>
               )}
             </div>
@@ -199,9 +202,9 @@ function AccountRequestsPage({
                 <div className="request-item-info">
                   <strong>{request.name}</strong>
                   <span>{request.email}</span>
-                  <small>Approved on {formatDate(request.createdAt)}</small>
+                  <small>{t("team.requests.approvedOn")} {formatDate(request.createdAt)}</small>
                 </div>
-                <span className="status-badge status-accepted">Approved</span>
+                <span className="status-badge status-accepted">{t("team.requests.approved")}</span>
               </div>
             ))}
           </div>
@@ -212,7 +215,7 @@ function AccountRequestsPage({
       {rejectedRequests.length > 0 && (
         <section className="management-card">
           <div className="management-card-header">
-            <h2>Rejected requests</h2>
+            <h2>{t("team.requests.rejected")}</h2>
             <div className="management-card-actions">
               <span className="count-badge">{rejectedRequests.length}</span>
               {onDeleteRejectedRequests && (
@@ -221,10 +224,10 @@ function AccountRequestsPage({
                   className="btn-delete-sm"
                   onClick={onDeleteRejectedRequests}
                   disabled={isLoadingRequests}
-                  title="Delete all rejected requests"
+                  title={t("team.requests.deleteAllRejectedTitle")}
                 >
                   <Trash2 size={14} />
-                  Delete all
+                  {t("team.requests.deleteAllRejected")}
                 </button>
               )}
             </div>
@@ -235,9 +238,9 @@ function AccountRequestsPage({
                 <div className="request-item-info">
                   <strong>{request.name}</strong>
                   <span>{request.email}</span>
-                  <small>Rejected on {formatDate(request.createdAt)}</small>
+                  <small>{t("team.requests.rejectedOn")} {formatDate(request.createdAt)}</small>
                 </div>
-                <span className="status-badge status-expired">Rejected</span>
+                <span className="status-badge status-expired">{t("team.requests.rejected")}</span>
               </div>
             ))}
           </div>
@@ -249,7 +252,7 @@ function AccountRequestsPage({
         <div className="modal-overlay">
           <div className="modal-content">
             <div className="modal-header">
-              <h2>Approve request</h2>
+              <h2>{t("team.requests.approveRequestTitle")}</h2>
               <button
                 type="button"
                 className="modal-close"
@@ -260,7 +263,7 @@ function AccountRequestsPage({
             </div>
             <div className="modal-body">
               <div className="form-section">
-                <label className="form-label">Role</label>
+                <label className="form-label">{t("team.requests.roleLabel")}</label>
                 <div className="role-options">
                   <button
                     type="button"
@@ -268,7 +271,7 @@ function AccountRequestsPage({
                     onClick={() => setSelectedRole("user")}
                   >
                     <Monitor size={16} />
-                    <span>Member</span>
+                    <span>{t("team.requests.member")}</span>
                   </button>
                   <button
                     type="button"
@@ -276,16 +279,16 @@ function AccountRequestsPage({
                     onClick={() => setSelectedRole("admin")}
                   >
                     <Shield size={16} />
-                    <span>Admin</span>
+                    <span>{t("team.requests.roleAdmin")}</span>
                   </button>
                 </div>
               </div>
 
               <div className="form-section">
-                <label className="form-label">Accessible monitors</label>
+                <label className="form-label">{t("team.requests.accessibleMonitors")}</label>
                 <div className="monitors-list">
                   {monitors.length === 0 ? (
-                    <p className="empty-message">No monitor available</p>
+                    <p className="empty-message">{t("team.requests.noMonitorAvailable")}</p>
                   ) : (
                     monitors.map((monitor) => (
                       <div
@@ -347,7 +350,7 @@ function AccountRequestsPage({
                 className="btn-outline"
                 onClick={handleCloseApproveModal}
               >
-                Cancel
+                {t("common.cancel")}
               </button>
               <button
                 type="button"
@@ -355,7 +358,7 @@ function AccountRequestsPage({
                 onClick={handleConfirmApprove}
                 disabled={isLoadingRequests}
               >
-                Confirm approval
+                {t("team.requests.confirmApproval")}
               </button>
             </div>
           </div>

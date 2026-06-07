@@ -100,6 +100,8 @@ import {
   type HistoryBarState as SharedHistoryBarState,
 } from "./lib/monitorHistory";
 import { isAdminRole, isUserRole, canAssignRole, canManageUser } from "./lib/roles";
+import { useAppLanguage, type TranslationKey } from "./lib/language";
+import LanguageSwitcher from "./components/LanguageSwitcher";
 import {
   AlertTriangle,
   ArrowUpDown,
@@ -153,7 +155,7 @@ interface MonitorRow {
   sslExpiryAt?: string;
   sslExpiryCheckedAt?: string;
   sslExpiryError?: string;
-  tags: string[];
+  tags: MonitorTag[];
   uptimeLabel: string;
   interval: string;
   uptime: string;
@@ -261,6 +263,8 @@ type MonitorDraft = {
   upStatusCodeGroups?: Array<"2xx" | "3xx">;
 };
 type MonitorFilterStatus = "none" | "up" | "down" | "paused";
+type MonitorTag = "website" | "api" | "core" | "interface";
+type MonitorTagFilter = "all" | MonitorTag;
 type MonitorSortOption =
   | "down-first"
   | "up-first"
@@ -287,14 +291,6 @@ type MonitorBatchSubmission = {
   integration: CreateIntegrationInput | null;
 };
 
-const monitorSortOptionLabels: Record<MonitorSortOption, string> = {
-  "down-first": "Down first",
-  "up-first": "Up first",
-  "paused-first": "Paused first",
-  "a-z": "A -> Z",
-  "newest-first": "Newest first",
-};
-
 const monitorSortOptions: MonitorSortOption[] = [
   "down-first",
   "up-first",
@@ -302,60 +298,19 @@ const monitorSortOptions: MonitorSortOption[] = [
   "a-z",
   "newest-first",
 ];
-const monitorTagOptions = ["All tags", "Website", "API", "Core", "Interface"];
+const monitorTagOptions: MonitorTagFilter[] = [
+  "all",
+  "website",
+  "api",
+  "core",
+  "interface",
+];
 const bulkActionOptions: BulkActionOption[] = [
   "start",
   "pause",
   "resume",
   "delete",
 ];
-const bulkActionOptionLabels: Record<BulkActionOption, string> = {
-  start: "Start",
-  pause: "Pause",
-  resume: "Resume",
-  delete: "Delete",
-};
-
-const monitorActionConfirmationContent: Record<
-  MonitorActionConfirmation,
-  {
-    title: string;
-    description: string;
-    confirmLabel: string;
-    accentClass: string;
-    icon: JSX.Element;
-  }
-> = {
-  start: {
-    title: "Start monitors",
-    description: "This will launch checks for the selected monitors.",
-    confirmLabel: "Start now",
-    accentClass: "start",
-    icon: <Play size={18} />,
-  },
-  pause: {
-    title: "Pause monitors",
-    description: "This will pause checks for the selected monitors.",
-    confirmLabel: "Pause now",
-    accentClass: "pause",
-    icon: <Pause size={18} />,
-  },
-  resume: {
-    title: "Resume monitors",
-    description: "This will resume checks for the selected monitors.",
-    confirmLabel: "Resume now",
-    accentClass: "resume",
-    icon: <RotateCcw size={18} />,
-  },
-  delete: {
-    title: "Delete monitors",
-    description:
-      "This action is permanent and will remove the selected monitors.",
-    confirmLabel: "Delete now",
-    accentClass: "delete",
-    icon: <Trash2 size={18} />,
-  },
-};
 
 const menuItems: MenuItem[] = [
   { label: "Monitoring", customIcon: "monitoringRadar" },
@@ -374,6 +329,16 @@ const routeByMenuLabel: Record<MenuLabel, string> = {
   "Team members": "/team-members",
   "Integrations & API": "/integrations-api",
   Chatbot: "/chatbot",
+};
+
+const menuLabelTranslationKeys: Record<MenuLabel, TranslationKey> = {
+  Monitoring: "menu.monitoring",
+  Incidents: "menu.incidents",
+  "Status pages": "menu.statusPages",
+  Maintenance: "menu.maintenance",
+  "Team members": "menu.teamMembers",
+  "Integrations & API": "menu.integrationsApi",
+  Chatbot: "menu.chatbot",
 };
 
 const USER_CACHE_KEY = "uptimewarden_cached_user";
@@ -523,19 +488,23 @@ const formatHoursAndMinutes = (minutes: number): string => {
   return `${hours}h, ${mins}m`;
 };
 
-const formatTrashTimeRemaining = (expiresAt: number, now: number): string => {
+const formatTrashTimeRemaining = (
+  expiresAt: number,
+  now: number,
+  t: (key: TranslationKey, values?: Record<string, string | number | boolean | null | undefined>) => string,
+): string => {
   const remainingMs = Math.max(0, expiresAt - now);
   const remainingMinutes = Math.ceil(remainingMs / 60000);
 
   if (remainingMinutes <= 0) {
-    return "Expired";
+    return t("dashboard.trash.expired");
   }
 
   if (remainingMinutes === 1) {
-    return "1 min left";
+    return t("dashboard.trash.oneMinuteLeft");
   }
 
-  return `${remainingMinutes} min left`;
+  return t("dashboard.trash.minutesLeft", { minutes: remainingMinutes });
 };
 
 const buildMonitorRestorePayload = (
@@ -569,14 +538,6 @@ const mapBackendMonitorToRow = (
   logsNewestFirst: BackendMonitorLog[] = [],
 ): MonitorRow => {
   const state: MonitorRow["state"] = monitor.status;
-  const statusLabel =
-    monitor.status === "up"
-      ? "Up"
-      : monitor.status === "down"
-        ? "Down"
-        : monitor.status === "paused"
-          ? "Paused"
-          : "Pending";
   const uptimeValue = Number.isFinite(monitor.uptime) ? monitor.uptime : 0;
 
   return {
@@ -598,8 +559,8 @@ const mapBackendMonitorToRow = (
     sslExpiryCheckedAt: monitor.sslExpiryCheckedAt,
     sslExpiryError: monitor.sslExpiryError,
     tags:
-      monitor.type === "ws" || monitor.type === "wss" ? ["API"] : ["Website"],
-    uptimeLabel: statusLabel,
+      monitor.type === "ws" || monitor.type === "wss" ? ["api"] : ["website"],
+    uptimeLabel: monitor.status,
     interval: formatIntervalLabel(monitor.interval),
     uptime: `${uptimeValue.toFixed(3)}%`,
     state,
@@ -614,11 +575,95 @@ const mapBackendMonitorToRow = (
 };
 
 function App() {
+  const { t } = useAppLanguage();
+  const monitorSortOptionLabels = useMemo<Record<MonitorSortOption, string>>(
+    () => ({
+      "down-first": t("dashboard.sort.downFirst"),
+      "up-first": t("dashboard.sort.upFirst"),
+      "paused-first": t("dashboard.sort.pausedFirst"),
+      "a-z": t("dashboard.sort.az"),
+      "newest-first": t("dashboard.sort.newestFirst"),
+    }),
+    [t],
+  );
+  const monitorTagLabels = useMemo<Record<MonitorTagFilter, string>>(
+    () => ({
+      all: t("dashboard.tags.all"),
+      website: t("dashboard.tags.website"),
+      api: t("dashboard.tags.api"),
+      core: t("dashboard.tags.core"),
+      interface: t("dashboard.tags.interface"),
+    }),
+    [t],
+  );
+  const bulkActionOptionLabels = useMemo<Record<BulkActionOption, string>>(
+    () => ({
+      start: t("dashboard.actions.start"),
+      pause: t("dashboard.actions.pause"),
+      resume: t("dashboard.actions.resume"),
+      delete: t("dashboard.actions.delete"),
+    }),
+    [t],
+  );
+  const monitorStatusLabels = useMemo(
+    () => ({
+      up: t("dashboard.monitor.status.up"),
+      down: t("dashboard.monitor.status.down"),
+      paused: t("dashboard.monitor.status.paused"),
+      pending: t("dashboard.monitor.status.pending"),
+    }),
+    [t],
+  );
+  const monitorActionConfirmationContent = useMemo<
+    Record<
+      MonitorActionConfirmation,
+      {
+        title: string;
+        description: string;
+        confirmLabel: string;
+        accentClass: string;
+        icon: JSX.Element;
+      }
+    >
+  >(
+    () => ({
+      start: {
+        title: t("dashboard.confirm.start.title"),
+        description: t("dashboard.confirm.start.description"),
+        confirmLabel: t("dashboard.confirm.start.confirm"),
+        accentClass: "start",
+        icon: <Play size={18} />,
+      },
+      pause: {
+        title: t("dashboard.confirm.pause.title"),
+        description: t("dashboard.confirm.pause.description"),
+        confirmLabel: t("dashboard.confirm.pause.confirm"),
+        accentClass: "pause",
+        icon: <Pause size={18} />,
+      },
+      resume: {
+        title: t("dashboard.confirm.resume.title"),
+        description: t("dashboard.confirm.resume.description"),
+        confirmLabel: t("dashboard.confirm.resume.confirm"),
+        accentClass: "resume",
+        icon: <RotateCcw size={18} />,
+      },
+      delete: {
+        title: t("dashboard.confirm.delete.title"),
+        description: t("dashboard.confirm.delete.description"),
+        confirmLabel: t("dashboard.confirm.delete.confirm"),
+        accentClass: "delete",
+        icon: <Trash2 size={18} />,
+      },
+    }),
+    [t],
+  );
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [monitorSortOption, setMonitorSortOption] =
     useState<MonitorSortOption>("down-first");
   const [isMonitorSortMenuOpen, setIsMonitorSortMenuOpen] = useState(false);
-  const [selectedMonitorTag, setSelectedMonitorTag] = useState("All tags");
+  const [selectedMonitorTag, setSelectedMonitorTag] =
+    useState<MonitorTagFilter>("all");
   const [isMonitorTagMenuOpen, setIsMonitorTagMenuOpen] = useState(false);
   const [isBulkActionsMenuOpen, setIsBulkActionsMenuOpen] = useState(false);
   const [selectedMonitorIds, setSelectedMonitorIds] = useState<string[]>([]);
@@ -842,16 +887,17 @@ function App() {
               : monitor.state === appliedMonitorFilterStatus,
           );
 
-    const tagFilteredRows = appliedMonitorTagQuery.trim()
+    const normalizedTagQuery = appliedMonitorTagQuery.trim().toLowerCase();
+    const tagFilteredRows = normalizedTagQuery
       ? statusFilteredRows.filter((monitor) =>
-          monitor.name
-            .toLowerCase()
-            .includes(appliedMonitorTagQuery.trim().toLowerCase()),
+          monitor.tags.some((tag) =>
+            monitorTagLabels[tag].toLowerCase().includes(normalizedTagQuery),
+          ),
         )
       : statusFilteredRows;
 
     const tagMenuFilteredRows =
-      selectedMonitorTag === "All tags"
+      selectedMonitorTag === "all"
         ? tagFilteredRows
         : tagFilteredRows.filter((monitor) =>
             monitor.tags.includes(selectedMonitorTag),
@@ -926,6 +972,7 @@ function App() {
     appliedMonitorFilterStatus,
     appliedMonitorTagQuery,
     monitorSearchQuery,
+    monitorTagLabels,
   ]);
 
   const hasPendingMonitorFilterChanges =
@@ -935,7 +982,7 @@ function App() {
   const hasActiveMonitorFilters =
     appliedMonitorFilterStatus !== "none" ||
     appliedMonitorTagQuery.trim().length > 0 ||
-    selectedMonitorTag !== "All tags";
+    selectedMonitorTag !== "all";
   const selectedMonitorsCount = selectedMonitorIds.length;
   const hasSelectedMonitors = selectedMonitorsCount > 0;
   const hasSelectedPausedMonitors = useMemo(() => {
@@ -976,9 +1023,11 @@ function App() {
   );
   const hasSelectedMaintenancePausedMonitors =
     selectedMaintenancePausedMonitorIds.length > 0;
-  const maintenanceActionDisabledTitle = "Unavailable during maintenance";
+  const maintenanceActionDisabledTitle = t(
+    "dashboard.maintenance.unavailable",
+  );
   const maintenanceActionDisabledReason = hasSelectedMaintenancePausedMonitors
-    ? "Pause and Resume stay locked while one or more selected monitors are covered by an active maintenance window."
+    ? t("dashboard.maintenance.lockedReason")
     : null;
   const pauseActionDisabled =
     !hasSelectedMonitors ||
@@ -1073,7 +1122,7 @@ function App() {
 
   const isUserLoading = Boolean(authToken) && !isAuthBootstrapComplete;
   const profileName = isUserLoading
-    ? "Loading..."
+    ? t("common.loading")
     : currentUser?.name || currentUser?.email || "";
   const profileEmail =
     !isUserLoading && currentUser?.email && currentUser?.name
@@ -1387,12 +1436,14 @@ function App() {
           clearSessionAndRedirectToLogin();
           return;
         }
-        setMonitorLoadError(formatAppError(error, "Unable to load monitors."));
+        setMonitorLoadError(
+          formatAppError(error, t("dashboard.feedback.unableToLoadMonitors")),
+        );
       } finally {
         setIsMonitorsLoading(false);
       }
     },
-    [clearSessionAndRedirectToLogin, refreshMaintenancePausedMonitors],
+    [clearSessionAndRedirectToLogin, refreshMaintenancePausedMonitors, t],
   );
 
   const refreshTeamSummary = useCallback(
@@ -2756,11 +2807,13 @@ function App() {
     async (option: BulkActionOption, monitorIds: string[]) => {
       if (!bulkActionOptions.includes(option)) return;
       if (!authToken) {
-        setMonitorActionFeedback("Authentication required.");
+        setMonitorActionFeedback(t("dashboard.feedback.authRequired"));
         return;
       }
       if (monitorIds.length === 0) {
-        setMonitorActionFeedback("Selectionnez au moins un monitor.");
+        setMonitorActionFeedback(
+          t("dashboard.feedback.selectAtLeastOneMonitor"),
+        );
         return;
       }
 
@@ -2838,18 +2891,35 @@ function App() {
       setIsBulkActionRunning(false);
 
       if (failedCount === 0) {
-        const optionLabel = bulkActionOptionLabels[option].toLowerCase();
-        setMonitorActionFeedback(
-          `${successfulCount} monitor(s) ${optionLabel} successfully.`,
-        );
+        const successMessage =
+          option === "start"
+            ? t("dashboard.feedback.bulkStartSuccess", {
+                count: successfulCount,
+              })
+            : option === "pause"
+              ? t("dashboard.feedback.bulkPauseSuccess", {
+                  count: successfulCount,
+                })
+              : option === "resume"
+                ? t("dashboard.feedback.bulkResumeSuccess", {
+                    count: successfulCount,
+                  })
+                : t("dashboard.feedback.bulkDeleteSuccess", {
+                    count: successfulCount,
+                  });
+        setMonitorActionFeedback(successMessage);
         return;
       }
 
       setMonitorActionFeedback(
-        `${successfulCount}/${monitorIds.length} action(s) reussie(s), ${failedCount} echec(s).`,
+        t("dashboard.feedback.bulkPartial", {
+          success: successfulCount,
+          total: monitorIds.length,
+          failed: failedCount,
+        }),
       );
     },
-    [authToken, clearSessionAndRedirectToLogin, monitorSnapshotById, refreshMonitors],
+    [authToken, clearSessionAndRedirectToLogin, refreshMonitors, t, monitorSnapshotById],
   );
 
   const handleTestNotification = useCallback(
@@ -2859,7 +2929,7 @@ function App() {
       }
 
       if (!authToken) {
-        setMonitorActionFeedback("Authentication required.");
+        setMonitorActionFeedback(t("dashboard.feedback.authRequired"));
         return;
       }
 
@@ -2871,8 +2941,10 @@ function App() {
         const integrationCount = response.integrations_found;
         setMonitorActionFeedback(
           integrationCount > 0
-            ? `Test notification sent to ${integrationCount} integration(s).`
-            : "Test notification sent, but no active DOWN integrations were found.",
+            ? t("dashboard.feedback.testNotificationSent", {
+                count: integrationCount,
+              })
+            : t("dashboard.feedback.testNotificationNoActive"),
         );
       } catch (error) {
         if (isApiError(error) && error.status === 401) {
@@ -2881,13 +2953,16 @@ function App() {
         }
 
         setMonitorActionFeedback(
-          formatAppError(error, "Unable to send the test notification."),
+          formatAppError(
+            error,
+            t("dashboard.feedback.unableToSendTestNotification"),
+          ),
         );
       } finally {
         setIsBulkActionRunning(false);
       }
     },
-    [authToken, clearSessionAndRedirectToLogin, isBulkActionRunning],
+    [authToken, clearSessionAndRedirectToLogin, isBulkActionRunning, t],
   );
 
   const handleBulkActionOptionSelect = useCallback(
@@ -2963,13 +3038,15 @@ function App() {
       }
 
       if (!authToken) {
-        setMonitorActionFeedback("Authentication required.");
+        setMonitorActionFeedback(t("dashboard.feedback.authRequired"));
         return;
       }
 
       const deletedMonitor = deletedMonitorTrashById.get(monitorId);
       if (!deletedMonitor) {
-        setMonitorActionFeedback("This monitor is no longer in the trash.");
+        setMonitorActionFeedback(
+          t("dashboard.feedback.monitorNoLongerInTrash"),
+        );
         return;
       }
 
@@ -2978,7 +3055,7 @@ function App() {
           removeDeletedMonitorTrashEntry(currentEntries, monitorId, Date.now()),
         );
         setMonitorActionFeedback(
-          "This deleted monitor has expired and can no longer be restored.",
+          t("dashboard.feedback.deletedMonitorExpired"),
         );
         return;
       }
@@ -2996,7 +3073,9 @@ function App() {
         );
         await refreshMonitors(authToken);
         setMonitorActionFeedback(
-          `${deletedMonitor.monitor.name} restored from trash.`,
+          t("dashboard.feedback.restoredFromTrash", {
+            name: deletedMonitor.monitor.name,
+          }),
         );
       } catch (error) {
         if (isApiError(error) && error.status === 401) {
@@ -3005,7 +3084,7 @@ function App() {
         }
 
         setMonitorActionFeedback(
-          formatAppError(error, "Unable to restore monitor."),
+          formatAppError(error, t("dashboard.feedback.unableToRestoreMonitor")),
         );
       } finally {
         setRestoringMonitorId(null);
@@ -3017,6 +3096,7 @@ function App() {
       deletedMonitorTrashById,
       isBulkActionRunning,
       refreshMonitors,
+      t,
       restoringMonitorId,
     ],
   );
@@ -3248,10 +3328,11 @@ function App() {
 
   return (
     <div className={appShellClasses}>
+      <LanguageSwitcher />
       <button
         className="mobile-toggle"
         onClick={() => setMobileMenuOpen(true)}
-        aria-label="Open menu"
+        aria-label={t("common.openMenu")}
       >
         <Menu size={18} />
       </button>
@@ -3264,7 +3345,9 @@ function App() {
             type="button"
             onClick={handleSidebarToggleClick}
             aria-label={
-              sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"
+              sidebarCollapsed
+                ? t("common.expandSidebar")
+                : t("common.collapseSidebar")
             }
             disabled={sidebarTogglePending}
           >
@@ -3275,12 +3358,12 @@ function App() {
             )}
           </button>
           <div className="brand-copy">
-            <h2>Monitoring</h2>
+            <h2>{t("menu.monitoring")}</h2>
           </div>
           <button
             className="mobile-close"
             onClick={() => setMobileMenuOpen(false)}
-            aria-label="Close menu"
+            aria-label={t("common.closeMenu")}
           >
             <X size={16} />
           </button>
@@ -3326,7 +3409,9 @@ function App() {
                     item.icon && <item.icon size={15} />
                   )}
                 </span>
-                <span className="menu-text">{item.label}</span>
+                <span className="menu-text">
+                  {t(menuLabelTranslationKeys[item.label])}
+                </span>
               </button>
             );
           })}
@@ -3341,7 +3426,7 @@ function App() {
             }}
           >
             {isUserLoading ? (
-              "…"
+              t("common.loadingDots")
             ) : profileAvatarUrl ? (
               <img src={`${profileAvatarUrl}?t=${Date.now()}`} alt="" />
             ) : (
@@ -3362,7 +3447,7 @@ function App() {
           </div>
           <button
             className="logout-button"
-            aria-label="Open profile page"
+            aria-label={t("common.profile")}
             onClick={() => {
               navigateTo("/profile");
               setMobileMenuOpen(false);
@@ -3396,12 +3481,12 @@ function App() {
         >
           <div className="modal-container modal-large">
             <div className="modal-header">
-              <h2>Profile</h2>
+              <h2>{t("profile.profileModalTitle")}</h2>
               <button
                 type="button"
                 className="modal-close-btn"
                 onClick={() => setIsProfileModalOpen(false)}
-                aria-label="Close"
+                aria-label={t("common.close")}
               >
                 <X size={20} />
               </button>
@@ -3432,13 +3517,13 @@ function App() {
             <div className="modal-header users-manage-header">
               <h2>
                 <Users size={22} />
-                User management
+                {t("users.managementTitle")}
               </h2>
               <button
                 type="button"
                 className="modal-close-btn"
                 onClick={() => setIsUsersManageModalOpen(false)}
-                aria-label="Close"
+                aria-label={t("common.close")}
               >
                 <X size={20} />
               </button>
@@ -3449,7 +3534,7 @@ function App() {
                 <div className="users-manage-block requests-block">
                   <div className="users-manage-block-header">
                     <Mail size={18} />
-                    <h3>Account requests</h3>
+                    <h3>{t("users.accountRequests")}</h3>
                     <span className="users-manage-badge">
                       {
                         accountRequests.filter((r) => r.status === "pending")
@@ -3459,10 +3544,10 @@ function App() {
                   </div>
                   <div className="users-manage-block-content">
                     {isLoadingAccountRequests ? (
-                      <p className="users-manage-loading">Loading...</p>
+                      <p className="users-manage-loading">{t("users.loading")}</p>
                     ) : accountRequests.filter((r) => r.status === "pending")
                         .length === 0 ? (
-                      <p className="users-manage-empty">No pending requests</p>
+                      <p className="users-manage-empty">{t("users.noPendingRequests")}</p>
                     ) : (
                       <ul className="users-manage-list">
                         {accountRequests
@@ -3485,7 +3570,7 @@ function App() {
                                 <button
                                   type="button"
                                   className="request-btn approve"
-                                  title="Approve"
+                                  title={t("users.approve")}
                                   onClick={() => {
                                     void handleApproveRequest(request.id);
                                   }}
@@ -3496,7 +3581,7 @@ function App() {
                                 <button
                                   type="button"
                                   className="request-btn reject"
-                                  title="Reject"
+                                  title={t("users.reject")}
                                   onClick={() => {
                                     void handleRejectRequest(request.id);
                                   }}
@@ -3516,14 +3601,14 @@ function App() {
                 <div className="users-manage-block users-block">
                   <div className="users-manage-block-header">
                     <Users size={18} />
-                    <h3>Existing users</h3>
+                    <h3>{t("users.existingUsers")}</h3>
                     <span className="users-manage-badge">
                       {teamMembers.length}
                     </span>
                   </div>
                   <div className="users-manage-block-content">
                     {teamMembers.length === 0 ? (
-                      <p className="users-manage-empty">No users</p>
+                      <p className="users-manage-empty">{t("users.noUsers")}</p>
                     ) : (
                       <ul className="users-manage-list">
                         {teamMembers.map((member) => (
@@ -3545,7 +3630,7 @@ function App() {
                               <span
                                 className={`status-indicator ${member.isActive ? "active" : "inactive"}`}
                               >
-                                {member.isActive ? "Actif" : "Inactif"}
+                                {member.isActive ? t("common.active") : t("common.inactive")}
                               </span>
                             </div>
                           </li>
@@ -3594,7 +3679,7 @@ function App() {
                 type="button"
                 className="modal-close-btn"
                 onClick={() => setMonitorActionConfirmation(null)}
-                aria-label="Close"
+                aria-label={t("common.close")}
               >
                 <X size={20} />
               </button>
@@ -3603,16 +3688,17 @@ function App() {
               <div className="monitor-action-modal-hero">
                 <div className="monitor-action-modal-badge-wrap">
                   <span className="monitor-action-modal-badge">
-                    {selectedMonitorsCount} selected monitor
-                    {selectedMonitorsCount > 1 ? "s" : ""}
+                    {t("dashboard.confirm.selectedCount", {
+                      count: selectedMonitorsCount,
+                    })}
                   </span>
                   {monitorActionConfirmation === "delete" ? (
                     <span className="monitor-action-modal-badge danger">
-                      Permanent action
+                      {t("dashboard.confirm.permanentAction")}
                     </span>
                   ) : (
                     <span className="monitor-action-modal-badge soft">
-                      Safe operation
+                      {t("dashboard.confirm.safeOperation")}
                     </span>
                   )}
                 </div>
@@ -3627,7 +3713,7 @@ function App() {
               <div className="monitor-action-modal-selection">
                 <div className="monitor-action-modal-selection-header">
                   <AlertTriangle size={16} />
-                  <span>Selected monitors</span>
+                  <span>{t("dashboard.confirm.selectedMonitors")}</span>
                 </div>
                 <div className="monitor-action-modal-chips">
                   {selectedMonitorPreviewNames.map((monitorName) => (
@@ -3641,10 +3727,11 @@ function App() {
                   {selectedMonitorsCount >
                   selectedMonitorPreviewNames.length ? (
                     <span className="monitor-action-modal-chip more">
-                      +
-                      {selectedMonitorsCount -
-                        selectedMonitorPreviewNames.length}{" "}
-                      more
+                      {t("dashboard.confirm.more", {
+                        count:
+                          selectedMonitorsCount -
+                          selectedMonitorPreviewNames.length,
+                      })}
                     </span>
                   ) : null}
                 </div>
@@ -3656,7 +3743,7 @@ function App() {
                   className="secondary-button"
                   onClick={handleCloseMonitorActionConfirmation}
                 >
-                  Cancel
+                  {t("common.cancel")}
                 </button>
                 <button
                   type="button"
@@ -4044,7 +4131,7 @@ function App() {
                 <span className="workspace-title-icon" aria-hidden="true">
                   <img src={uptimeWLogo} alt="" />
                 </span>
-                <h1>Monitoring</h1>
+                <h1>{t("menu.monitoring")}</h1>
               </div>
               <div className="primary-button-wrap" ref={newMonitorMenuRef}>
                 <button
@@ -4056,12 +4143,12 @@ function App() {
                   }}
                 >
                   <Plus size={14} />
-                  <span>New monitor</span>
+                  <span>{t("workspace.newMonitor")}</span>
                 </button>
                 <button
                   className="primary-button-menu-toggle"
                   type="button"
-                  aria-label="Open new monitor options"
+                  aria-label={t("workspace.openNewMonitorOptions")}
                   aria-haspopup="menu"
                   aria-expanded={newMonitorMenuOpen}
                   onClick={() => setNewMonitorMenuOpen((prev) => !prev)}
@@ -4082,7 +4169,7 @@ function App() {
                       >
                         <Plus size={14} />
                       </span>
-                      <span>Single monitor</span>
+                      <span>{t("dashboard.newMonitor.single")}</span>
                     </button>
                     <button
                       type="button"
@@ -4095,7 +4182,7 @@ function App() {
                       >
                         <Wrench size={14} />
                       </span>
-                      <span>Monitor Wizard</span>
+                      <span>{t("dashboard.newMonitor.wizard")}</span>
                     </button>
                     <button
                       type="button"
@@ -4108,7 +4195,7 @@ function App() {
                       >
                         <ArrowUpDown size={14} />
                       </span>
-                      <span>Bulk upload</span>
+                      <span>{t("dashboard.newMonitor.bulk")}</span>
                     </button>
                   </div>
                 )}
@@ -4138,7 +4225,7 @@ function App() {
                     aria-expanded={isBulkActionsMenuOpen}
                     disabled={!hasSelectedMonitors || isBulkActionRunning}
                   >
-                    Bulk actions
+                    {t("dashboard.bulkActions")}
                     <ChevronDown size={16} />
                   </button>
 
@@ -4192,7 +4279,7 @@ function App() {
                 </div>
                 <div className="monitor-tag-wrap" ref={monitorTagMenuRef}>
                   <button
-                    className={`chip-button monitor-tag-trigger ${isMonitorTagMenuOpen || selectedMonitorTag !== "All tags" ? "active" : ""}`}
+                    className={`chip-button monitor-tag-trigger ${isMonitorTagMenuOpen || selectedMonitorTag !== "all" ? "active" : ""}`}
                     type="button"
                     onClick={() => setIsMonitorTagMenuOpen((prev) => !prev)}
                     aria-haspopup="menu"
@@ -4200,7 +4287,7 @@ function App() {
                   >
                     <Tag size={20} />
                     <span className="monitor-tag-label">
-                      {selectedMonitorTag}
+                      {monitorTagLabels[selectedMonitorTag]}
                     </span>
                     <ChevronDown size={16} />
                   </button>
@@ -4221,7 +4308,7 @@ function App() {
                             setIsMonitorTagMenuOpen(false);
                           }}
                         >
-                          <span>{tagOption}</span>
+                          <span>{monitorTagLabels[tagOption]}</span>
                           {selectedMonitorTag === tagOption ? (
                             <Check size={16} aria-hidden="true" />
                           ) : null}
@@ -4237,7 +4324,7 @@ function App() {
                   <Search size={20} />
                   <input
                     type="text"
-                    placeholder="Search by name or url"
+                    placeholder={t("dashboard.searchPlaceholder")}
                     value={monitorSearchQuery}
                     onChange={(event) =>
                       setMonitorSearchQuery(event.target.value)
@@ -4296,14 +4383,14 @@ function App() {
                   }}
                 >
                   <CiSliderHorizontal size={20} />
-                  Filter
+                  {t("dashboard.filter.button")}
                 </button>
               </div>
             </div>
 
             <div className="table-card">
               <div className="table-head">
-                <span>Actions</span>
+                <span>{t("dashboard.table.actions")}</span>
                 <div className="action-row">
                   <span
                     className={`monitor-action-tooltip-wrap${maintenanceActionDisabledReason ? " has-tooltip" : ""}`}
@@ -4317,13 +4404,13 @@ function App() {
                       <span className="action-icon-circle" aria-hidden="true">
                         <Pause size={11} />
                       </span>
-                      <span>Pause</span>
+                      <span>{bulkActionOptionLabels.pause}</span>
                     </button>
                     {maintenanceActionDisabledReason ? (
                       <span className="monitor-action-tooltip" role="tooltip">
                         <span className="monitor-action-tooltip-kicker">
                           <AlertTriangle size={12} aria-hidden="true" />
-                          Maintenance lock
+                          {t("dashboard.maintenance.lock")}
                         </span>
                         <strong className="monitor-action-tooltip-title">
                           {maintenanceActionDisabledTitle}
@@ -4343,7 +4430,7 @@ function App() {
                     <span className="action-icon-circle" aria-hidden="true">
                       <Trash2 size={11} />
                     </span>
-                    <span>Delete</span>
+                    <span>{bulkActionOptionLabels.delete}</span>
                   </button>
                   <span
                     className={`monitor-action-tooltip-wrap${maintenanceActionDisabledReason ? " has-tooltip" : ""}`}
@@ -4357,13 +4444,13 @@ function App() {
                       <span className="action-icon-circle" aria-hidden="true">
                         <RotateCcw size={11} />
                       </span>
-                      <span>Resume</span>
+                      <span>{bulkActionOptionLabels.resume}</span>
                     </button>
                     {maintenanceActionDisabledReason ? (
                       <span className="monitor-action-tooltip" role="tooltip">
                         <span className="monitor-action-tooltip-kicker">
                           <AlertTriangle size={12} aria-hidden="true" />
-                          Maintenance lock
+                          {t("dashboard.maintenance.lock")}
                         </span>
                         <strong className="monitor-action-tooltip-title">
                           {maintenanceActionDisabledTitle}
@@ -4386,7 +4473,7 @@ function App() {
               <div className="monitor-table">
                 {isMonitorsLoading ? (
                   <p className="monitor-table-feedback">
-                    Chargement des monitors...
+                    {t("dashboard.loadingMonitors")}
                   </p>
                 ) : monitorLoadError ? (
                   <p className="monitor-table-feedback error">
@@ -4394,7 +4481,7 @@ function App() {
                   </p>
                 ) : displayedMonitors.length === 0 ? (
                   <p className="monitor-table-feedback">
-                    Aucun monitor disponible.
+                    {t("dashboard.noMonitors")}
                   </p>
                 ) : (
                   displayedMonitors.map((monitor) => (
@@ -4408,8 +4495,12 @@ function App() {
                           className={`monitor-checkbox ${selectedMonitorIds.includes(monitor.id) ? "selected" : ""}`}
                           aria-label={
                             selectedMonitorIds.includes(monitor.id)
-                              ? `Unselect ${monitor.name}`
-                              : `Select ${monitor.name}`
+                              ? t("dashboard.monitor.unselect", {
+                                  name: monitor.name,
+                                })
+                              : t("dashboard.monitor.select", {
+                                  name: monitor.name,
+                                })
                           }
                           onClick={() => toggleMonitorSelection(monitor.id)}
                         />
@@ -4431,7 +4522,7 @@ function App() {
                           )}
                           <div className="monitor-meta">
                             <span className="protocol">{monitor.protocol}</span>
-                            <span>{monitor.uptimeLabel}</span>
+                            <span>{monitorStatusLabels[monitor.state]}</span>
                           </div>
                         </div>
 
@@ -4461,7 +4552,9 @@ function App() {
                           onClick={() =>
                             navigateTo(`/monitoring/${monitor.id}/edit`)
                           }
-                          aria-label={`Edit ${monitor.name}`}
+                          aria-label={t("dashboard.monitor.edit", {
+                            name: monitor.name,
+                          })}
                         >
                           <span className="action-icon-circle" aria-hidden="true">
                             <Wrench size={12} />
@@ -4478,7 +4571,7 @@ function App() {
           {/* --- Status Panel (right column) --- */}
           <aside className="status-panel">
             <section className="status-card">
-              <h3>Current status</h3>
+              <h3>{t("dashboard.status.current")}</h3>
               <div className="status-ring-wrap">
                 <div className="status-ring">
                   <span
@@ -4490,19 +4583,22 @@ function App() {
               <div className="status-grid">
                 <article>
                   <strong>{currentStatus.down}</strong>
-                  <span>Down</span>
+                  <span>{t("dashboard.status.down")}</span>
                 </article>
                 <article>
                   <strong>{currentStatus.up}</strong>
-                  <span>Up</span>
+                  <span>{t("dashboard.status.up")}</span>
                 </article>
                 <article>
                   <strong>{currentStatus.paused}</strong>
-                  <span>Paused</span>
+                  <span>{t("dashboard.status.paused")}</span>
                 </article>
               </div>
               <p className="status-hint">
-                Using {monitorRows.length} of 50 monitors
+                {t("dashboard.status.usingMonitors", {
+                  current: monitorRows.length,
+                  max: 50,
+                })}
               </p>
             </section>
 
@@ -4519,14 +4615,20 @@ function App() {
                     <Trash2 size={13} />
                   </span>
                   <div>
-                    <h3>Trash</h3>
+                    <h3>{t("dashboard.trash.title")}</h3>
                     <p>
-                      Deleted monitors stay here for{" "}
-                      {MONITOR_TRASH_TTL_MS / 60000} minutes.
+                      {t("dashboard.trash.description", {
+                        minutes: MONITOR_TRASH_TTL_MS / 60000,
+                      })}
                     </p>
                   </div>
                 </button>
-                <span className="monitor-trash-count" aria-label={`${deletedMonitorTrash.length} deleted monitor(s)`}>
+                <span
+                  className="monitor-trash-count"
+                  aria-label={t("dashboard.trash.countLabel", {
+                    count: deletedMonitorTrash.length,
+                  })}
+                >
                   {deletedMonitorTrash.length}
                 </span>
               </div>
@@ -4534,7 +4636,7 @@ function App() {
               {deletedMonitorTrash.length === 0 ? (
                 <div className="monitor-trash-empty">
                   <Clock3 size={12} aria-hidden="true" />
-                  <span>No deleted monitors yet.</span>
+                  <span>{t("dashboard.trash.empty")}</span>
                 </div>
               ) : (
                 <div className="monitor-trash-list">
@@ -4550,7 +4652,11 @@ function App() {
                         <div className="monitor-trash-item-meta">
                           <span className="monitor-trash-expiry">
                             <Clock3 size={11} aria-hidden="true" />
-                            {formatTrashTimeRemaining(entry.expiresAt, trashClock)}
+                            {formatTrashTimeRemaining(
+                              entry.expiresAt,
+                              trashClock,
+                              t,
+                            )}
                           </span>
                           <button
                             type="button"
@@ -4561,7 +4667,11 @@ function App() {
                             disabled={isExpired || isRestoring || isBulkActionRunning}
                           >
                             <RotateCcw size={11} aria-hidden="true" />
-                            <span>{isRestoring ? 'Restoring...' : 'Restore'}</span>
+                            <span>
+                              {isRestoring
+                                ? t("dashboard.trash.restoring")
+                                : t("dashboard.trash.restore")}
+                            </span>
                           </button>
                         </div>
                       </article>
@@ -4570,7 +4680,9 @@ function App() {
 
                   {deletedMonitorTrash.length > 3 ? (
                     <p className="monitor-trash-more">
-                      +{deletedMonitorTrash.length - 3} more in trash
+                      {t("dashboard.trash.moreInTrash", {
+                        count: deletedMonitorTrash.length - 3,
+                      })}
                     </p>
                   ) : null}
                 </div>
@@ -4578,17 +4690,21 @@ function App() {
             </section>
 
             <section className="status-card">
-              <h3>Last 24 hours</h3>
+              <h3>{t("dashboard.last24Hours")}</h3>
               <div className="hours-row">
                 <div className="hours-col">
                   <p className="hours-uptime">
                     {last24HoursStats.overallUptime}
                   </p>
-                  <span className="hours-label">Overall uptime</span>
+                  <span className="hours-label">
+                    {t("dashboard.metrics.overallUptime")}
+                  </span>
                 </div>
                 <div className="hours-col">
                   <p className="hours-value">{last24HoursStats.incidents}</p>
-                  <span className="hours-label">Incidents</span>
+                  <span className="hours-label">
+                    {t("dashboard.metrics.incidents")}
+                  </span>
                 </div>
               </div>
               <div className="hours-row">
@@ -4596,13 +4712,17 @@ function App() {
                   <p className="hours-meta">
                     {last24HoursStats.withoutIncident}
                   </p>
-                  <span className="hours-label">Without incid.</span>
+                  <span className="hours-label">
+                    {t("dashboard.metrics.withoutIncident")}
+                  </span>
                 </div>
                 <div className="hours-col">
                   <p className="hours-value">
                     {last24HoursStats.affectedMonitors}
                   </p>
-                  <span className="hours-label">Affected mon.</span>
+                  <span className="hours-label">
+                    {t("dashboard.metrics.affectedMonitors")}
+                  </span>
                 </div>
               </div>
             </section>
@@ -4618,11 +4738,11 @@ function App() {
             aria-hidden={!isMonitorFilterOpen}
           >
             <header className="monitor-filter-header">
-              <h3>Filter</h3>
+              <h3>{t("dashboard.filter.title")}</h3>
               <button
                 type="button"
                 onClick={closeMonitorFilterPanel}
-                aria-label="Close filter"
+                aria-label={t("dashboard.filter.close")}
               >
                 <X size={16} />
               </button>
@@ -4630,7 +4750,9 @@ function App() {
 
             <div className="monitor-filter-body">
               <div className="monitor-filter-group">
-                <label htmlFor="monitor-filter-status">Status</label>
+                <label htmlFor="monitor-filter-status">
+                  {t("dashboard.filter.status")}
+                </label>
                 <div className="monitor-filter-select-shell">
                   <select
                     id="monitor-filter-status"
@@ -4641,21 +4763,25 @@ function App() {
                       )
                     }
                   >
-                    <option value="none">None</option>
-                    <option value="up">Up</option>
-                    <option value="down">Down</option>
-                    <option value="paused">Paused / Pending</option>
+                    <option value="none">{t("dashboard.filter.none")}</option>
+                    <option value="up">{t("dashboard.filter.up")}</option>
+                    <option value="down">{t("dashboard.filter.down")}</option>
+                    <option value="paused">
+                      {t("dashboard.filter.pausedPending")}
+                    </option>
                   </select>
                   <ChevronDown size={14} aria-hidden="true" />
                 </div>
               </div>
 
               <div className="monitor-filter-group">
-                <label htmlFor="monitor-filter-tags">Tags</label>
+                <label htmlFor="monitor-filter-tags">
+                  {t("dashboard.filter.tags")}
+                </label>
                 <input
                   id="monitor-filter-tags"
                   type="text"
-                  placeholder="Search for a tag..."
+                  placeholder={t("dashboard.filter.searchPlaceholder")}
                   value={draftMonitorTagQuery}
                   onChange={(event) =>
                     setDraftMonitorTagQuery(event.target.value)
@@ -4663,11 +4789,10 @@ function App() {
                 />
                 <div className="monitor-filter-empty">
                   <p className="monitor-filter-empty-title">
-                    You don&apos;t have any tags yet.
+                    {t("dashboard.filter.emptyTitle")}
                   </p>
                   <p className="monitor-filter-empty-copy">
-                    To filter monitors based on tags create and attach tag to
-                    some monitor.
+                    {t("dashboard.filter.emptyCopy")}
                   </p>
                 </div>
               </div>
@@ -4679,7 +4804,7 @@ function App() {
                 className="monitor-filter-reset"
                 onClick={handleResetMonitorFilter}
               >
-                Reset
+                {t("dashboard.filter.reset")}
               </button>
               <button
                 type="button"
@@ -4687,7 +4812,7 @@ function App() {
                 onClick={handleApplyMonitorFilter}
                 disabled={!hasPendingMonitorFilterChanges}
               >
-                Apply
+                {t("dashboard.filter.apply")}
               </button>
             </footer>
           </aside>

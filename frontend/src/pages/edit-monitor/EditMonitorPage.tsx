@@ -1,7 +1,8 @@
 import { ChevronRight, Clock3, Mail, Pencil, Search, Trash2, UserPlus, Users } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { getUserRoleLabel, isAdminRole } from '../../lib/roles';
+import { isAdminRole } from '../../lib/roles';
 import type { UserRole } from '../../lib/api';
+import { useAppLanguage } from '../../lib/language';
 import './EditMonitorPage.css';
 
 interface EditableMonitor {
@@ -58,11 +59,11 @@ interface EditMonitorPageProps {
   initialSection?: EditMonitorSideSection;
 }
 
-const formatShortDate = (value: string): string => {
+const formatShortDate = (value: string, locale: string): string => {
   const parsed = Date.parse(value);
   if (Number.isNaN(parsed)) return '-';
 
-  return new Date(parsed).toLocaleDateString('fr-FR', {
+  return new Date(parsed).toLocaleDateString(locale, {
     day: '2-digit',
     month: 'short',
     year: 'numeric',
@@ -87,6 +88,8 @@ function EditMonitorPage({
   onSaveChanges,
   initialSection = 'integrations',
 }: EditMonitorPageProps) {
+  const { t, language } = useAppLanguage();
+  const dateLocale = language === 'fr' ? 'fr-FR' : language === 'ar' ? 'ar-TN' : 'en-US';
   const editLabel = monitor.name === 'Metal 2000 Website' ? 'Metal 2000 website' : monitor.name;
   const [monitorName, setMonitorName] = useState(monitor.name);
   const [monitorUrl, setMonitorUrl] = useState(monitor.url ?? '');
@@ -108,6 +111,17 @@ function EditMonitorPage({
   const [pendingUserId, setPendingUserId] = useState<string | null>(null);
   const [pendingInvitationId, setPendingInvitationId] = useState<string | null>(null);
   const nameInputRef = useRef<HTMLInputElement | null>(null);
+  const getUserRoleLabel = (role: UserRole): string => {
+    if (role === 'super_admin') {
+      return t('team.management.roleSuperAdmin');
+    }
+
+    if (role === 'admin') {
+      return t('team.management.roleAdmin');
+    }
+
+    return t('team.management.roleMember');
+  };
 
   useEffect(() => {
     setMonitorName(monitor.name);
@@ -129,13 +143,13 @@ function EditMonitorPage({
 
   const friendlyName = useMemo(() => {
     const rawUrl = monitorUrl.trim();
-    if (rawUrl === '') return monitorName.trim() || 'monitor';
+    if (rawUrl === '') return monitorName.trim() || t('editMonitor.monitorFallback');
     try {
-      return new URL(rawUrl).hostname || monitorName.trim() || 'monitor';
+      return new URL(rawUrl).hostname || monitorName.trim() || t('editMonitor.monitorFallback');
     } catch {
-      return monitorName.trim() || 'monitor';
+      return monitorName.trim() || t('editMonitor.monitorFallback');
     }
-  }, [monitorName, monitorUrl]);
+  }, [monitorName, monitorUrl, t]);
   const activeSideSection = initialSection;
   const isDetailsSection = activeSideSection === 'details';
   const isIntegrationsSection = activeSideSection === 'integrations';
@@ -195,13 +209,13 @@ function EditMonitorPage({
 
     if (cleanedEmail === '') {
       setAccessFeedback(null);
-      setAccessError("Email is required.");
+      setAccessError(t('editMonitor.errors.emailRequired'));
       return;
     }
 
     if (!isValidEmail(cleanedEmail)) {
       setAccessFeedback(null);
-      setAccessError("Email is not valid.");
+      setAccessError(t('editMonitor.errors.emailInvalid'));
       return;
     }
 
@@ -222,14 +236,14 @@ function EditMonitorPage({
 
     setAccessName('');
     setAccessEmail('');
-    setAccessFeedback(result.notice ?? 'Invitation sent or access granted successfully.');
+    setAccessFeedback(result.notice ?? t('editMonitor.access.successGranted'));
     setIsSubmittingAccess(false);
   };
 
   const handleRevokeAccess = async (userId: string) => {
     if (!onRevokeMonitorAccess || pendingUserId || pendingInvitationId) return;
 
-    const shouldRevoke = window.confirm('Remove this monitor access?');
+    const shouldRevoke = window.confirm(t('editMonitor.confirm.removeAccess'));
     if (!shouldRevoke) return;
 
     setPendingUserId(userId);
@@ -244,14 +258,14 @@ function EditMonitorPage({
       return;
     }
 
-    setAccessFeedback('Access removed successfully.');
+    setAccessFeedback(t('editMonitor.access.removed'));
     setPendingUserId(null);
   };
 
   const handleDeleteMonitorInvitation = async (invitationId: string) => {
     if (!onDeleteInvitation || pendingUserId || pendingInvitationId) return;
 
-    const shouldDelete = window.confirm('Delete this invitation?');
+    const shouldDelete = window.confirm(t('editMonitor.confirm.deleteInvitation'));
     if (!shouldDelete) return;
 
     setPendingInvitationId(invitationId);
@@ -266,7 +280,7 @@ function EditMonitorPage({
       return;
     }
 
-    setAccessFeedback('Invitation deleted.');
+    setAccessFeedback(t('editMonitor.access.invitationDeleted'));
     setPendingInvitationId(null);
   };
 
@@ -277,23 +291,23 @@ function EditMonitorPage({
     const cleanedUrl = monitorUrl.trim();
 
     if (cleanedName === '') {
-      setSaveError('Monitor name is required.');
+      setSaveError(t('editMonitor.errors.monitorNameRequired'));
       return;
     }
 
     if (cleanedUrl === '') {
-      setSaveError('Monitor URL is required.');
+      setSaveError(t('editMonitor.errors.monitorUrlRequired'));
       return;
     }
 
     try {
       const parsedUrl = new URL(cleanedUrl);
       if (!['http:', 'https:', 'ws:', 'wss:'].includes(parsedUrl.protocol)) {
-        setSaveError('URL must start with http://, https://, ws://, or wss://.');
+        setSaveError(t('editMonitor.errors.urlMustStartWith'));
         return;
       }
     } catch {
-      setSaveError('URL is not valid.');
+      setSaveError(t('editMonitor.errors.urlInvalid'));
       return;
     }
 
@@ -314,13 +328,13 @@ function EditMonitorPage({
     <section className="edit-monitor-page">
       <div className="edit-monitor-breadcrumb">
         <button type="button" className="edit-monitor-breadcrumb-link" onClick={onBack}>
-          Monitoring
+          {t('menu.monitoring')}
         </button>
         <ChevronRight size={14} />
         <span>{editLabel}</span>
       </div>
 
-      <h2 className="edit-monitor-title">Edit {editLabel}</h2>
+      <h2 className="edit-monitor-title">{t('editMonitor.title', { name: editLabel })}</h2>
 
       <div className="edit-monitor-content-grid">
         <div className="edit-monitor-main">
@@ -328,18 +342,18 @@ function EditMonitorPage({
             <>
               <section className="edit-monitor-card">
                 <div className="edit-monitor-top-shell">
-                  <h3>URL to monitor</h3>
+                  <h3>{t('editMonitor.urlToMonitor')}</h3>
                   <input
                     type="url"
                     value={monitorUrl}
                     onChange={(event) => setMonitorUrl(event.target.value)}
                     disabled={isSaving}
-                    placeholder="https://example.com"
+                    placeholder={t('editMonitor.urlPlaceholder')}
                   />
 
                   <div className="edit-monitor-friendly-row">
                     <p>
-                      Friendly name: <strong>{friendlyName}</strong>
+                      {t('editMonitor.friendlyName')} <strong>{friendlyName}</strong>
                     </p>
                     <button
                       type="button"
@@ -348,24 +362,24 @@ function EditMonitorPage({
                       }}
                     >
                       <Pencil size={12} />
-                      Rename
+                      {t('editMonitor.rename')}
                     </button>
                   </div>
 
                   <div className="edit-monitor-meta-grid">
                     <div className="edit-monitor-meta-box">
-                      <h4>Group</h4>
-                      <p>Your monitor will be added to default group.</p>
+                      <h4>{t('editMonitor.group')}</h4>
+                      <p>{t('editMonitor.defaultGroupInfo')}</p>
                       <select disabled>
-                        <option>Monitors (default)</option>
+                        <option>{t('editMonitor.defaultGroupOption')}</option>
                       </select>
                     </div>
                     <div className="edit-monitor-meta-box">
-                      <h4>Add tags</h4>
-                      <p>Tags help you organize your monitors.</p>
+                      <h4>{t('editMonitor.addTags')}</h4>
+                      <p>{t('editMonitor.tagsHelp')}</p>
                       <input
                         type="text"
-                        placeholder="Click to add tag..."
+                        placeholder={t('editMonitor.tagPlaceholder')}
                         value={tagDraft}
                         onChange={(event) => setTagDraft(event.target.value)}
                         disabled={isSaving}
@@ -375,8 +389,8 @@ function EditMonitorPage({
 
                   <div className="edit-monitor-domain-row">
                     <div className="edit-monitor-domain-copy">
-                      <h4>Domain expiry reminders</h4>
-                      <p>Enable WHOIS checks to track domain expiration date.</p>
+                      <h4>{t('editMonitor.domainExpiryReminders')}</h4>
+                      <p>{t('editMonitor.domainExpiryDescription')}</p>
                     </div>
                     <div className="edit-monitor-domain-select">
                       <select
@@ -386,16 +400,16 @@ function EditMonitorPage({
                         }
                         disabled={isSaving}
                       >
-                        <option value="disabled">Disabled</option>
-                        <option value="enabled">Enabled</option>
+                        <option value="disabled">{t('common.disabled')}</option>
+                        <option value="enabled">{t('common.enabled')}</option>
                       </select>
                     </div>
                   </div>
 
                   <div className="edit-monitor-domain-row">
                     <div className="edit-monitor-domain-copy">
-                      <h4>SSL expiry reminders</h4>
-                      <p>Enable TLS certificate checks to track expiration date.</p>
+                      <h4>{t('editMonitor.sslExpiryReminders')}</h4>
+                      <p>{t('editMonitor.sslExpiryDescription')}</p>
                     </div>
                     <div className="edit-monitor-domain-select">
                       <select
@@ -405,21 +419,21 @@ function EditMonitorPage({
                         }
                         disabled={isSaving}
                       >
-                        <option value="disabled">Disabled</option>
-                        <option value="enabled">Enabled</option>
+                        <option value="disabled">{t('common.disabled')}</option>
+                        <option value="enabled">{t('common.enabled')}</option>
                       </select>
                     </div>
                   </div>
 
                   <label className="edit-monitor-field">
-                    <span>Monitor name</span>
+                    <span>{t('editMonitor.monitorName')}</span>
                     <input
                       ref={nameInputRef}
                       type="text"
                       value={monitorName}
                       onChange={(event) => setMonitorName(event.target.value)}
                       disabled={isSaving}
-                      placeholder="My service"
+                      placeholder={t('editMonitor.monitorNamePlaceholder')}
                     />
                   </label>
                 </div>
@@ -428,7 +442,7 @@ function EditMonitorPage({
               <section className="edit-monitor-submit-card">
                 {saveError ? <p className="edit-monitor-save-error">{saveError}</p> : null}
                 <button type="button" onClick={handleSaveChanges} disabled={isSaving}>
-                  {isSaving ? 'Saving...' : 'Save changes'}
+                  {isSaving ? t('common.saving') : t('editMonitor.saveChanges')}
                 </button>
               </section>
             </>
@@ -438,47 +452,51 @@ function EditMonitorPage({
             <section className="edit-monitor-card">
               <div className="edit-monitor-integrations-shell">
                 <div className="edit-monitor-notify-head">
-                  <h3>Notify team members</h3>
+                  <h3>{t('editMonitor.notifyTeamMembers')}</h3>
                   <button type="button" className="edit-monitor-manage-btn" onClick={() => onManageTeam?.()}>
                     <Users size={13} />
-                    Manage team
+                    {t('editMonitor.manageTeam')}
                   </button>
                 </div>
 
                 <div className="edit-monitor-notify-grid">
                   <label className="edit-monitor-notify-item">
                     <input type="checkbox" defaultChecked />
-                    <span>E-mail</span>
+                    <span>{t('newMonitor.notificationChannels.email')}</span>
                   </label>
                   <label className="edit-monitor-notify-item">
                     <input type="checkbox" />
-                    <span>SMS message</span>
+                    <span>{t('newMonitor.notificationChannels.sms')}</span>
                   </label>
                   <label className="edit-monitor-notify-item">
                     <input type="checkbox" />
-                    <span>Voice call</span>
+                    <span>{t('newMonitor.notificationChannels.voice')}</span>
                   </label>
                   <label className="edit-monitor-notify-item">
                     <input type="checkbox" />
-                    <span>Push</span>
+                    <span>{t('newMonitor.notificationChannels.push')}</span>
                   </label>
                 </div>
 
                 <div className="edit-monitor-access-panel">
                   <div className="edit-monitor-access-panel-head">
                     <div>
-                      <h4>Monitor access</h4>
-                      <p>Invite users by email or manage who can consult this monitor.</p>
+                      <h4>{t('editMonitor.monitorAccess')}</h4>
+                      <p>{t('editMonitor.monitorAccessDescription')}</p>
                     </div>
 
                     <div className="edit-monitor-access-stats">
                       <span className="edit-monitor-access-stat">
                         <Users size={13} />
-                        {monitorSharedUsers.length} user{monitorSharedUsers.length > 1 ? 's' : ''}
+                        {monitorSharedUsers.length === 1
+                          ? t('editMonitor.access.users.one')
+                          : t('editMonitor.access.users.many', { count: monitorSharedUsers.length })}
                       </span>
                       <span className="edit-monitor-access-stat pending">
                         <Clock3 size={13} />
-                        {pendingInvitationCount} pending
+                        {pendingInvitationCount === 1
+                          ? t('editMonitor.access.pending.one')
+                          : t('editMonitor.access.pending.many', { count: pendingInvitationCount })}
                       </span>
                     </div>
                   </div>
@@ -487,24 +505,24 @@ function EditMonitorPage({
                     <>
                       <div className="edit-monitor-access-form-grid">
                         <label className="edit-monitor-field">
-                          <span>Name</span>
+                          <span>{t('common.name')}</span>
                           <input
                             type="text"
                             value={accessName}
                             onChange={(event) => setAccessName(event.target.value)}
                             disabled={isSubmittingAccess || pendingUserId !== null || pendingInvitationId !== null}
-                            placeholder="Optional"
+                            placeholder={t('common.optional')}
                           />
                         </label>
 
                         <label className="edit-monitor-field">
-                          <span>Email</span>
+                          <span>{t('common.email')}</span>
                           <input
                             type="email"
                             value={accessEmail}
                             onChange={(event) => setAccessEmail(event.target.value)}
                             disabled={isSubmittingAccess || pendingUserId !== null || pendingInvitationId !== null}
-                            placeholder="user@company.com"
+                            placeholder={t('editMonitor.emailPlaceholder')}
                           />
                         </label>
                       </div>
@@ -524,17 +542,17 @@ function EditMonitorPage({
                           }
                         >
                           <UserPlus size={14} />
-                          {isSubmittingAccess ? 'Sending...' : 'Invite by email'}
+                          {isSubmittingAccess ? t('common.sending') : t('editMonitor.inviteByEmail')}
                         </button>
 
                         <button type="button" className="edit-monitor-inline-link" onClick={() => onManageTeam?.()}>
-                          Open full team management
+                          {t('editMonitor.openFullTeamManagement')}
                         </button>
                       </div>
                     </>
                   ) : (
                     <p className="edit-monitor-access-note">
-                      Only admins can invite users or change access for this monitor.
+                      {t('editMonitor.onlyAdminsCanManageAccess')}
                     </p>
                   )}
 
@@ -547,19 +565,19 @@ function EditMonitorPage({
                       type="search"
                       value={accessQuery}
                       onChange={(event) => setAccessQuery(event.target.value)}
-                      placeholder="Search users or invitations..."
+                      placeholder={t('editMonitor.searchUsersOrInvitations')}
                     />
                   </div>
 
                   <div className="edit-monitor-access-lists">
                     <div className="edit-monitor-access-list">
                       <div className="edit-monitor-access-list-head">
-                        <h5>Users with access</h5>
+                        <h5>{t('editMonitor.usersWithAccess')}</h5>
                         <span>{visibleSharedUsers.length}</span>
                       </div>
 
                       {visibleSharedUsers.length === 0 ? (
-                        <p className="edit-monitor-access-empty">No user currently has access to this monitor.</p>
+                        <p className="edit-monitor-access-empty">{t('editMonitor.noUserAccess')}</p>
                       ) : (
                         <div className="edit-monitor-access-rows">
                           {visibleSharedUsers.map((member) => (
@@ -590,7 +608,7 @@ function EditMonitorPage({
                                     }
                                   >
                                     <Trash2 size={13} />
-                                    {pendingUserId === member.id ? 'Removing...' : 'Remove'}
+                                    {pendingUserId === member.id ? t('common.removing') : t('common.remove')}
                                   </button>
                                 ) : null}
                               </div>
@@ -602,12 +620,12 @@ function EditMonitorPage({
 
                     <div className="edit-monitor-access-list">
                       <div className="edit-monitor-access-list-head">
-                        <h5>Invitations</h5>
+                        <h5>{t('editMonitor.invitations')}</h5>
                         <span>{visibleInvitations.length}</span>
                       </div>
 
                       {visibleInvitations.length === 0 ? (
-                        <p className="edit-monitor-access-empty">No invitation found for this monitor.</p>
+                        <p className="edit-monitor-access-empty">{t('editMonitor.noInvitationFound')}</p>
                       ) : (
                         <div className="edit-monitor-access-rows">
                           {visibleInvitations.map((invitation) => (
@@ -620,17 +638,17 @@ function EditMonitorPage({
                                 </span>
                                 <span className="edit-monitor-access-row-meta">
                                   <Clock3 size={12} />
-                                  Expires {formatShortDate(invitation.expiresAt)}
+                                  {t('editMonitor.expires', { date: formatShortDate(invitation.expiresAt, dateLocale) })}
                                 </span>
                               </div>
 
                               <div className="edit-monitor-access-row-actions">
                                 <span className={`edit-monitor-access-status ${invitation.status}`}>
                                   {invitation.status === 'pending'
-                                    ? 'Pending'
+                                    ? t('editMonitor.status.pending')
                                     : invitation.status === 'accepted'
-                                      ? 'Accepted'
-                                      : 'Expired'}
+                                      ? t('editMonitor.status.accepted')
+                                      : t('editMonitor.status.expired')}
                                 </span>
                                 {canManageMonitorAccess ? (
                                   <button
@@ -644,9 +662,9 @@ function EditMonitorPage({
                                       pendingUserId !== null ||
                                       isSubmittingAccess
                                     }
-                                  >
-                                    <Trash2 size={13} />
-                                    {pendingInvitationId === invitation.id ? 'Deleting...' : 'Delete'}
+                                    >
+                                      <Trash2 size={13} />
+                                    {pendingInvitationId === invitation.id ? t('common.deleting') : t('common.delete')}
                                   </button>
                                 ) : null}
                               </div>
@@ -659,11 +677,11 @@ function EditMonitorPage({
                 </div>
 
                 <p className="edit-monitor-footnote">
-                  You can set up notifications for{' '}
+                  {t('editMonitor.footnote.prefix')}{' '}
                   <button type="button" className="edit-monitor-inline-link" onClick={() => onOpenIntegrationsTeam?.()}>
-                    Integrations & Team
+                    {t('editMonitor.footnote.link')}
                   </button>{' '}
-                  in the specific tab and edit it later.
+                  {t('editMonitor.footnote.suffix')}
                 </p>
               </div>
             </section>
@@ -678,7 +696,7 @@ function EditMonitorPage({
               onOpenMonitorDetails();
             }}
           >
-            Monitor details
+            {t('newMonitor.side.details')}
           </button>
           <button
             type="button"
@@ -687,7 +705,7 @@ function EditMonitorPage({
               onOpenIntegrationsTeam?.();
             }}
           >
-            Integrations & Team
+            {t('newMonitor.side.integrationsTeam')}
           </button>
           <button
             type="button"
@@ -696,7 +714,7 @@ function EditMonitorPage({
               onOpenMaintenanceInfo?.();
             }}
           >
-            Maintenance info
+            {t('newMonitor.side.maintenanceInfo')}
           </button>
         </aside>
       </div>

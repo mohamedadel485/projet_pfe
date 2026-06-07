@@ -2,6 +2,7 @@ import { Bot, LoaderCircle, RefreshCcw, Send, Sparkles, Trash2 } from 'lucide-re
 import { useEffect, useRef, useState } from 'react';
 import { fetchChatResponse, parseChatStreamText, readChatResponseError } from '../../lib/chatApi';
 import { fetchBackendHealth, type BackendHealthResponse } from '../../lib/api';
+import { useAppLanguage } from '../../lib/language';
 import './ChatbotPage.css';
 
 type ChatRole = 'user' | 'assistant';
@@ -49,7 +50,7 @@ const STORAGE_KEYS = {
   messages: 'uptimewarden-chatbot-messages',
 };
 
-const QUICK_PROMPTS = [
+const QUICK_PROMPTS_DEFAULTS = [
   'Explain this project in one paragraph.',
   'Write a debugging checklist for a Gemini chatbot.',
   'Give 5 prompts to test response quality.',
@@ -145,12 +146,20 @@ const loadMessages = (): ChatMessageEntry[] => {
     .filter((message): message is ChatMessageEntry => message !== null);
 };
 
-const buildWelcomeText = (userName?: string | null): string =>
-  userName
+const buildWelcomeText = (language: string, userName?: string | null): string => {
+  if (language === 'fr') {
+    return userName
+      ? `Bonjour ${userName} ! Je suis prêt à discuter. Utilisez le panneau de gauche pour ajuster le modèle et le ton.`
+      : 'Bonjour ! Je suis prêt à discuter. Utilisez le panneau de gauche pour ajuster le modèle et le ton.';
+  }
+
+  return userName
     ? `Hi ${userName}! I am ready to chat. Use the left panel to adjust model and tone.`
     : 'Hi! I am ready to chat. Use the left panel to adjust model and tone.';
+};
 
 function ChatbotPage({ userName }: ChatbotPageProps) {
+  const { language, t } = useAppLanguage();
   const [settings, setSettings] = useState<ChatbotSettings>(() => loadSettings());
   const [messages, setMessages] = useState<ChatMessageEntry[]>(() => loadMessages());
   const [draft, setDraft] = useState('');
@@ -164,6 +173,14 @@ function ChatbotPage({ userName }: ChatbotPageProps) {
   const messagesRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const quickPrompts =
+    language === 'fr'
+      ? [
+          t('chatbot.quickPrompts.explain'),
+          t('chatbot.quickPrompts.debugging'),
+          t('chatbot.quickPrompts.testQuality'),
+        ]
+      : QUICK_PROMPTS_DEFAULTS;
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -194,8 +211,11 @@ function ChatbotPage({ userName }: ChatbotPageProps) {
         setHealth({
           status: response.ok || response.status === 'OK' ? 'ready' : 'offline',
           detail: response.apiKeyConfigured
-            ? `Backend ${response.status} - uptime ${formatUptime(response.uptime)}`
-            : 'Backend online, add GEMINI_API_KEY in the backend .env file',
+            ? t('chatbot.backendDetail.configured', {
+                status: response.status,
+                uptime: formatUptime(response.uptime),
+              })
+            : t('chatbot.backendDetail.noKey'),
           apiKeyConfigured: Boolean(response.apiKeyConfigured),
           model: normalizeGeminiModel(response.model) || DEFAULT_MODEL,
         });
@@ -206,7 +226,7 @@ function ChatbotPage({ userName }: ChatbotPageProps) {
 
         setHealth({
           status: 'offline',
-          detail: 'Backend unavailable at the moment',
+          detail: t('chatbot.backendDetail.offline'),
           apiKeyConfigured: false,
           model: DEFAULT_MODEL,
         });
@@ -340,8 +360,7 @@ function ChatbotPage({ userName }: ChatbotPageProps) {
         throw new Error(errorMessage);
       }
 
-      const fallbackReply =
-        'No textual response was received. Please try again in a moment.';
+      const fallbackReply = t('chatbot.fallback.noText');
 
       if (!response.body) {
         const text = (await response.text()).trim();
@@ -411,7 +430,7 @@ function ChatbotPage({ userName }: ChatbotPageProps) {
       const fallbackReply =
         error instanceof Error && error.message.trim() !== ''
           ? error.message
-          : "I can't reach the chatbot right now. Please try again in a moment.";
+          : t('chatbot.fallback.unreachable');
 
       updateMessageContent(assistantMessageId, (message) => ({
         ...message,
@@ -429,7 +448,7 @@ function ChatbotPage({ userName }: ChatbotPageProps) {
   };
 
   const showStarterCard = messages.length === 0;
-  const welcomeCopy = buildWelcomeText(userName);
+  const welcomeCopy = buildWelcomeText(language, userName);
 
   return (
     <div className="chatbot-page">
@@ -444,37 +463,36 @@ function ChatbotPage({ userName }: ChatbotPageProps) {
               <Bot size={22} />
             </div>
             <div>
-              <p className="chatbot-eyebrow">Gemini Lab</p>
-              <h1>Chatbot</h1>
+              <p className="chatbot-eyebrow">{t('chatbot.eyebrow')}</p>
+              <h1>{t('chatbot.title')}</h1>
             </div>
           </div>
 
-          <p className="chatbot-lede">
-            A test space integrated into Uptime Warden. The frontend stays local, and the chatbot uses the
-            existing backend in a generic mode.
-          </p>
+          <p className="chatbot-lede">{t('chatbot.lede')}</p>
 
           <div className={`chatbot-status chatbot-status--${health.status}`}>
             <span className="chatbot-status__dot" aria-hidden="true" />
             <div>
-              <p className="chatbot-status__label">Backend status</p>
+              <p className="chatbot-status__label">{t('chatbot.backendStatus')}</p>
               <strong>
                 {health.status === 'ready'
                   ? health.apiKeyConfigured
-                    ? 'Key ready'
-                    : 'Key missing'
+                    ? t('chatbot.keyReady')
+                    : t('chatbot.keyMissing')
                   : health.status === 'offline'
-                    ? 'Offline'
-                    : 'Checking...'}
+                    ? t('chatbot.offline')
+                    : t('chatbot.checking')}
               </strong>
               <span>{health.detail}</span>
-              <span>Model: {health.model}</span>
+              <span>
+                {t('chatbot.model')}: {health.model}
+              </span>
             </div>
           </div>
 
           <div className="chatbot-field">
             <div className="chatbot-field__row">
-              <label htmlFor="chatbot-model">Model</label>
+              <label htmlFor="chatbot-model">{t('chatbot.model')}</label>
             </div>
             <input
               id="chatbot-model"
@@ -492,7 +510,7 @@ function ChatbotPage({ userName }: ChatbotPageProps) {
 
           <div className="chatbot-field chatbot-field--range">
             <div className="chatbot-field__row">
-              <label htmlFor="chatbot-temperature">Temperature</label>
+              <label htmlFor="chatbot-temperature">{t('chatbot.temperature')}</label>
               <output htmlFor="chatbot-temperature">{settings.temperature.toFixed(1)}</output>
             </div>
             <input
@@ -513,9 +531,9 @@ function ChatbotPage({ userName }: ChatbotPageProps) {
 
           <div className="chatbot-field">
             <div className="chatbot-field__row">
-              <label htmlFor="chatbot-system-prompt">System prompt</label>
+              <label htmlFor="chatbot-system-prompt">{t('chatbot.systemPrompt')}</label>
               <button type="button" className="chatbot-link-button" onClick={resetSettings}>
-                Restore defaults
+                {t('chatbot.restoreDefaults')}
               </button>
             </div>
             <textarea
@@ -535,24 +553,22 @@ function ChatbotPage({ userName }: ChatbotPageProps) {
           <div className="chatbot-actions">
             <button type="button" className="chatbot-secondary" onClick={resetChat}>
               <Trash2 size={15} />
-              Reset chat
+              {t('chatbot.resetChat')}
             </button>
             <button type="button" className="chatbot-secondary" onClick={() => void sendMessage('Hi!')}>
               <RefreshCcw size={15} />
-              Demo
+              {t('chatbot.demo')}
             </button>
           </div>
 
-          <p className="chatbot-hint">
-            Press Enter to send. Shift+Enter adds a line break. Messages and settings stay in your browser.
-          </p>
+          <p className="chatbot-hint">{t('chatbot.hint')}</p>
         </aside>
 
         <section className="chatbot-panel chatbot-conversation">
           <header className="chatbot-header">
             <div>
-              <p className="chatbot-eyebrow">Conversation</p>
-              <h2>Chat with Gemini</h2>
+              <p className="chatbot-eyebrow">{t('chatbot.conversation')}</p>
+              <h2>{t('chatbot.chatWithGemini')}</h2>
               <p className="chatbot-header__copy">{welcomeCopy}</p>
             </div>
 
@@ -562,8 +578,8 @@ function ChatbotPage({ userName }: ChatbotPageProps) {
             </div>
           </header>
 
-          <div className="chatbot-prompt-rail" aria-label="Quick prompts">
-            {QUICK_PROMPTS.map((prompt) => (
+          <div className="chatbot-prompt-rail" aria-label={t('chatbot.quickPrompts')}>
+            {quickPrompts.map((prompt) => (
               <button
                 key={prompt}
                 type="button"
@@ -579,11 +595,9 @@ function ChatbotPage({ userName }: ChatbotPageProps) {
 
           <div className={`chatbot-empty-state ${showStarterCard ? 'show' : ''}`}>
             <div className="chatbot-empty-card">
-              <p className="chatbot-eyebrow">Ready</p>
-              <h3>Start a live test</h3>
-              <p>
-                Ask a question, change the system prompt or model, then see the backend respond using app context.
-              </p>
+              <p className="chatbot-eyebrow">{t('chatbot.ready')}</p>
+              <h3>{t('chatbot.startLiveTest')}</h3>
+              <p>{t('chatbot.startLiveTestCopy')}</p>
             </div>
           </div>
 
@@ -604,7 +618,7 @@ function ChatbotPage({ userName }: ChatbotPageProps) {
                 <span className="chatbot-typing__icon" aria-hidden="true">
                   <LoaderCircle size={15} />
                 </span>
-                <span>Gemini is thinking...</span>
+                <span>{t('chatbot.thinking')}</span>
               </div>
             ) : null}
 
@@ -618,7 +632,7 @@ function ChatbotPage({ userName }: ChatbotPageProps) {
             }}
           >
             <label className="chatbot-sr-only" htmlFor="chatbot-message">
-              Message
+              {t('chatbot.message')}
             </label>
             <div className="chatbot-input-shell">
               <textarea
@@ -632,7 +646,7 @@ function ChatbotPage({ userName }: ChatbotPageProps) {
                     void sendMessage(draft);
                   }
                 }}
-                placeholder="Type your message..."
+                placeholder={t('chatbot.messagePlaceholder')}
                 rows={3}
                 disabled={isSending}
               />
@@ -640,15 +654,12 @@ function ChatbotPage({ userName }: ChatbotPageProps) {
                 type="submit"
                 className="chatbot-send-button"
                 disabled={isSending || draft.trim() === ''}
-                aria-label="Send message"
+                aria-label={t('chatbot.sendMessage')}
               >
                 {isSending ? <LoaderCircle size={16} className="chatbot-send-button__spinning" /> : <Send size={16} />}
               </button>
             </div>
-            <p className="chatbot-footer-hint">
-              Generic mode uses the Uptime Warden backend, but you can change prompt, model, and temperature from
-              the left panel.
-            </p>
+            <p className="chatbot-footer-hint">{t('chatbot.footerHint')}</p>
           </form>
         </section>
       </div>

@@ -1,6 +1,7 @@
 import { ChevronRight, Upload } from 'lucide-react';
 import { type ChangeEvent, useEffect, useRef, useState } from 'react';
 import { isApiError, saveStatusPage } from '../../lib/api';
+import { useAppLanguage } from '../../lib/language';
 import type { StatusPageMonitorOption } from './StatusPageMonitorsPage';
 import {
   createStatusPageId,
@@ -78,7 +79,7 @@ const readStoredStatusPageState = (statusPageId: string, statusPageName?: string
   return { storedSettings, formValues };
 };
 
-const densityOptions: DensityOption[] = [
+const densityOptionsDefaults: DensityOption[] = [
   {
     value: 'wide',
     label: 'Wide',
@@ -91,7 +92,7 @@ const densityOptions: DensityOption[] = [
   },
 ];
 
-const alignmentOptions: AlignmentOption[] = [
+const alignmentOptionsDefaults: AlignmentOption[] = [
   {
     value: 'left',
     label: 'Logo on left',
@@ -125,6 +126,7 @@ function StatusPageInfoPage({
   onBackToStatusPages,
   onOpenMonitorsStep,
 }: StatusPageInfoPageProps) {
+  const { language, t } = useAppLanguage();
   const [formValues, setFormValues] = useState<StatusPageFormValues>(
     () => readStoredStatusPageState(statusPageId, statusPageName).formValues,
   );
@@ -136,6 +138,36 @@ function StatusPageInfoPage({
   const [isSaving, setIsSaving] = useState(false);
   const [hydratedStatusPageId, setHydratedStatusPageId] = useState(statusPageId);
   const logoInputRef = useRef<HTMLInputElement | null>(null);
+  const densityOptions =
+    language === 'fr'
+      ? [
+          {
+            value: 'wide' as const,
+            label: t('statusPageInfo.density.wide.label'),
+            description: t('statusPageInfo.density.wide.description'),
+          },
+          {
+            value: 'compact' as const,
+            label: t('statusPageInfo.density.compact.label'),
+            description: t('statusPageInfo.density.compact.description'),
+          },
+        ]
+      : densityOptionsDefaults;
+  const alignmentOptions =
+    language === 'fr'
+      ? [
+          {
+            value: 'left' as const,
+            label: t('statusPageInfo.alignment.left.label'),
+            description: t('statusPageInfo.alignment.left.description'),
+          },
+          {
+            value: 'center' as const,
+            label: t('statusPageInfo.alignment.center.label'),
+            description: t('statusPageInfo.alignment.center.description'),
+          },
+        ]
+      : alignmentOptionsDefaults;
 
   const isNewStatusPage = statusPageId === 'new';
   const monitorIdsKey = monitors.map((monitor) => monitor.id).join('|');
@@ -230,7 +262,7 @@ function StatusPageInfoPage({
     }
 
     if (!formValues.pageName.trim()) {
-      setSaveNotice('Status page name is required.');
+      setSaveNotice(t('statusPageInfo.error.nameRequired'));
       return;
     }
 
@@ -241,7 +273,7 @@ function StatusPageInfoPage({
     }
 
     if (formValues.passwordEnabled && !formValues.password.trim()) {
-      setSaveNotice('Enter a password or disable password protection.');
+      setSaveNotice(t('statusPageInfo.error.passwordRequired'));
       return;
     }
 
@@ -288,7 +320,11 @@ function StatusPageInfoPage({
         promoteStatusPageDraft(statusPageId, resolvedStatusPageId);
       }
 
-      setSaveNotice(isNewStatusPage ? 'Status page created and published.' : 'Status page published.');
+      setSaveNotice(
+        isNewStatusPage
+          ? t('statusPageInfo.notice.createdAndPublished')
+          : t('statusPageInfo.notice.published'),
+      );
       if (isNewStatusPage) {
         onBackToStatusPages();
       }
@@ -301,8 +337,8 @@ function StatusPageInfoPage({
 
       setSaveNotice(
         fallbackMessage
-          ? `Saved locally, but server sync failed: ${fallbackMessage}`
-          : 'Saved locally, but server sync failed.',
+          ? t('statusPageInfo.notice.savedLocallyWithServerError', { message: fallbackMessage })
+          : t('statusPageInfo.notice.savedLocallyWithServerErrorFallback'),
       );
     } finally {
       setIsSaving(false);
@@ -314,16 +350,16 @@ function StatusPageInfoPage({
       <header className="status-page-info-header">
         <nav aria-label="Breadcrumb" className="status-page-info-breadcrumb">
           <button type="button" onClick={onBackToMonitoring}>
-            Monitoring
+            {t('statusPageInfo.breadcrumb.monitoring')}
           </button>
           <ChevronRight size={12} />
           <button type="button" onClick={onBackToStatusPages}>
-            Status pages
+            {t('statusPageInfo.breadcrumb.statusPages')}
           </button>
         </nav>
 
         <div className="status-page-info-header-copy">
-          <h1>{isNewStatusPage ? 'Create status page' : 'Global settings'}</h1>
+          <h1>{isNewStatusPage ? t('statusPageInfo.title.create') : t('statusPageInfo.title.settings')}</h1>
         </div>
       </header>
 
@@ -334,28 +370,28 @@ function StatusPageInfoPage({
           <section className="status-page-info-card status-page-info-main-card">
             <div className="status-page-info-section two-columns">
               <label className="status-page-info-field">
-                <span>Name of the status page</span>
-                <small>Required. Used in page heading, browser title and shared links.</small>
+                <span>{t('statusPageInfo.name.label')}</span>
+                <small>{t('statusPageInfo.name.hint')}</small>
                 <input
                   type="text"
                   value={formValues.pageName}
                   onChange={updateTextField('pageName')}
-                  placeholder="Status page"
+                  placeholder={t('statusPageInfo.name.placeholder')}
                   autoComplete="off"
                 />
               </label>
 
               <label className="status-page-info-field">
                 <div className="status-page-info-field-topline">
-                  <span>Custom domain</span>
-                  <em>Optional</em>
+                  <span>{t('statusPageInfo.customDomain.label')}</span>
+                  <em>{t('statusPageInfo.customDomain.optional')}</em>
                 </div>
-                <small>Host the page on your own domain when you are ready to publish it.</small>
+                <small>{t('statusPageInfo.customDomain.hint')}</small>
                 <input
                   type="text"
                   value={formValues.customDomain}
                   onChange={updateTextField('customDomain')}
-                  placeholder="e.g. status.yourdomain.com"
+                  placeholder={t('statusPageInfo.customDomain.placeholder')}
                   autoComplete="off"
                 />
               </label>
@@ -363,8 +399,8 @@ function StatusPageInfoPage({
 
             <div className="status-page-info-section">
               <div className="status-page-info-section-header">
-                <h2>Logo</h2>
-                <p>Upload a brand mark for the page header. PNG, JPG or SVG recommended.</p>
+                <h2>{t('statusPageInfo.logo.title')}</h2>
+                <p>{t('statusPageInfo.logo.hint')}</p>
               </div>
 
               <input
@@ -384,11 +420,11 @@ function StatusPageInfoPage({
                   <Upload size={16} />
                 </span>
                 <div className="status-page-info-logo-copy">
-                  <strong>{formValues.logoName || 'Drag and drop your logo here or choose by click'}</strong>
+                  <strong>{formValues.logoName || t('statusPageInfo.logo.dropzoneEmpty')}</strong>
                   <small>
                     {formValues.logoName
-                      ? 'Click to replace the selected file.'
-                      : 'Best result: square logo, lightweight image and transparent background.'}
+                      ? t('statusPageInfo.logo.dropzoneSelected')
+                      : t('statusPageInfo.logo.bestResult')}
                   </small>
                 </div>
               </button>
@@ -396,15 +432,15 @@ function StatusPageInfoPage({
 
             <div className="status-page-info-section">
               <div className="status-page-info-section-header">
-                <h2>Layout</h2>
-                <p>Choose spacing and logo placement for the public page.</p>
+                <h2>{t('statusPageInfo.layout.title')}</h2>
+                <p>{t('statusPageInfo.layout.hint')}</p>
               </div>
 
               <div className="status-page-info-preview-grid two-columns">
                 <div className="status-page-info-preview-block">
                   <div className="status-page-info-preview-block-head">
-                    <h3>Density</h3>
-                    <p>For better readability, compact to display as much info at once as possible.</p>
+                    <h3>{t('statusPageInfo.density.title')}</h3>
+                    <p>{t('statusPageInfo.density.hint')}</p>
                   </div>
 
                   <div className="status-page-info-preview-options">
@@ -442,8 +478,8 @@ function StatusPageInfoPage({
 
                 <div className="status-page-info-preview-block">
                   <div className="status-page-info-preview-block-head">
-                    <h3>Alignment</h3>
-                    <p>Use maximum space with logo on left or push your brand first.</p>
+                    <h3>{t('statusPageInfo.alignment.title')}</h3>
+                    <p>{t('statusPageInfo.alignment.hint')}</p>
                   </div>
 
                   <div className="status-page-info-preview-options">
@@ -483,8 +519,8 @@ function StatusPageInfoPage({
 
             <div className="status-page-info-section">
               <div className="status-page-info-section-header">
-                <h2>Password</h2>
-                <p>Protect the page with a password if you do not want it to be public yet.</p>
+                <h2>{t('statusPageInfo.password.title')}</h2>
+                <p>{t('statusPageInfo.password.hint')}</p>
               </div>
 
               <label className="status-page-info-toggle-item status-page-info-password-toggle">
@@ -498,59 +534,63 @@ function StatusPageInfoPage({
                 </span>
 
                 <div className="status-page-info-toggle-copy">
-                  <strong>Password protection</strong>
+                  <strong>{t('statusPageInfo.password.toggle.label')}</strong>
                   <small>
                     {formValues.passwordEnabled
-                      ? 'Visitors must enter the password to open this status page.'
-                      : 'The status page stays public without password protection.'}
+                      ? t('statusPageInfo.password.toggle.enabledHint')
+                      : t('statusPageInfo.password.toggle.disabledHint')}
                   </small>
                 </div>
 
                 <span
                   className={`status-page-info-password-toggle-badge ${formValues.passwordEnabled ? 'enabled' : 'disabled'}`}
                 >
-                  {formValues.passwordEnabled ? 'Enabled' : 'Disabled'}
+                  {formValues.passwordEnabled
+                    ? t('statusPageInfo.password.toggle.enabled')
+                    : t('statusPageInfo.password.toggle.disabled')}
                 </span>
               </label>
 
               {formValues.passwordEnabled ? (
                 <label className="status-page-info-field">
-                  <span>Password</span>
+                  <span>{t('statusPageInfo.password.fieldLabel')}</span>
                   <input
                     type="password"
                     value={formValues.password}
                     onChange={updateTextField('password')}
-                    placeholder="Enter password"
+                    placeholder={t('statusPageInfo.password.fieldPlaceholder')}
                     autoComplete="new-password"
                   />
                 </label>
               ) : (
-                <p className="status-page-info-password-note">
-                  Enable password protection to require a password on the public status page.
-                </p>
+                <p className="status-page-info-password-note">{t('statusPageInfo.password.note')}</p>
               )}
             </div>
 
             <footer className="status-page-info-actions">
               <button type="button" className="status-page-info-secondary" onClick={onOpenMonitorsStep}>
-                Back to monitors
+                {t('statusPageInfo.actions.backToMonitors')}
               </button>
               <button type="button" className="status-page-info-primary" onClick={handleFinishSetup} disabled={isSaving}>
-                {isSaving ? 'Saving...' : isNewStatusPage ? 'Finish: Create status page' : 'Save global settings'}
+                {isSaving
+                  ? t('statusPageInfo.actions.saving')
+                  : isNewStatusPage
+                    ? t('statusPageInfo.actions.finishCreate')
+                    : t('statusPageInfo.actions.saveSettings')}
               </button>
             </footer>
           </section>
         </div>
 
-        <aside className="status-page-info-sidebar" aria-label="Status page setup steps">
+        <aside className="status-page-info-sidebar" aria-label={t('statusPageInfo.sidebar.ariaLabel')}>
           <section className="status-page-info-sidebar-card">
-            <p className="status-page-info-sidebar-label">Setup flow</p>
+            <p className="status-page-info-sidebar-label">{t('statusPageInfo.sidebar.setupFlow')}</p>
 
             <button type="button" className="status-page-info-step link" onClick={onOpenMonitorsStep}>
               <span className="status-page-info-step-index">1</span>
               <div className="status-page-info-step-copy">
-                <strong>Monitors</strong>
-                <small>Select the services to display</small>
+                <strong>{t('statusPageInfo.sidebar.stepMonitors')}</strong>
+                <small>{t('statusPageInfo.sidebar.stepMonitorsHint')}</small>
               </div>
               <ChevronRight size={15} />
             </button>
@@ -558,19 +598,19 @@ function StatusPageInfoPage({
             <div className="status-page-info-step active">
               <span className="status-page-info-step-index">2</span>
               <div className="status-page-info-step-copy">
-                <strong>Global settings</strong>
-                <small>Name, domain, logo and password</small>
+                <strong>{t('statusPageInfo.sidebar.stepGlobalSettings')}</strong>
+                <small>{t('statusPageInfo.sidebar.stepGlobalSettingsHint')}</small>
               </div>
             </div>
           </section>
 
           <section className="status-page-info-sidebar-card">
-            <p className="status-page-info-sidebar-label">Summary</p>
-            <h3>{formValues.pageName.trim() || statusPageName || 'New status page'}</h3>
+            <p className="status-page-info-sidebar-label">{t('statusPageInfo.sidebar.summary')}</p>
+            <h3>{formValues.pageName.trim() || statusPageName || t('statusPageInfo.sidebar.newStatusPage')}</h3>
             <p className="status-page-info-sidebar-summary">
               {selectedMonitorIds.length > 0
-                ? `${selectedMonitorIds.length} monitor${selectedMonitorIds.length > 1 ? 's' : ''} selected.`
-                : 'No monitors selected yet.'}
+                ? t('statusPageInfo.sidebar.selectedMonitorsCount', { count: selectedMonitorIds.length })
+                : t('statusPageInfo.sidebar.noMonitorsSelected')}
             </p>
 
             {selectedPreview.length > 0 ? (
@@ -578,35 +618,41 @@ function StatusPageInfoPage({
                 {selectedPreview.map((monitor) => (
                   <span key={`summary-${monitor.id}`}>{monitor.name}</span>
                 ))}
-                {selectedOverflowCount > 0 ? <span>+{selectedOverflowCount} more</span> : null}
+                {selectedOverflowCount > 0 ? (
+                  <span>{t('statusPageInfo.sidebar.more', { count: selectedOverflowCount })}</span>
+                ) : null}
               </div>
             ) : null}
 
             <div className="status-page-info-sidebar-meta">
               <div>
-                <span>Custom domain</span>
-                <strong>{formValues.customDomain.trim() || 'Not set'}</strong>
+                <span>{t('statusPageInfo.sidebar.customDomain')}</span>
+                <strong>{formValues.customDomain.trim() || t('statusPageInfo.sidebar.notSet')}</strong>
               </div>
               <div>
-                <span>Logo</span>
-                <strong>{formValues.logoName.trim() || 'Not uploaded'}</strong>
+                <span>{t('statusPageInfo.sidebar.logo')}</span>
+                <strong>{formValues.logoName.trim() || t('statusPageInfo.sidebar.notUploaded')}</strong>
               </div>
               <div>
-                <span>Density</span>
-                <strong>{formValues.density === 'compact' ? 'Compact' : 'Wide'}</strong>
+                <span>{t('statusPageInfo.sidebar.densityCompact')}</span>
+                <strong>{formValues.density === 'compact' ? t('statusPageInfo.sidebar.densityCompact') : t('statusPageInfo.sidebar.densityWide')}</strong>
               </div>
               <div>
-                <span>Alignment</span>
-                <strong>{formValues.alignment === 'center' ? 'Logo center' : 'Logo left'}</strong>
+                <span>{t('statusPageInfo.sidebar.alignmentCenter')}</span>
+                <strong>
+                  {formValues.alignment === 'center'
+                    ? t('statusPageInfo.sidebar.alignmentCenter')
+                    : t('statusPageInfo.sidebar.alignmentLeft')}
+                </strong>
               </div>
               <div>
-                <span>Password</span>
+                <span>{t('statusPageInfo.password.fieldLabel')}</span>
                 <strong>
                   {formValues.passwordEnabled
                     ? formValues.password.trim()
-                      ? 'Enabled'
-                      : 'Missing password'
-                    : 'Disabled'}
+                      ? t('statusPageInfo.password.toggle.enabled')
+                      : t('statusPageInfo.sidebar.passwordMissing')
+                    : t('statusPageInfo.password.toggle.disabled')}
                 </strong>
               </div>
             </div>

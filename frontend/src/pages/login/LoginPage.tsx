@@ -9,6 +9,8 @@ import tileE from "../../images/login-tile-e.png";
 import tileF from "../../images/login-tile-f.png";
 import tileG from "../../images/login-tile-g.png";
 import tileH from "../../images/login-tile-h.png";
+import LanguageSwitcher from "../../components/LanguageSwitcher";
+import { useAppLanguage } from "../../lib/language";
 import "./LoginPage.css";
 
 interface LoginCredentials {
@@ -57,6 +59,7 @@ function LoginPage({
   onVerifyCode,
   onResetPassword,
 }: LoginPageProps) {
+  const { t } = useAppLanguage();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(false);
@@ -104,9 +107,7 @@ function LoginPage({
   const handleEmailChange = (value: string) => {
     setRequestEmail(value);
     if (value.trim() && !validateEmail(value.trim())) {
-      setEmailError(
-        "Please enter a valid email address (e.g., user@example.com)",
-      );
+      setEmailError(t("settings.errorInvalidEmail"));
     } else {
       setEmailError(null);
     }
@@ -160,22 +161,23 @@ function LoginPage({
 
   return (
     <main className="login-page">
+      <LanguageSwitcher />
       <div className="login-shell">
         <section className="login-left">
           <p className="login-brand">Monitoring</p>
           <h1 className="login-title">
-            Welcome to
-            <span>Monitiring</span>
+            {t("auth.welcomeTo")}
+            <span>uptimeWarden</span>
           </h1>
 
           <form className="login-form" onSubmit={handleSubmit}>
-            <label htmlFor="login-email">Email</label>
+            <label htmlFor="login-email">{t("common.email")}</label>
             <input
               id="login-email"
               name="email"
               type="email"
               autoComplete="email"
-              placeholder="username@gmail.com"
+              placeholder={t("auth.emailPlaceholder")}
               value={email}
               onChange={(event) => {
                 setEmail(event.target.value);
@@ -188,14 +190,14 @@ function LoginPage({
               <p className="login-form-error">{loginEmailError}</p>
             ) : null}
 
-            <label htmlFor="login-password">Password</label>
+            <label htmlFor="login-password">{t("auth.password")}</label>
             <div className="login-password-wrap">
               <input
                 id="login-password"
                 name="password"
                 type={showPassword ? "text" : "password"}
                 autoComplete="current-password"
-                placeholder="XXXXXXXXXX"
+                placeholder={t("auth.password")}
                 value={password}
                 onChange={(event) => {
                   setPassword(event.target.value);
@@ -207,7 +209,9 @@ function LoginPage({
               <button
                 type="button"
                 className="login-password-toggle"
-                aria-label={showPassword ? "Hide password" : "Show password"}
+                aria-label={
+                  showPassword ? t("auth.hidePassword") : t("auth.showPassword")
+                }
                 onClick={() => setShowPassword((prev) => !prev)}
                 disabled={isSubmitting}
               >
@@ -228,7 +232,7 @@ function LoginPage({
                   onChange={(event) => setRememberMe(event.target.checked)}
                   disabled={isSubmitting}
                 />
-                <span>Remember me</span>
+                <span>{t("auth.rememberMe")}</span>
               </label>
               <a
                 href="#"
@@ -245,7 +249,7 @@ function LoginPage({
                   setForgotSuccess(null);
                 }}
               >
-                Forget password ?
+                {t("auth.forgotPassword")}
               </a>
             </div>
 
@@ -255,7 +259,7 @@ function LoginPage({
                 className="login-btn-primary"
                 disabled={!isFormValid || isSubmitting}
               >
-                {isSubmitting ? "Signing in..." : "Log in"}
+                {isSubmitting ? t("auth.signingIn") : t("auth.signIn")}
               </button>
               <button
                 type="button"
@@ -267,13 +271,13 @@ function LoginPage({
                   setRequestSuccess(null);
                 }}
               >
-                Create account
+                {t("auth.createAccount")}
               </button>
             </div>
           </form>
 
           <p className="login-footer">
-            Privacy policy | Terms of service Status page by{" "}
+            {t("auth.footer")}
             <strong>MONITORING</strong>
           </p>
 
@@ -287,43 +291,42 @@ function LoginPage({
             >
               <div className="login-modal-container">
                 <div className="login-modal-header">
-                  <h2>Account creation request</h2>
+                  <h2>{t("auth.accountCreationRequestTitle")}</h2>
                   <button
                     type="button"
                     className="login-modal-close"
                     onClick={() => setIsRequestModalOpen(false)}
-                    aria-label="Close"
+                    aria-label={t("common.close")}
                   >
                     <X size={20} />
                   </button>
                 </div>
                 <div className="login-modal-body">
                   <p className="login-modal-description">
-                    Please complete the form below to send an
-                    account creation request to the super admin.
+                    {t("auth.accountCreationRequestDescription")}
                   </p>
 
                   <label className="login-modal-label" htmlFor="request-name">
-                    Full name *
+                    {t("auth.fullName")} *
                   </label>
                   <input
                     id="request-name"
                     className="login-modal-input"
                     type="text"
-                    placeholder="John Doe"
+                    placeholder={t("auth.nameExample")}
                     value={requestName}
                     onChange={(e) => setRequestName(e.target.value)}
                     disabled={isRequestSubmitting}
                   />
 
                   <label className="login-modal-label" htmlFor="request-email">
-                    Email *
+                    {t("common.email")} *
                   </label>
                   <input
                     id="request-email"
                     className={`login-modal-input ${emailError ? "login-modal-input-error" : ""}`}
                     type="email"
-                    placeholder="john.doe@example.com"
+                    placeholder={t("auth.emailPlaceholder")}
                     value={requestEmail}
                     onChange={(e) => handleEmailChange(e.target.value)}
                     disabled={isRequestSubmitting}
@@ -336,17 +339,17 @@ function LoginPage({
                     className="login-modal-label"
                     htmlFor="request-message"
                   >
-                    Message (optional)
+                    {t("auth.messageOptional")}
                   </label>
-                  <textarea
-                    id="request-message"
-                    className="login-modal-textarea"
-                    placeholder="Briefly explain why you need an account..."
-                    value={requestMessage}
-                    onChange={(e) => setRequestMessage(e.target.value)}
-                    disabled={isRequestSubmitting}
-                    rows={3}
-                  />
+                    <textarea
+                      id="request-message"
+                      className="login-modal-textarea"
+                    placeholder={t("auth.accountCreationRequestPlaceholder")}
+                      value={requestMessage}
+                      onChange={(e) => setRequestMessage(e.target.value)}
+                      disabled={isRequestSubmitting}
+                      rows={3}
+                    />
 
                   {requestError && (
                     <p className="login-modal-error">{requestError}</p>
@@ -365,14 +368,12 @@ function LoginPage({
                     }
                     onClick={async () => {
                       if (!onRequestAccount) {
-                        setRequestError("Feature unavailable.");
+                        setRequestError(t("auth.featureUnavailable"));
                         return;
                       }
                       // Validate email before submit
                       if (!validateEmail(requestEmail.trim())) {
-                        setEmailError(
-                          "Please enter a valid email address",
-                        );
+                        setEmailError(t("settings.errorInvalidEmail"));
                         return;
                       }
                       setIsRequestSubmitting(true);
@@ -386,9 +387,7 @@ function LoginPage({
                       if (error) {
                         setRequestError(error);
                       } else {
-                        setRequestSuccess(
-                          "Your request has been sent to the super admin. You will receive a response by email.",
-                        );
+                        setRequestSuccess(t("auth.requestSent"));
                         // Reset the form after success
                         setRequestEmail("");
                         setRequestName("");
@@ -397,9 +396,7 @@ function LoginPage({
                       setIsRequestSubmitting(false);
                     }}
                   >
-                    {isRequestSubmitting
-                      ? "Sending..."
-                      : "Send request"}
+                    {isRequestSubmitting ? t("auth.sending") : t("auth.sendRequest")}
                   </button>
                 </div>
               </div>
@@ -428,20 +425,20 @@ function LoginPage({
                         setIsForgotPasswordOpen(false);
                       }
                     }}
-                    aria-label="Back"
+                    aria-label={t("common.back")}
                   >
                     <ArrowLeft size={20} />
                   </button>
                   <h2>
-                    {forgotStep === 1 && "Forgot password"}
-                    {forgotStep === 2 && "Verification code"}
-                    {forgotStep === 3 && "New password"}
+                    {forgotStep === 1 && t("auth.forgotPasswordTitle")}
+                    {forgotStep === 2 && t("auth.verificationCode")}
+                    {forgotStep === 3 && t("settings.newPassword")}
                   </h2>
                   <button
                     type="button"
                     className="login-modal-close"
                     onClick={() => setIsForgotPasswordOpen(false)}
-                    aria-label="Close"
+                    aria-label={t("common.close")}
                   >
                     <X size={20} />
                   </button>
@@ -451,19 +448,19 @@ function LoginPage({
                   {forgotStep === 1 && (
                     <>
                       <p className="login-modal-description">
-                        Enter your email address to receive a verification code.
+                        {t("auth.enterEmailForCode")}
                       </p>
                       <label
                         className="login-modal-label"
                         htmlFor="forgot-email"
                       >
-                        Email *
+                        {t("common.email")} *
                       </label>
                       <input
                         id="forgot-email"
                         className={`login-modal-input ${forgotError ? "login-modal-input-error" : ""}`}
                         type="email"
-                        placeholder="john.doe@example.com"
+                        placeholder={t("auth.emailPlaceholder")}
                         value={forgotEmail}
                         onChange={(e) => {
                           setForgotEmail(e.target.value);
@@ -482,9 +479,7 @@ function LoginPage({
                           setForgotError(null);
                           // Validate email format
                           if (!validateEmail(forgotEmail.trim())) {
-                            setForgotError(
-                              "Please enter a valid email address",
-                            );
+                            setForgotError(t("settings.errorInvalidEmail"));
                             return;
                           }
                           setIsForgotSubmitting(true);
@@ -499,17 +494,13 @@ function LoginPage({
                               setForgotStep(2);
                             }
                           } catch {
-                            setForgotError(
-                              "Unable to send the verification code.",
-                            );
+                            setForgotError(t("auth.unableToSendCode"));
                           } finally {
                             setIsForgotSubmitting(false);
                           }
                         }}
                       >
-                        {isForgotSubmitting
-                          ? "Sending..."
-                          : "Send code"}
+                        {isForgotSubmitting ? t("auth.sending") : t("auth.sendCode")}
                       </button>
                     </>
                   )}
@@ -518,14 +509,16 @@ function LoginPage({
                   {forgotStep === 2 && (
                     <>
                       <p className="login-modal-description">
-                        A 6-digit code has been sent to{" "}
-                        <strong>{forgotEmail}</strong>. Entrez-le ci-dessous.
+                        {t("auth.codeSentDescription").replace(
+                          "{email}",
+                          forgotEmail,
+                        )}
                       </p>
                       <label
                         className="login-modal-label"
                         htmlFor="verification-code"
                       >
-                        Verification code *
+                        {t("auth.verificationCode")} *
                       </label>
                       <input
                         id="verification-code"
@@ -562,18 +555,20 @@ function LoginPage({
                               verificationCode,
                             );
                             if (!isValid) {
-                              setForgotError("Invalid or expired code");
+                              setForgotError(t("auth.invalidOrExpiredCode"));
                             } else {
                               setForgotStep(3);
                             }
                           } catch {
-                            setForgotError("Invalid or expired code");
+                            setForgotError(t("auth.invalidOrExpiredCode"));
                           } finally {
                             setIsForgotSubmitting(false);
                           }
                         }}
                       >
-                        {isForgotSubmitting ? "Verifying..." : "Verify"}
+                        {isForgotSubmitting
+                          ? t("auth.verifying")
+                          : t("auth.verify")}
                       </button>
                       <button
                         type="button"
@@ -588,17 +583,17 @@ function LoginPage({
                             if (error) {
                               setForgotError(error);
                             } else {
-                              setForgotSuccess("A new code has been sent");
+                              setForgotSuccess(t("auth.newCodeSent"));
                               setTimeout(() => setForgotSuccess(null), 3000);
                             }
                           } catch {
-                            setForgotError("Unable to resend the code.");
+                            setForgotError(t("auth.unableToSendCode"));
                           } finally {
                             setIsForgotSubmitting(false);
                           }
                         }}
                       >
-                        Resend code
+                        {t("auth.resendCode")}
                       </button>
                       {forgotSuccess && (
                         <p className="login-modal-success">{forgotSuccess}</p>
@@ -610,13 +605,13 @@ function LoginPage({
                   {forgotStep === 3 && (
                     <>
                       <p className="login-modal-description">
-                        Create a new secure password.
+                        {t("auth.createNewSecurePassword")}
                       </p>
                       <label
                         className="login-modal-label"
                         htmlFor="new-password"
                       >
-                        New password *
+                        {t("settings.newPassword")} *
                       </label>
                       <div className="login-password-wrap">
                         <input
@@ -624,7 +619,7 @@ function LoginPage({
                           className="login-modal-input"
                           type={showNewPassword ? "text" : "password"}
                           autoComplete="new-password"
-                          placeholder="Min. 6 characters, 1 uppercase, 1 number, 1 special character"
+                          placeholder={t("auth.passwordRequirementsPlaceholder")}
                           value={newPassword}
                           onChange={(e) => {
                             setNewPassword(e.target.value);
@@ -635,7 +630,11 @@ function LoginPage({
                         <button
                           type="button"
                           className="login-password-toggle"
-                          aria-label={showNewPassword ? "Hide" : "Show"}
+                          aria-label={
+                            showNewPassword
+                              ? t("auth.hidePassword")
+                              : t("auth.showPassword")
+                          }
                           onClick={() => setShowNewPassword((prev) => !prev)}
                           disabled={isForgotSubmitting}
                         >
@@ -651,7 +650,7 @@ function LoginPage({
                         className="login-modal-label"
                         htmlFor="confirm-password"
                       >
-                        Confirm password *
+                        {t("settings.confirmPassword")} *
                       </label>
                       <div className="login-password-wrap">
                         <input
@@ -659,7 +658,7 @@ function LoginPage({
                           className="login-modal-input"
                           type={showConfirmPassword ? "text" : "password"}
                           autoComplete="new-password"
-                          placeholder="Confirm your password"
+                          placeholder={t("auth.repeatPassword")}
                           value={confirmPassword}
                           onChange={(e) => {
                             setConfirmPassword(e.target.value);
@@ -671,7 +670,9 @@ function LoginPage({
                           type="button"
                           className="login-password-toggle"
                           aria-label={
-                            showConfirmPassword ? "Hide" : "Show"
+                            showConfirmPassword
+                              ? t("auth.hidePassword")
+                              : t("auth.showPassword")
                           }
                           onClick={() =>
                             setShowConfirmPassword((prev) => !prev)
@@ -689,26 +690,26 @@ function LoginPage({
                       {/* Password strength indicator */}
                       {newPassword && (
                         <div className="password-strength">
-                          <p>Password must contain:</p>
+                          <p>{t("auth.passwordMustContain")}</p>
                           <ul>
                             <li
                               className={newPassword.length >= 6 ? "valid" : ""}
                             >
-                              At least 6 characters
+                              {t("settings.passwordRuleLength")}
                             </li>
                             <li
                               className={
                                 /[A-Z]/.test(newPassword) ? "valid" : ""
                               }
                             >
-                              One uppercase letter
+                              {t("settings.passwordRuleUppercase")}
                             </li>
                             <li
                               className={
                                 /[0-9]/.test(newPassword) ? "valid" : ""
                               }
                             >
-                              One number
+                              {t("settings.passwordRuleNumber")}
                             </li>
                             <li
                               className={
@@ -719,7 +720,7 @@ function LoginPage({
                                   : ""
                               }
                             >
-                              One special character
+                              {t("settings.passwordRuleSpecial")}
                             </li>
                           </ul>
                         </div>
@@ -747,7 +748,7 @@ function LoginPage({
                           setForgotError(null);
                           if (newPassword !== confirmPassword) {
                             setForgotError(
-                              "Passwords do not match",
+                              t("settings.errorPasswordMismatch"),
                             );
                             return;
                           }
@@ -760,7 +761,7 @@ function LoginPage({
                             setForgotError(error);
                           } else {
                             setForgotSuccess(
-                              "Your password has been reset successfully!",
+                              t("auth.passwordResetSuccess"),
                             );
                             setTimeout(() => {
                               setIsForgotPasswordOpen(false);
@@ -771,8 +772,8 @@ function LoginPage({
                         }}
                       >
                         {isForgotSubmitting
-                          ? "Resetting..."
-                          : "Reset password"}
+                          ? t("auth.resetting")
+                          : t("auth.resetPassword")}
                       </button>
                     </>
                   )}
@@ -798,12 +799,14 @@ function LoginPage({
                 style={{ maxWidth: 460 }}
               >
                 <div className="login-modal-header">
-                  <h2 id="account-disabled-title">Account disabled</h2>
+                  <h2 id="account-disabled-title">
+                    {t("auth.accountDisabledTitle")}
+                  </h2>
                   <button
                     type="button"
                     className="login-modal-close"
                     onClick={() => setAccountDisabledPopupOpen(false)}
-                    aria-label="Close"
+                    aria-label={t("common.close")}
                   >
                     <X size={20} />
                   </button>
@@ -819,17 +822,17 @@ function LoginPage({
                     🚫
                   </div>
                   <p className="login-modal-description">
-                    {accountDisabledMessage ?? "Your account has been disabled."}
+                    {accountDisabledMessage ?? t("auth.accountDisabledMessage")}
                   </p>
                   <p style={{ marginTop: 12, color: "#5b6472" }}>
-                    Contact an administrator to reactivate access.
+                    {t("auth.contactAdmin")}
                   </p>
                   <button
                     type="button"
                     className="login-modal-submit"
                     onClick={() => setAccountDisabledPopupOpen(false)}
                   >
-                    Understood
+                    {t("auth.understood")}
                   </button>
                 </div>
               </div>

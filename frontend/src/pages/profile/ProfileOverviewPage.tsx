@@ -12,6 +12,8 @@ import {
 import { useState } from "react";
 import type { AuthUser } from "../../lib/api";
 import { resolveAvatarUrl } from "../../lib/api";
+import { useAppLanguage, type TranslationKey } from "../../lib/language";
+import LanguageSwitcher from "../../components/LanguageSwitcher";
 import monitoringMenuIcon from "../../images/m1.png";
 import ExclamationHexagonIcon from "../../ExclamationHexagonIcon";
 
@@ -23,14 +25,17 @@ interface ProfileOverviewPageProps {
   onLogout: () => void;
 }
 
-const roleLabel = (role?: AuthUser["role"]): string => {
+const roleLabel = (
+  role?: AuthUser["role"],
+  t?: (key: TranslationKey) => string,
+): string => {
   switch (role) {
     case "super_admin":
-      return "Super Admin";
+      return t ? t("role.superAdmin") : "Super Admin";
     case "admin":
-      return "Admin";
+      return t ? t("role.admin") : "Admin";
     default:
-      return "User";
+      return t ? t("role.user") : "User";
   }
 };
 
@@ -41,12 +46,13 @@ const ProfileOverviewPage = ({
   onOpenSettings,
   onLogout,
 }: ProfileOverviewPageProps) => {
+  const { t } = useAppLanguage();
   const displayName = currentUser?.name || currentUser?.email || "Account";
   const displayEmail = currentUser?.email || "No email available";
   const avatarUrl = currentUser?.avatar
     ? resolveAvatarUrl(currentUser.avatar)
     : null;
-  const sessionState = authToken ? "Connected" : "Offline";
+  const sessionState = authToken ? t("profile.connected") : t("profile.offline");
   const [isProfilePopupOpen, setIsProfilePopupOpen] = useState(false);
   const initials =
     (currentUser?.name || currentUser?.email || "")
@@ -58,6 +64,7 @@ const ProfileOverviewPage = ({
 
   return (
     <div className="profile-page-shell">
+      <LanguageSwitcher />
       <span
         className="profile-page-orb profile-page-orb-left"
         aria-hidden="true"
@@ -71,12 +78,12 @@ const ProfileOverviewPage = ({
           <button
             className="sidebar-collapse-toggle"
             type="button"
-            aria-label="Sidebar pinned"
+            aria-label={t("common.collapseSidebar")}
           >
             <ChevronRight size={14} />
           </button>
           <div className="brand-copy">
-            <h2>Monitoring</h2>
+            <h2>{t("menu.monitoring")}</h2>
           </div>
         </div>
 
@@ -93,13 +100,13 @@ const ProfileOverviewPage = ({
                 className="menu-monitoring-image"
               />
             </span>
-            <span className="menu-text">Monitoring</span>
+            <span className="menu-text">{t("menu.monitoring")}</span>
           </button>
           <button className="menu-link" type="button" aria-disabled="true">
             <span className="menu-icon-slot" aria-hidden="true">
               <ExclamationHexagonIcon size={16} className="menu-custom-icon" />
             </span>
-            <span className="menu-text">Incidents</span>
+            <span className="menu-text">{t("menu.incidents")}</span>
           </button>
           <button className="menu-link" type="button" aria-disabled="true">
             <span className="menu-icon-slot" aria-hidden="true">
@@ -107,19 +114,19 @@ const ProfileOverviewPage = ({
                 sensors
               </span>
             </span>
-            <span className="menu-text">Status pages</span>
+            <span className="menu-text">{t("menu.statusPages")}</span>
           </button>
           <button className="menu-link" type="button" aria-disabled="true">
             <span className="menu-icon-slot" aria-hidden="true">
               <Wrench size={15} />
             </span>
-            <span className="menu-text">Maintenance</span>
+            <span className="menu-text">{t("menu.maintenance")}</span>
           </button>
           <button className="menu-link" type="button" aria-disabled="true">
             <span className="menu-icon-slot" aria-hidden="true">
               <Users size={15} />
             </span>
-            <span className="menu-text">Team members</span>
+            <span className="menu-text">{t("menu.teamMembers")}</span>
           </button>
           <button className="menu-link" type="button" aria-disabled="true">
             <span className="menu-icon-slot" aria-hidden="true">
@@ -127,7 +134,7 @@ const ProfileOverviewPage = ({
                 graph_1
               </span>
             </span>
-            <span className="menu-text">Integrations & API</span>
+            <span className="menu-text">{t("menu.integrationsApi")}</span>
           </button>
         </nav>
 
@@ -146,7 +153,7 @@ const ProfileOverviewPage = ({
           <button
             className="logout-button"
             type="button"
-            aria-label="Open profile page"
+            aria-label={t("common.profile")}
             onClick={onGoDashboard}
           >
             <ChevronDown size={14} />
@@ -157,9 +164,9 @@ const ProfileOverviewPage = ({
       <main className="profile-page-main">
         <header className="workspace-top profile-page-top">
           <div>
-            <span className="profile-page-badge">USER SPACE</span>
-            <h1>Account center</h1>
-            <p>Quickly access the essential actions in your account.</p>
+            <span className="profile-page-badge">{t("profile.userSpace")}</span>
+            <h1>{t("profile.accountCenter")}</h1>
+            <p>{t("profile.subtitle")}</p>
           </div>
         </header>
 
@@ -175,11 +182,11 @@ const ProfileOverviewPage = ({
                   )}
                 </div>
                 <div className="profile-hero-copy-block">
-                  <span className="profile-hero-kicker">Welcome back</span>
+                  <span className="profile-hero-kicker">{t("profile.welcomeBack")}</span>
                   <div className="profile-hero-name-row">
                     <h2>{displayName}</h2>
                     <span className="profile-role-pill">
-                      {roleLabel(currentUser?.role)}
+                      {roleLabel(currentUser?.role, t)}
                     </span>
                   </div>
                   <p>{displayEmail}</p>
@@ -207,8 +214,8 @@ const ProfileOverviewPage = ({
                   <LayoutDashboard size={18} />
                 </span>
                 <span className="profile-action-copy-block">
-                  <strong>Dashboard</strong>
-                  <span>Back to dashboard</span>
+                  <strong>{t("profile.dashboard")}</strong>
+                  <span>{t("profile.dashboardHint")}</span>
                 </span>
                 <ChevronRight size={18} />
               </button>
@@ -225,8 +232,8 @@ const ProfileOverviewPage = ({
                   <UserCircle2 size={18} />
                 </span>
                 <span className="profile-action-copy-block">
-                  <strong>Profile</strong>
-                  <span>Edit your information</span>
+                  <strong>{t("profile.profile")}</strong>
+                  <span>{t("profile.profileHint")}</span>
                 </span>
                 <ChevronRight size={18} />
               </button>
@@ -243,8 +250,8 @@ const ProfileOverviewPage = ({
                   <Settings2 size={18} />
                 </span>
                 <span className="profile-action-copy-block">
-                  <strong>Settings</strong>
-                  <span>Preferences and security</span>
+                  <strong>{t("profile.settings")}</strong>
+                  <span>{t("profile.settingsHint")}</span>
                 </span>
                 <ChevronRight size={18} />
               </button>
@@ -261,8 +268,8 @@ const ProfileOverviewPage = ({
                   <LogOut size={18} />
                 </span>
                 <span className="profile-action-copy-block">
-                  <strong>Log out</strong>
-                  <span>Sign out of the session</span>
+                  <strong>{t("profile.logout")}</strong>
+                  <span>{t("profile.logoutHint")}</span>
                 </span>
                 <ChevronRight size={18} />
               </button>
@@ -270,30 +277,25 @@ const ProfileOverviewPage = ({
           </section>
 
           <aside className="profile-page-card profile-overview-card">
-            <h2>Quick Overview</h2>
-            <p className="profile-overview-intro">
-              Quickly access the important settings for your account.
-            </p>
+            <h2>{t("profile.overviewTitle")}</h2>
+            <p className="profile-overview-intro">{t("profile.overviewIntro")}</p>
 
             <div className="profile-overview-list">
               <div className="profile-overview-item">
-                <span className="profile-overview-label">SESSION</span>
-                <strong>{authToken ? "Active" : "Inactive"}</strong>
+                <span className="profile-overview-label">{t("profile.sessionLabel")}</span>
+                <strong>{authToken ? t("common.active") : t("common.inactive")}</strong>
               </div>
               <div className="profile-overview-item">
-                <span className="profile-overview-label">ROLE</span>
-                <strong>{roleLabel(currentUser?.role)}</strong>
+                <span className="profile-overview-label">{t("profile.roleLabel")}</span>
+                <strong>{roleLabel(currentUser?.role, t)}</strong>
               </div>
               <div className="profile-overview-item">
-                <span className="profile-overview-label">EMAIL</span>
+                <span className="profile-overview-label">{t("profile.emailShort")}</span>
                 <strong>{displayEmail}</strong>
               </div>
             </div>
 
-            <div className="profile-tip">
-              Tip: complete your profile and enable a strong password to
-              improve security.
-            </div>
+            <div className="profile-tip">{t("profile.tip")}</div>
           </aside>
         </div>
 
@@ -308,12 +310,12 @@ const ProfileOverviewPage = ({
           >
             <div className="modal-container profile-consult-modal-container">
               <div className="modal-header profile-consult-modal-header">
-                <h2>Profile</h2>
+                <h2>{t("profile.profileModalTitle")}</h2>
                 <button
                   type="button"
                   className="modal-close-btn"
                   onClick={() => setIsProfilePopupOpen(false)}
-                  aria-label="Close"
+                  aria-label={t("common.close")}
                 >
                   <X size={20} />
                 </button>
@@ -330,31 +332,31 @@ const ProfileOverviewPage = ({
                   </div>
                   <div className="profile-consult-copy">
                     <span className="profile-hero-kicker">
-                      Profile overview
+                      {t("profile.profileModalKicker")}
                     </span>
                     <h3>{displayName}</h3>
                     <p>{displayEmail}</p>
                     <span className="profile-role-pill">
-                      {roleLabel(currentUser?.role)}
+                      {roleLabel(currentUser?.role, t)}
                     </span>
                   </div>
                 </div>
 
                 <div className="profile-consult-grid">
                   <div className="profile-consult-item">
-                    <span>Name</span>
+                    <span>{t("profile.nameLabel")}</span>
                     <strong>{displayName}</strong>
                   </div>
                   <div className="profile-consult-item">
-                    <span>Email</span>
+                    <span>{t("profile.emailLabel")}</span>
                     <strong>{displayEmail}</strong>
                   </div>
                   <div className="profile-consult-item">
-                    <span>Role</span>
-                    <strong>{roleLabel(currentUser?.role)}</strong>
+                    <span>{t("profile.roleLabel")}</span>
+                    <strong>{roleLabel(currentUser?.role, t)}</strong>
                   </div>
                   <div className="profile-consult-item">
-                    <span>Session</span>
+                    <span>{t("profile.sessionLabel")}</span>
                     <strong>{sessionState}</strong>
                   </div>
                 </div>

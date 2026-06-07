@@ -20,6 +20,7 @@ import {
   fetchMonitorLogs,
   type BackendIncident,
   type BackendMaintenance,
+  type BackendMaintenanceStatus,
   type BackendMonitorLog,
 } from "../../lib/api";
 import {
@@ -29,6 +30,7 @@ import {
   type HistoryBarState,
 } from "../../lib/monitorHistory";
 import { ensureChartsRegistered } from "../../lib/charts";
+import { useAppLanguage } from "../../lib/language";
 import "./MonitorDetailsPage.css";
 
 interface MonitorDetails {
@@ -70,20 +72,59 @@ type ResponseStats = {
 };
 
 type ResponseRange = "24h" | "7d" | "30d" | "365d";
+type MonitorState = MonitorDetails["state"];
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const RESPONSE_POINT_COUNT = 16;
 
 const RESPONSE_RANGE_OPTIONS: Array<{
   value: ResponseRange;
-  label: string;
+  labelKey: string;
   durationMs: number;
 }> = [
-  { value: "24h", label: "Last 24 hours", durationMs: DAY_MS },
-  { value: "7d", label: "Last 7 days", durationMs: 7 * DAY_MS },
-  { value: "30d", label: "Last 30 days", durationMs: 30 * DAY_MS },
-  { value: "365d", label: "Last 365 days", durationMs: 365 * DAY_MS },
+  {
+    value: "24h",
+    labelKey: "monitorDetails.responseRange.last24Hours",
+    durationMs: DAY_MS,
+  },
+  {
+    value: "7d",
+    labelKey: "monitorDetails.responseRange.last7Days",
+    durationMs: 7 * DAY_MS,
+  },
+  {
+    value: "30d",
+    labelKey: "monitorDetails.responseRange.last30Days",
+    durationMs: 30 * DAY_MS,
+  },
+  {
+    value: "365d",
+    labelKey: "monitorDetails.responseRange.last365Days",
+    durationMs: 365 * DAY_MS,
+  },
 ];
+
+const MONITOR_STATE_LABEL_KEYS: Record<MonitorState, string> = {
+  up: "dashboard.monitor.status.up",
+  down: "dashboard.monitor.status.down",
+  paused: "dashboard.monitor.status.paused",
+  pending: "dashboard.monitor.status.pending",
+};
+
+const MAINTENANCE_STATUS_LABEL_KEYS: Record<BackendMaintenanceStatus, string> =
+  {
+    scheduled: "maintenance.status.scheduled",
+    ongoing: "maintenance.status.ongoing",
+    paused: "maintenance.status.paused",
+    completed: "maintenance.status.completed",
+    cancelled: "maintenance.status.cancelled",
+  };
+
+const getLocale = (language: string): string => {
+  if (language === "fr") return "fr-FR";
+  if (language === "ar") return "ar-EG";
+  return "en-US";
+};
 
 const toTimestamp = (value?: string | null): number => {
   if (!value) return 0;
@@ -91,27 +132,26 @@ const toTimestamp = (value?: string | null): number => {
   return Number.isNaN(parsed) ? 0 : parsed;
 };
 
-const formatDateTime = (value?: string | null): string => {
+const formatDateTime = (value?: string | null, locale = "en-US"): string => {
   const timestamp = toTimestamp(value);
   if (timestamp === 0) return "-";
 
   return new Date(timestamp)
-    .toLocaleString("en-US", {
+    .toLocaleString(locale, {
       month: "short",
       day: "numeric",
       year: "numeric",
       hour: "numeric",
       minute: "2-digit",
-      hour12: true,
-    })
-    .replace(/\s(AM|PM)$/i, "$1");
+      hour12: locale === "en-US",
+    });
 };
 
-const formatShortDate = (value?: string | null): string => {
+const formatShortDate = (value?: string | null, locale = "en-US"): string => {
   const timestamp = toTimestamp(value);
   if (timestamp === 0) return "-";
 
-  return new Date(timestamp).toLocaleDateString("en-US", {
+  return new Date(timestamp).toLocaleDateString(locale, {
     month: "short",
     day: "numeric",
     year: "numeric",
@@ -152,16 +192,20 @@ const formatMs = (value: number | null): string => {
   return `${Math.round(value)} ms`;
 };
 
-const mapErrorMessage = (reason: unknown): string => {
+const mapErrorMessage = (
+  reason: unknown,
+  fallbackMessage: string,
+): string => {
   if (reason instanceof Error && reason.message.trim() !== "") {
     return reason.message;
   }
-  return "Unable to load monitor details.";
+  return fallbackMessage;
 };
 
-const getResponseRangeOption = (range: ResponseRange) =>
-  RESPONSE_RANGE_OPTIONS.find((option) => option.value === range) ??
-  RESPONSE_RANGE_OPTIONS[0];
+const getResponseRangeOption = (
+  range: ResponseRange,
+  options: Array<{ value: ResponseRange; label: string; durationMs: number }>,
+) => options.find((option) => option.value === range) ?? options[0];
 
 const getNiceChartBounds = (values: number[]): { min: number; max: number } => {
   const cleaned = values.filter((value) => Number.isFinite(value));
@@ -179,6 +223,7 @@ const getNiceChartBounds = (values: number[]): { min: number; max: number } => {
 const formatResponseAxisLabel = (
   value: string,
   range: ResponseRange,
+  locale = "en-US",
 ): string => {
   const timestamp = toTimestamp(value);
   if (timestamp === 0) return "-";
@@ -187,15 +232,14 @@ const formatResponseAxisLabel = (
 
   if (range === "24h") {
     return date
-      .toLocaleTimeString("en-US", {
+      .toLocaleTimeString(locale, {
         hour: "numeric",
         minute: "2-digit",
-        hour12: true,
-      })
-      .replace(/\s(AM|PM)$/i, "$1");
+        hour12: locale === "en-US",
+      });
   }
 
-  return date.toLocaleDateString("en-US", {
+  return date.toLocaleDateString(locale, {
     month: "short",
     day: "numeric",
   });
@@ -250,6 +294,8 @@ function MonitorDetailsPage({
   refreshSignal = 0,
   isActionPending = false,
 }: MonitorDetailsPageProps) {
+  const { language, t, isRtl } = useAppLanguage();
+  const locale = useMemo(() => getLocale(language), [language]);
   const [logs, setLogs] = useState<BackendMonitorLog[]>([]);
   const [incidents, setIncidents] = useState<BackendIncident[]>([]);
   const [maintenances, setMaintenances] = useState<BackendMaintenance[]>([]);
@@ -260,6 +306,41 @@ function MonitorDetailsPage({
   const [isResponseRangeMenuOpen, setIsResponseRangeMenuOpen] = useState(false);
   const moreMenuRef = useRef<HTMLDivElement | null>(null);
   const responseRangeMenuRef = useRef<HTMLDivElement | null>(null);
+  const responseRangeOptions = useMemo(
+    () =>
+      RESPONSE_RANGE_OPTIONS.map((option) => ({
+        ...option,
+        label: t(option.labelKey),
+      })),
+    [t],
+  );
+  const monitorStateLabels = useMemo(
+    () => ({
+      up: t(MONITOR_STATE_LABEL_KEYS.up),
+      down: t(MONITOR_STATE_LABEL_KEYS.down),
+      paused: t(MONITOR_STATE_LABEL_KEYS.paused),
+      pending: t(MONITOR_STATE_LABEL_KEYS.pending),
+    }),
+    [t],
+  );
+  const maintenanceStatusLabels = useMemo(
+    () => ({
+      scheduled: t(MAINTENANCE_STATUS_LABEL_KEYS.scheduled),
+      ongoing: t(MAINTENANCE_STATUS_LABEL_KEYS.ongoing),
+      paused: t(MAINTENANCE_STATUS_LABEL_KEYS.paused),
+      completed: t(MAINTENANCE_STATUS_LABEL_KEYS.completed),
+      cancelled: t(MAINTENANCE_STATUS_LABEL_KEYS.cancelled),
+    }),
+    [t],
+  );
+  const formatIncidentSummary = (count: number, downtime: string): string =>
+    count === 1
+      ? t("monitorDetails.summary.one", { downtime })
+      : t("monitorDetails.summary.many", { count, downtime });
+  const formatIncidentTotal = (count: number): string =>
+    count === 1
+      ? t("monitorDetails.total.one")
+      : t("monitorDetails.total.many", { count });
 
   useEffect(() => {
     if (!isMoreMenuOpen) return;
@@ -362,7 +443,9 @@ function MonitorDetailsPage({
               ? maintenancesResult.reason
               : null;
 
-      setDataError(firstError ? mapErrorMessage(firstError) : null);
+      setDataError(
+        firstError ? mapErrorMessage(firstError, t("monitorDetails.loadError")) : null,
+      );
       setIsDataLoading(false);
     };
 
@@ -371,14 +454,14 @@ function MonitorDetailsPage({
     return () => {
       isDisposed = true;
     };
-  }, [monitor.id, refreshSignal]);
+  }, [monitor.id, refreshSignal, t]);
 
   useEffect(() => {
     let isDisposed = false;
 
     const loadRangeLogs = async (): Promise<void> => {
       const now = Date.now();
-      const rangeOption = getResponseRangeOption(responseRange);
+      const rangeOption = getResponseRangeOption(responseRange, responseRangeOptions);
       const startDate = new Date(now - rangeOption.durationMs).toISOString();
       const endDate = new Date(now).toISOString();
 
@@ -395,7 +478,7 @@ function MonitorDetailsPage({
       } catch (error) {
         if (!isDisposed) {
           setLogs([]);
-          setDataError(mapErrorMessage(error));
+          setDataError(mapErrorMessage(error, t("monitorDetails.loadError")));
         }
       }
     };
@@ -405,17 +488,10 @@ function MonitorDetailsPage({
     return () => {
       isDisposed = true;
     };
-  }, [monitor.id, refreshSignal, responseRange]);
+  }, [monitor.id, refreshSignal, responseRange, responseRangeOptions, t]);
 
-  const linkLabel = monitor.url ?? "No website configured";
-  const statusLabel =
-    monitor.state === "up"
-      ? "Up"
-      : monitor.state === "down"
-        ? "Down"
-        : monitor.state === "paused"
-          ? "Paused"
-          : "Pending";
+  const linkLabel = monitor.url ?? t("monitorDetails.noWebsiteConfigured");
+  const statusLabel = monitorStateLabels[monitor.state];
   const intervalMinutes = parseIntervalToMinutes(monitor.interval);
   const onOpenNotificationConfig =
     onOpenNotificationSettings ?? onOpenMaintenanceInfo;
@@ -450,8 +526,8 @@ function MonitorDetailsPage({
 
   const lastCheckLabel = useMemo(() => {
     const lastLog = monitorLogs[monitorLogs.length - 1];
-    return lastLog ? formatDateTime(lastLog.checkedAt) : "No check yet";
-  }, [monitorLogs]);
+    return lastLog ? formatDateTime(lastLog.checkedAt, locale) : t("monitorDetails.noCheckYet");
+  }, [locale, monitorLogs, t]);
 
   const last24HistoryBars = useMemo<HistoryBarState[]>(() => {
     const sourceLogs = logsLast24.length > 0 ? logsLast24 : monitorLogs;
@@ -467,8 +543,7 @@ function MonitorDetailsPage({
     if (logsLast24.length === 0) {
       return {
         uptime: monitor.uptime,
-        incidents: 0,
-        downtime: "0m, 0s down",
+        summary: t("monitorDetails.noChecksYet"),
       };
     }
 
@@ -483,8 +558,10 @@ function MonitorDetailsPage({
 
     return {
       uptime: formatPercent(uptime),
-      incidents: incidentsCount,
-      downtime: `${formatCompactDuration(downtimeMs)} down`,
+      summary: formatIncidentSummary(
+        incidentsCount,
+        formatCompactDuration(downtimeMs),
+      ),
     };
   }, [
     intervalMinutes,
@@ -492,6 +569,8 @@ function MonitorDetailsPage({
     logsLast24,
     monitor.uptime,
     monitorIncidents,
+    formatIncidentSummary,
+    t,
   ]);
 
   const windowStats = useMemo(() => {
@@ -508,7 +587,7 @@ function MonitorDetailsPage({
       if (scopedLogs.length === 0) {
         return {
           uptime: "- - -%",
-          summary: "No checks yet",
+          summary: t("monitorDetails.noChecksYet"),
         };
       }
 
@@ -519,7 +598,10 @@ function MonitorDetailsPage({
 
       return {
         uptime: formatPercent(uptime),
-        summary: `${scopedIncidents.length} incident(s), ${formatCompactDuration(downtimeMs)} down`,
+        summary: formatIncidentSummary(
+          scopedIncidents.length,
+          formatCompactDuration(downtimeMs),
+        ),
       };
     };
 
@@ -528,9 +610,12 @@ function MonitorDetailsPage({
       thirtyDays: buildStats(30),
       year: buildStats(365),
     };
-  }, [intervalMinutes, monitorIncidents, monitorLogs, now]);
+  }, [formatIncidentSummary, intervalMinutes, monitorIncidents, monitorLogs, now, t]);
 
-  const responseRangeOption = getResponseRangeOption(responseRange);
+  const responseRangeOption = getResponseRangeOption(
+    responseRange,
+    responseRangeOptions,
+  );
 
   const responseWindowLogs = useMemo(() => {
     const windowStart = now - responseRangeOption.durationMs;
@@ -588,7 +673,7 @@ function MonitorDetailsPage({
       labels,
       datasets: [
         {
-          label: "Response time",
+          label: t("monitorDetails.responseTime"),
           data: responseChartLogs.map((log) => Math.max(0, log.responseTime)),
           fill: true,
           tension: 0.35,
@@ -634,7 +719,7 @@ function MonitorDetailsPage({
         },
       ],
     };
-  }, [responseChartLogs]);
+  }, [responseChartLogs, t]);
 
   const responseChartOptions = useMemo(() => {
     return {
@@ -679,12 +764,14 @@ function MonitorDetailsPage({
             const index = dataPoint?.dataIndex ?? 0;
             const log = responseChartLogs[index];
             const checkedAt = log?.checkedAt
-              ? formatDateTime(log.checkedAt)
+              ? formatDateTime(log.checkedAt, locale)
               : "-";
             const responseTime = Number.isFinite(log?.responseTime)
               ? formatMs(log!.responseTime)
               : "-";
             const status = log?.status === "down" ? "down" : "up";
+            const statusLabel =
+              status === "up" ? monitorStateLabels.up : monitorStateLabels.down;
 
             const placement = tooltip.caretY < 36 ? "below" : "above";
             tooltipEl.className = `response-chart-tooltip ${placement}`;
@@ -693,7 +780,7 @@ function MonitorDetailsPage({
               <div class="response-chart-tooltip-row">
                 <span class="response-chart-tooltip-dot ${status}" aria-hidden="true"></span>
                 <strong>${responseTime}</strong>
-                <span class="response-chart-tooltip-status">${status === "up" ? "Up" : "Down"}</span>
+                <span class="response-chart-tooltip-status">${statusLabel}</span>
               </div>
             `;
 
@@ -706,7 +793,7 @@ function MonitorDetailsPage({
           callbacks: {
             title: (items: any[]) => {
               const raw = items?.[0]?.label as string | undefined;
-              return raw ? formatDateTime(raw) : "-";
+              return raw ? formatDateTime(raw, locale) : "-";
             },
             label: (item: any) => {
               const value = item.parsed?.y as number | undefined;
@@ -715,7 +802,9 @@ function MonitorDetailsPage({
             afterLabel: (item: any) => {
               const index = item.dataIndex ?? 0;
               const status = responseChartLogs[index]?.status;
-              return status ? `Status: ${status === "up" ? "Up" : "Down"}` : "";
+              const statusLabel =
+                status === "up" ? monitorStateLabels.up : monitorStateLabels.down;
+              return status ? t("monitorDetails.tooltipStatus", { status: statusLabel }) : "";
             },
           },
         },
@@ -730,7 +819,14 @@ function MonitorDetailsPage({
         },
       },
     };
-  }, [responseChartBounds.max, responseChartBounds.min, responseChartLogs]);
+  }, [
+    locale,
+    monitorStateLabels,
+    responseChartBounds.max,
+    responseChartBounds.min,
+    responseChartLogs,
+    t,
+  ]);
 
   const responseXAxisLabels = useMemo(() => {
     if (responseChartLogs.length === 0) {
@@ -739,17 +835,23 @@ function MonitorDetailsPage({
 
     const middleIndex = Math.floor(responseChartLogs.length / 2);
     return [
-      formatResponseAxisLabel(responseChartLogs[0].checkedAt, responseRange),
+      formatResponseAxisLabel(
+        responseChartLogs[0].checkedAt,
+        responseRange,
+        locale,
+      ),
       formatResponseAxisLabel(
         responseChartLogs[middleIndex].checkedAt,
         responseRange,
+        locale,
       ),
       formatResponseAxisLabel(
         responseChartLogs[responseChartLogs.length - 1].checkedAt,
         responseRange,
+        locale,
       ),
     ];
-  }, [responseChartLogs, responseRange]);
+  }, [locale, responseChartLogs, responseRange]);
 
   const latestIncidentRows = useMemo(
     () =>
@@ -760,19 +862,21 @@ function MonitorDetailsPage({
         const rootCause =
           incident.errorMessage ||
           (incident.statusCode
-            ? `HTTP ${incident.statusCode}`
-            : "Unknown error");
+            ? t("monitorDetails.rootCauseHttp", { statusCode: incident.statusCode })
+            : t("monitorDetails.unknownError"));
 
         return {
           id: incident._id,
-          status: isOngoing ? "Ongoing" : "Resolved",
+          status: isOngoing
+            ? t("incidents.status.ongoing")
+            : t("incidents.status.resolved"),
           isOngoing,
           rootCause,
-          started: formatDateTime(startedAt),
+          started: formatDateTime(startedAt, locale),
           duration: formatDurationFromMs(durationMs),
         };
       }),
-    [monitorIncidents],
+    [locale, monitorIncidents, t],
   );
 
   const nextMaintenance = useMemo(() => {
@@ -797,54 +901,66 @@ function MonitorDetailsPage({
         parsedUrl.protocol === "https:" || parsedUrl.protocol === "wss:";
       return {
         domain: parsedUrl.host,
-        ssl: isTls ? "TLS/SSL check active" : "TLS/SSL not applicable",
+        ssl: isTls ? t("monitorDetails.sslActive") : t("monitorDetails.sslNotApplicable"),
       };
     } catch {
       return {
-        domain: "Unavailable",
-        ssl: "Unavailable",
+        domain: t("monitorDetails.unavailable"),
+        ssl: t("monitorDetails.unavailable"),
       };
     }
-  }, [monitor.url]);
+  }, [monitor.url, t]);
 
   const domainExpiryLabel = useMemo(() => {
     if (monitor.domainExpiryMode !== "enabled") {
-      return "Disabled";
+      return t("monitorDetails.disabled");
     }
     if (!monitor.domainExpiryCheckedAt) {
-      return "Checking...";
+      return t("monitorDetails.checking");
     }
     if (!monitor.domainExpiryAt) {
-      return "Unavailable";
+      return t("monitorDetails.unavailable");
     }
-    return formatShortDate(monitor.domainExpiryAt);
+    return formatShortDate(monitor.domainExpiryAt, locale);
   }, [
+    locale,
     monitor.domainExpiryAt,
     monitor.domainExpiryCheckedAt,
     monitor.domainExpiryMode,
+    t,
   ]);
 
   const sslExpiryLabel = useMemo(() => {
     if (monitor.sslExpiryMode !== "enabled") {
-      return "Disabled";
+      return t("monitorDetails.disabled");
     }
     if (!monitor.sslExpiryCheckedAt) {
-      return "Checking...";
+      return t("monitorDetails.checking");
     }
     if (!monitor.sslExpiryAt) {
-      return "Unavailable";
+      return t("monitorDetails.unavailable");
     }
-    return formatShortDate(monitor.sslExpiryAt);
-  }, [monitor.sslExpiryAt, monitor.sslExpiryCheckedAt, monitor.sslExpiryMode]);
+    return formatShortDate(monitor.sslExpiryAt, locale);
+  }, [
+    locale,
+    monitor.sslExpiryAt,
+    monitor.sslExpiryCheckedAt,
+    monitor.sslExpiryMode,
+    t,
+  ]);
 
   return (
     <section className="monitor-details-page">
       <div className="monitor-details-breadcrumb">
         <button type="button" className="monitor-details-back" onClick={onBack}>
-          <ChevronLeft size={14} />
-          <span>Monitoring</span>
+          {isRtl ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
+          <span>{t("menu.monitoring")}</span>
         </button>
-        <ChevronRight size={14} className="monitor-details-separator" />
+        {isRtl ? (
+          <ChevronLeft size={14} className="monitor-details-separator" />
+        ) : (
+          <ChevronRight size={14} className="monitor-details-separator" />
+        )}
         <span>{monitor.name}</span>
       </div>
 
@@ -857,7 +973,7 @@ function MonitorDetailsPage({
             <h2>{monitor.name}</h2>
             {monitor.url ? (
               <p className="monitor-details-subline">
-                <span>{monitor.protocol}/s monitor for </span>
+                <span>{t("monitorDetails.monitorFor", { protocol: monitor.protocol })} </span>
                 <a
                   href={monitor.url}
                   target="_blank"
@@ -870,7 +986,7 @@ function MonitorDetailsPage({
               </p>
             ) : (
               <p>
-                {monitor.protocol}/s monitor for {linkLabel}
+                {t("monitorDetails.monitorFor", { protocol: monitor.protocol })} {linkLabel}
               </p>
             )}
           </div>
@@ -884,13 +1000,13 @@ function MonitorDetailsPage({
             disabled={isActionPending}
           >
             <Bell size={13} />
-            Test Notification
+            {t("monitorDetails.actions.testNotification")}
           </button>
           <div className="monitor-details-more-menu" ref={moreMenuRef}>
             <button
               type="button"
               className="monitor-details-more-button"
-              aria-label="More actions"
+              aria-label={t("monitorDetails.actions.moreActions")}
               aria-haspopup="menu"
               aria-expanded={isMoreMenuOpen}
               onClick={() => setIsMoreMenuOpen((previousOpen) => !previousOpen)}
@@ -910,7 +1026,7 @@ function MonitorDetailsPage({
                   disabled={isActionPending || !onDelete}
                   className="danger"
                 >
-                  Delete monitor
+                  {t("monitorDetails.actions.deleteMonitor")}
                 </button>
               </div>
             ) : null}
@@ -929,22 +1045,22 @@ function MonitorDetailsPage({
         <div className="monitor-details-main-column">
           <div className="monitor-details-stats-grid">
             <article>
-              <h3>Current status</h3>
+              <h3>{t("dashboard.status.current")}</h3>
               <p
                 className={monitor.state === "up" ? "status-up" : "status-down"}
               >
                 {statusLabel}
               </p>
-              <span>Currently {monitor.uptimeLabel.toLowerCase()}</span>
+              <span>{t("monitorDetails.currently", { status: statusLabel.toLowerCase() })}</span>
             </article>
             <article>
-              <h3>Last check</h3>
-              <p>{isDataLoading ? "Loading..." : lastCheckLabel}</p>
-              <span>Checked every {monitor.interval}</span>
+              <h3>{t("monitorDetails.lastCheck")}</h3>
+              <p>{isDataLoading ? t("common.loading") : lastCheckLabel}</p>
+              <span>{t("monitorDetails.checkedEvery", { interval: monitor.interval })}</span>
             </article>
             <article className="monitor-last24-card">
               <div className="stat-row-head">
-                <h3>Last 24 hours</h3>
+                <h3>{t("dashboard.last24Hours")}</h3>
                 <strong>{last24Summary.uptime}</strong>
               </div>
               <div
@@ -961,25 +1077,23 @@ function MonitorDetailsPage({
                   />
                 ))}
               </div>
-              <span>
-                {last24Summary.incidents} incidents, {last24Summary.downtime}
-              </span>
+              <span>{last24Summary.summary}</span>
             </article>
           </div>
 
           <section className="monitor-details-ranges-card">
             <article className="range-cell">
-              <h3>Last 7 days</h3>
+              <h3>{t("monitorDetails.responseRange.last7Days")}</h3>
               <p>{windowStats.sevenDays.uptime}</p>
               <span>{windowStats.sevenDays.summary}</span>
             </article>
             <article className="range-cell">
-              <h3>Last 30 days</h3>
+              <h3>{t("monitorDetails.responseRange.last30Days")}</h3>
               <p>{windowStats.thirtyDays.uptime}</p>
               <span>{windowStats.thirtyDays.summary}</span>
             </article>
             <article className="range-cell">
-              <h3>Last 365 days</h3>
+              <h3>{t("monitorDetails.responseRange.last365Days")}</h3>
               <p>{windowStats.year.uptime}</p>
               <span>{windowStats.year.summary}</span>
             </article>
@@ -990,17 +1104,17 @@ function MonitorDetailsPage({
                 onClick={onExportLogs}
               >
                 <CalendarClock size={12} />
-                <span>Open incidents</span>
+                <span>{t("monitorDetails.openIncidents")}</span>
                 <ChevronDown size={13} />
               </button>
               <p>{monitor.uptime}</p>
-              <span>{monitorIncidents.length} incidents total</span>
+              <span>{formatIncidentTotal(monitorIncidents.length)}</span>
             </article>
           </section>
 
           <section className="monitor-details-response">
             <div className="response-header">
-              <h3>Response time</h3>
+              <h3>{t("monitorDetails.responseTime")}</h3>
               <div
                 className="response-range-menu-wrap"
                 ref={responseRangeMenuRef}
@@ -1010,7 +1124,7 @@ function MonitorDetailsPage({
                   className={`response-range-button ${isResponseRangeMenuOpen ? "open" : ""}`}
                   aria-haspopup="menu"
                   aria-expanded={isResponseRangeMenuOpen}
-                  aria-label="Select response time window"
+                  aria-label={t("monitorDetails.selectResponseRange")}
                   onClick={() =>
                     setIsResponseRangeMenuOpen((previousOpen) => !previousOpen)
                   }
@@ -1020,7 +1134,7 @@ function MonitorDetailsPage({
                 </button>
                 {isResponseRangeMenuOpen ? (
                   <div className="response-range-menu" role="menu">
-                    {RESPONSE_RANGE_OPTIONS.map((option) => (
+                    {responseRangeOptions.map((option) => (
                       <button
                         key={option.value}
                         type="button"
@@ -1056,7 +1170,7 @@ function MonitorDetailsPage({
                   />
                   {responseWindowLogs.length === 0 ? (
                     <div className="response-chart-empty">
-                      No response data for this period
+                      {t("monitorDetails.noResponseData")}
                     </div>
                   ) : null}
                 </div>
@@ -1075,43 +1189,43 @@ function MonitorDetailsPage({
                   <Minus size={14} />
                   <strong>{formatMs(responseStats.average)}</strong>
                 </div>
-                <span>Average</span>
+                <span>{t("monitorDetails.average")}</span>
               </article>
               <article className="metric-min">
                 <div className="metric-value">
                   <ArrowDownLeft size={14} />
                   <strong>{formatMs(responseStats.minimum)}</strong>
                 </div>
-                <span>Minimum</span>
+                <span>{t("monitorDetails.minimum")}</span>
               </article>
               <article className="metric-max">
                 <div className="metric-value">
                   <ArrowUpLeft size={14} />
                   <strong>{formatMs(responseStats.maximum)}</strong>
                 </div>
-                <span>Maximum</span>
+                <span>{t("monitorDetails.maximum")}</span>
               </article>
             </div>
           </section>
 
           <section className="monitor-details-incidents">
             <div className="incidents-header">
-              <h3>Latest incidents</h3>
+              <h3>{t("monitorDetails.latestIncidents")}</h3>
               <button type="button" onClick={onExportLogs}>
                 <Upload size={13} />
-                Export logs
+                {t("monitorDetails.exportLogs")}
               </button>
             </div>
             <div className="incidents-table">
               <div className="incidents-table-head">
-                <span>Status</span>
-                <span>Root Cause</span>
-                <span>Started</span>
-                <span>Duration</span>
+                <span>{t("incidents.table.status")}</span>
+                <span>{t("incidents.table.rootCause")}</span>
+                <span>{t("incidents.table.started")}</span>
+                <span>{t("incidents.table.duration")}</span>
               </div>
               {latestIncidentRows.length === 0 ? (
                 <div className="incidents-row">
-                  <span>No incidents</span>
+                  <span>{t("monitorDetails.noIncidents")}</span>
                   <span>-</span>
                   <span>-</span>
                   <span>-</span>
@@ -1139,36 +1253,50 @@ function MonitorDetailsPage({
 
         <aside className="monitor-details-side">
           <article className="monitor-side-card">
-            <h3>Domain & SSL</h3>
-            <p>Domain: {domainAndSsl.domain}</p>
-            <p>SSL: {domainAndSsl.ssl}</p>
-            <p>SSL expiry: {sslExpiryLabel}</p>
+            <h3>{t("monitorDetails.domainSsl")}</h3>
+            <p>{t("monitorDetails.domainPrefix", { domain: domainAndSsl.domain })}</p>
+            <p>{t("monitorDetails.sslPrefix", { ssl: domainAndSsl.ssl })}</p>
+            <p>{t("monitorDetails.sslExpiryPrefix", { value: sslExpiryLabel })}</p>
             {monitor.sslExpiryMode === "enabled" &&
             monitor.sslExpiryCheckedAt ? (
-              <p>SSL checked: {formatDateTime(monitor.sslExpiryCheckedAt)}</p>
+              <p>
+                {t("monitorDetails.sslCheckedPrefix", {
+                  date: formatDateTime(monitor.sslExpiryCheckedAt, locale),
+                })}
+              </p>
             ) : null}
             {monitor.sslExpiryMode === "enabled" && monitor.sslExpiryError ? (
-              <p>SSL error: {monitor.sslExpiryError}</p>
+              <p>
+                {t("monitorDetails.sslErrorPrefix", {
+                  message: monitor.sslExpiryError,
+                })}
+              </p>
             ) : null}
-            <p>Domain expiry: {domainExpiryLabel}</p>
+            <p>{t("monitorDetails.domainExpiryPrefix", { value: domainExpiryLabel })}</p>
             {monitor.domainExpiryMode === "enabled" &&
             monitor.domainExpiryCheckedAt ? (
               <p>
-                WHOIS checked: {formatDateTime(monitor.domainExpiryCheckedAt)}
+                {t("monitorDetails.domainCheckedPrefix", {
+                  date: formatDateTime(monitor.domainExpiryCheckedAt, locale),
+                })}
               </p>
             ) : null}
             {monitor.domainExpiryMode === "enabled" &&
             monitor.domainExpiryError ? (
-              <p>WHOIS error: {monitor.domainExpiryError}</p>
+              <p>
+                {t("monitorDetails.domainErrorPrefix", {
+                  message: monitor.domainExpiryError,
+                })}
+              </p>
             ) : null}
           </article>
           <article className="monitor-side-card">
             <div className="monitor-side-card-head">
-              <h3>Next maintenance</h3>
+              <h3>{t("monitorDetails.nextMaintenance")}</h3>
               <button
                 type="button"
                 className="side-card-settings-button"
-                aria-label="Open maintenance settings"
+                aria-label={t("monitorDetails.openMaintenanceSettings")}
                 onClick={onOpenMaintenanceInfo}
                 disabled={!onOpenMaintenanceInfo}
               >
@@ -1183,25 +1311,25 @@ function MonitorDetailsPage({
             {nextMaintenance ? (
               <>
                 <p>
-                  {nextMaintenance.status.toUpperCase()} -{" "}
-                  {formatDateTime(nextMaintenance.startAt)}
+                  {maintenanceStatusLabels[nextMaintenance.status]} -{" "}
+                  {formatDateTime(nextMaintenance.startAt, locale)}
                 </p>
                 <p>{nextMaintenance.name}</p>
               </>
             ) : (
-              <p>No maintenance planned</p>
+              <p>{t("monitorDetails.noMaintenancePlanned")}</p>
             )}
-            <button type="button" onClick={onOpenMaintenanceInfo}>
-              Set up maintenance
+            <button type="button" onClick={onOpenMaintenanceInfo} disabled={!onOpenMaintenanceInfo}>
+              {t("monitorDetails.setUpMaintenance")}
             </button>
           </article>
           <article className="monitor-side-card">
             <div className="monitor-side-card-head">
-              <h3>To be notified</h3>
+              <h3>{t("monitorDetails.toBeNotified")}</h3>
               <button
                 type="button"
                 className="side-card-settings-button"
-                aria-label="Open notification settings"
+                aria-label={t("monitorDetails.openNotificationSettings")}
                 onClick={onOpenNotificationConfig}
                 disabled={!onOpenNotificationConfig}
               >

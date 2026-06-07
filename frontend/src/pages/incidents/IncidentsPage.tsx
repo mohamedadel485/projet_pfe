@@ -15,6 +15,7 @@ import {
   Tag,
 } from 'lucide-react';
 import { fetchIncidents, isApiError, type BackendIncident } from '../../lib/api';
+import { useAppLanguage } from '../../lib/language';
 import './incidents-page.css';
 
 interface IncidentRow {
@@ -51,7 +52,6 @@ type IncidentTagOption = 'All tags' | 'Website' | 'API' | 'Core' | 'Interface';
 
 interface IncidentFilterOption {
   id: IncidentFilterId;
-  label: string;
   matches: (incident: IncidentRow) => boolean;
 }
 
@@ -61,45 +61,33 @@ const rootCauseIncludes = (incident: IncidentRow, terms: string[]): boolean => {
 };
 
 const incidentFilterOptions: IncidentFilterOption[] = [
-  { id: 'resolved', label: 'Resolved', matches: (incident) => incident.status === 'Resolved' },
-  { id: 'ongoing', label: 'Ongoing', matches: (incident) => incident.status === 'Ongoing' },
+  { id: 'resolved', matches: (incident) => incident.status === 'Resolved' },
+  { id: 'ongoing', matches: (incident) => incident.status === 'Ongoing' },
   {
     id: 'root-timeout',
-    label: 'Root cause: Time/Out',
     matches: (incident) => rootCauseIncludes(incident, ['timeout', 'time out']),
   },
-  { id: 'root-2xx', label: 'Root cause: 2xx', matches: (incident) => rootCauseIncludes(incident, ['2xx']) },
-  { id: 'root-3xx', label: 'Root cause: 3xx', matches: (incident) => rootCauseIncludes(incident, ['3xx']) },
-  { id: 'root-4xx', label: 'Root cause: 4xx', matches: (incident) => rootCauseIncludes(incident, ['4xx']) },
+  { id: 'root-2xx', matches: (incident) => rootCauseIncludes(incident, ['2xx']) },
+  { id: 'root-3xx', matches: (incident) => rootCauseIncludes(incident, ['3xx']) },
+  { id: 'root-4xx', matches: (incident) => rootCauseIncludes(incident, ['4xx']) },
   {
     id: 'root-5xx',
-    label: 'Root cause: 5xx',
     matches: (incident) => rootCauseIncludes(incident, ['5xx', 'server error', 'internal server error']),
   },
   {
     id: 'root-dns',
-    label: 'Root cause: DNS resolving issue',
     matches: (incident) => rootCauseIncludes(incident, ['dns']),
   },
   {
     id: 'root-assertion',
-    label: 'Root cause: Assertion failed',
     matches: (incident) => rootCauseIncludes(incident, ['assertion']),
   },
   {
     id: 'root-invalid-json',
-    label: 'Root cause: Invalid JSON response',
     matches: (incident) => rootCauseIncludes(incident, ['invalid json']),
   },
-  { id: 'slow-response', label: 'Slow response', matches: (incident) => rootCauseIncludes(incident, ['slow']) },
+  { id: 'slow-response', matches: (incident) => rootCauseIncludes(incident, ['slow']) },
 ];
-const incidentSortOptionLabels: Record<IncidentSortOption, string> = {
-  'down-first': 'Down first',
-  'up-first': 'Up first',
-  'paused-first': 'Paused first',
-  'a-z': 'A -> Z',
-  'newest-first': 'Newest first',
-};
 const incidentSortOptions: IncidentSortOption[] = ['down-first', 'up-first', 'paused-first', 'a-z', 'newest-first'];
 const incidentTagOptions: IncidentTagOption[] = ['All tags', 'Website', 'API', 'Core', 'Interface'];
 const incidentStatusRank: Record<IncidentRow['status'], number> = {
@@ -118,12 +106,12 @@ const getIncidentNumericId = (incidentId: string): number => {
   return Number.isNaN(numericPart) ? 0 : numericPart;
 };
 
-const formatIncidentDate = (value: string): string => {
+const formatIncidentDate = (value: string, locale: string): string => {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '-';
 
   return date
-    .toLocaleString('en-US', {
+    .toLocaleString(locale, {
       month: 'short',
       day: 'numeric',
       year: 'numeric',
@@ -190,7 +178,7 @@ const deriveRootCause = (incident: BackendIncident): string => {
   return incident.status === 'up' ? 'Recovered' : 'Unknown error';
 };
 
-const buildIncidentRowsFromLogs = (incidents: BackendIncident[]): IncidentRow[] => {
+const buildIncidentRowsFromLogs = (incidents: BackendIncident[], locale: string): IncidentRow[] => {
   const rows = incidents.map((incident): IncidentRow => {
     const startedSource = incident.startedAt ?? incident.checkedAt;
     const startedMs = Date.parse(startedSource);
@@ -210,8 +198,8 @@ const buildIncidentRowsFromLogs = (incidents: BackendIncident[]): IncidentRow[] 
       monitorUrl: incident.monitor?.url ?? '',
       rootCause: deriveRootCause(incident),
       comments: 0,
-      started: formatIncidentDate(startedSource),
-      resolved: incident.resolvedAt ? formatIncidentDate(incident.resolvedAt) : '-',
+      started: formatIncidentDate(startedSource, locale),
+      resolved: incident.resolvedAt ? formatIncidentDate(incident.resolvedAt, locale) : '-',
       duration: incident.status === 'down' ? 'Ongoing' : formatDurationFromMs(durationMs),
       visibility: 'Included',
       statusCode: incident.statusCode,
@@ -287,6 +275,8 @@ interface IncidentsPageProps {
 }
 
 function IncidentsPage({ onOpenMonitor }: IncidentsPageProps) {
+  const { language, t } = useAppLanguage();
+  const locale = language === 'fr' ? 'fr-FR' : language === 'ar' ? 'ar-TN' : 'en-US';
   const [incidentRows, setIncidentRows] = useState<IncidentRow[]>([]);
   const [selectedIncidentId, setSelectedIncidentId] = useState<string | null>(null);
   const [isFilterMenuOpen, setIsFilterMenuOpen] = useState(false);
@@ -304,10 +294,59 @@ function IncidentsPage({ onOpenMonitor }: IncidentsPageProps) {
   const sortMenuRef = useRef<HTMLDivElement | null>(null);
   const tagMenuRef = useRef<HTMLDivElement | null>(null);
 
+  const incidentTagLabels = useMemo<Record<IncidentTagOption, string>>(
+    () => ({
+      'All tags': t('dashboard.tags.all'),
+      Website: t('dashboard.tags.website'),
+      API: t('dashboard.tags.api'),
+      Core: t('dashboard.tags.core'),
+      Interface: t('dashboard.tags.interface'),
+    }),
+    [t],
+  );
+  const incidentSortLabels = useMemo<Record<IncidentSortOption, string>>(
+    () => ({
+      'down-first': t('dashboard.sort.downFirst'),
+      'up-first': t('dashboard.sort.upFirst'),
+      'paused-first': t('dashboard.sort.pausedFirst'),
+      'a-z': t('dashboard.sort.az'),
+      'newest-first': t('dashboard.sort.newestFirst'),
+    }),
+    [t],
+  );
+  const incidentFilterLabels = useMemo<Record<IncidentFilterId, string>>(
+    () => ({
+      resolved: t('incidents.filter.resolved'),
+      ongoing: t('incidents.filter.ongoing'),
+      'root-timeout': t('incidents.filter.rootTimeout'),
+      'root-2xx': t('incidents.filter.root2xx'),
+      'root-3xx': t('incidents.filter.root3xx'),
+      'root-4xx': t('incidents.filter.root4xx'),
+      'root-5xx': t('incidents.filter.root5xx'),
+      'root-dns': t('incidents.filter.rootDns'),
+      'root-assertion': t('incidents.filter.rootAssertion'),
+      'root-invalid-json': t('incidents.filter.rootInvalidJson'),
+      'slow-response': t('incidents.filter.slowResponse'),
+    }),
+    [t],
+  );
+  const incidentStatusLabels = useMemo(
+    () => ({
+      Resolved: t('incidents.status.resolved'),
+      Ongoing: t('incidents.status.ongoing'),
+    }),
+    [t],
+  );
+
   const selectedIncident = useMemo(
     () => incidentRows.find((incident) => incident.id === selectedIncidentId) ?? null,
     [incidentRows, selectedIncidentId]
   );
+  const selectedIncidentStatusLabel = selectedIncident ? incidentStatusLabels[selectedIncident.status] : '';
+  const selectedIncidentMonitorName =
+    selectedIncident?.monitor === 'Unknown monitor'
+      ? t('incidents.unknownMonitor')
+      : selectedIncident?.monitor ?? '';
   const filteredIncidentRows = useMemo(() => {
     const normalizedSearchQuery = searchQuery.trim().toLowerCase();
 
@@ -400,7 +439,7 @@ function IncidentsPage({ onOpenMonitor }: IncidentsPageProps) {
         const response = await fetchIncidents(undefined, { limit: 500 });
         if (cancelled) return;
 
-        const rows = buildIncidentRowsFromLogs(response.incidents);
+        const rows = buildIncidentRowsFromLogs(response.incidents, locale);
         setIncidentRows(rows);
         setSelectedIncidentId((previousId) =>
           previousId && rows.some((incident) => incident.id === previousId) ? previousId : null
@@ -409,11 +448,11 @@ function IncidentsPage({ onOpenMonitor }: IncidentsPageProps) {
         if (cancelled) return;
 
         if (isApiError(error)) {
-          setIncidentsLoadError(error.message || 'Unable to load incidents.');
+          setIncidentsLoadError(error.message || t('incidents.errors.load'));
         } else if (error instanceof Error && error.message.trim() !== '') {
           setIncidentsLoadError(error.message);
         } else {
-          setIncidentsLoadError('Unable to load incidents.');
+          setIncidentsLoadError(t('incidents.errors.load'));
         }
 
         setIncidentRows([]);
@@ -429,7 +468,7 @@ function IncidentsPage({ onOpenMonitor }: IncidentsPageProps) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [locale, t]);
 
   useEffect(() => {
     setRequestTab('url');
@@ -514,10 +553,10 @@ function IncidentsPage({ onOpenMonitor }: IncidentsPageProps) {
     if (!selectedIncident || typeof document === 'undefined') return;
 
     const responseContent = [
-      `Monitor: ${selectedIncident.monitor}`,
-      `Status: ${selectedIncident.status}`,
-      `Started: ${selectedIncident.started}`,
-      `Root cause: ${selectedIncident.rootCause}`,
+      `${t('incidents.table.monitor')}: ${selectedIncident.monitor}`,
+      `${t('incidents.table.status')}: ${incidentStatusLabels[selectedIncident.status]}`,
+      `${t('incidents.table.started')}: ${selectedIncident.started}`,
+      `${t('incidents.table.rootCause')}: ${selectedIncident.rootCause}`,
       '',
       responseBodyText,
     ].join('\n');
@@ -552,10 +591,10 @@ function IncidentsPage({ onOpenMonitor }: IncidentsPageProps) {
             type="button"
             onClick={() => setSelectedIncidentId(null)}
           >
-            Incidents
+            {t('incidents.title')}
           </button>
           <ChevronRight size={14} />
-          <span>{selectedIncident.monitor}</span>
+          <span>{selectedIncidentMonitorName}</span>
         </div>
 
         <div className="incident-detail-header">
@@ -566,32 +605,39 @@ function IncidentsPage({ onOpenMonitor }: IncidentsPageProps) {
 
             <div className="incident-detail-title-copy">
               <h2>
-                {selectedIncident.status} incident on {selectedIncident.monitor}
+                {t('incidents.detail.title', {
+                  status: selectedIncidentStatusLabel,
+                  monitor: selectedIncidentMonitorName,
+                })}
               </h2>
               <p>
-                HTTP/S monitor for{' '}
+                {t('incidents.detail.monitorFor')}{' '}
                 {selectedIncident.monitorUrl ? (
                   <a href={selectedIncident.monitorUrl} target="_blank" rel="noreferrer">
                     {selectedIncident.monitorUrl}
                   </a>
                 ) : (
-                  <span>{selectedIncident.monitor}</span>
+                  <span>{selectedIncidentMonitorName}</span>
                 )}
               </p>
-              <span>Included</span>
+              <span>{t('incidents.visibility.included')}</span>
             </div>
           </div>
 
           <div className="incident-detail-actions">
             <button type="button" onClick={handleDownloadSelectedIncidentResponse}>
               <Download size={14} />
-              Download response
+              {t('incidents.detail.downloadResponse')}
             </button>
             <button type="button" onClick={handleOpenSelectedIncidentMonitor} disabled={!selectedIncident.monitorId}>
               <Radio size={14} />
-              Go to monitor
+              {t('incidents.detail.goToMonitor')}
             </button>
-            <button className="incident-detail-more-button" type="button" aria-label="More actions">
+            <button
+              className="incident-detail-more-button"
+              type="button"
+              aria-label={t('incidents.detail.moreActions')}
+            >
               <EllipsisVertical size={15} />
             </button>
           </div>
@@ -600,48 +646,54 @@ function IncidentsPage({ onOpenMonitor }: IncidentsPageProps) {
         <div className="incident-detail-content">
           <div className="incident-detail-main">
             <section className="incident-detail-card incident-detail-root-cause-card">
-              <p className="incident-detail-label">Root cause</p>
+              <p className="incident-detail-label">{t('incidents.detail.rootCause')}</p>
               <h3 className="incident-detail-root-cause">{selectedIncident.rootCause}</h3>
             </section>
 
             <div className="incident-detail-two-cards">
               <section className="incident-detail-card incident-detail-status-card">
-                <p className="incident-detail-label">Status</p>
-                <p className="incident-detail-value status">{selectedIncident.status}</p>
-                <p className="incident-detail-meta">Started at {selectedIncident.started}</p>
+                <p className="incident-detail-label">{t('incidents.detail.status')}</p>
+                <p className="incident-detail-value status">{selectedIncidentStatusLabel}</p>
+                <p className="incident-detail-meta">
+                  {t('incidents.detail.startedAt', { date: selectedIncident.started })}
+                </p>
               </section>
 
               <section className="incident-detail-card">
-                <p className="incident-detail-label">Duration</p>
-                <p className="incident-detail-value">{selectedIncident.duration}</p>
+                <p className="incident-detail-label">{t('incidents.detail.duration')}</p>
+                <p className="incident-detail-value">
+                  {selectedIncident.duration === 'Ongoing'
+                    ? t('incidents.status.ongoing')
+                    : selectedIncident.duration}
+                </p>
                 <p className="incident-detail-meta">
                   {selectedIncident.resolved === '-'
-                    ? 'Not resolved yet'
-                    : `Resolved at ${selectedIncident.resolved}`}
+                    ? t('incidents.detail.notResolvedYet')
+                    : t('incidents.detail.resolvedAt', { date: selectedIncident.resolved })}
                 </p>
               </section>
             </div>
 
             <section className="incident-detail-card incident-detail-activity-card">
-              <h3>Activity log</h3>
+              <h3>{t('incidents.detail.activityLog')}</h3>
               <ul className="incident-detail-log">
                 <li>
                   <span className="incident-detail-log-icon">
                     <Bell size={18} />
                   </span>
-                  Email sent to your email
+                  {t('incidents.detail.emailSent')}
                 </li>
                 <li>
                   <span className="incident-detail-log-icon">
                     <Bell size={18} />
                   </span>
-                  Discord notification sent to discord integration #1
+                  {t('incidents.detail.discordNotification')}
                 </li>
                 <li>
                   <span className="incident-detail-log-icon">
                     <Bell size={18} />
                   </span>
-                  Incident resolved, confirmed by metal 2000
+                  {t('incidents.detail.resolvedConfirmed')}
                 </li>
               </ul>
             </section>
@@ -650,7 +702,7 @@ function IncidentsPage({ onOpenMonitor }: IncidentsPageProps) {
           <aside className="incident-detail-side">
             <section className="incident-detail-card side">
               <div className="incident-detail-side-header">
-                <h3>Request</h3>
+                <h3>{t('incidents.detail.request')}</h3>
                 <div className="incident-detail-tabs">
                   <button
                     className={requestTab === 'url' ? 'active' : undefined}
@@ -658,7 +710,7 @@ function IncidentsPage({ onOpenMonitor }: IncidentsPageProps) {
                     aria-pressed={requestTab === 'url'}
                     onClick={() => setRequestTab('url')}
                   >
-                    URL
+                    {t('incidents.detail.urlTab')}
                   </button>
                   <button
                     className={requestTab === 'headers' ? 'active' : undefined}
@@ -666,7 +718,7 @@ function IncidentsPage({ onOpenMonitor }: IncidentsPageProps) {
                     aria-pressed={requestTab === 'headers'}
                     onClick={() => setRequestTab('headers')}
                   >
-                    Headers
+                    {t('incidents.detail.headersTab')}
                   </button>
                 </div>
               </div>
@@ -675,7 +727,7 @@ function IncidentsPage({ onOpenMonitor }: IncidentsPageProps) {
                   <span>{requestUrlText}</span>
                   <button
                     type="button"
-                    aria-label="Copy request URL"
+                    aria-label={t('incidents.detail.copyRequestUrl')}
                     onClick={() => {
                       void handleCopyRequest();
                     }}
@@ -690,7 +742,7 @@ function IncidentsPage({ onOpenMonitor }: IncidentsPageProps) {
                   </pre>
                   <button
                     type="button"
-                    aria-label="Copy request headers"
+                    aria-label={t('incidents.detail.copyRequestHeaders')}
                     onClick={() => {
                       void handleCopyRequest();
                     }}
@@ -703,7 +755,7 @@ function IncidentsPage({ onOpenMonitor }: IncidentsPageProps) {
 
             <section className="incident-detail-card side">
               <div className="incident-detail-side-header">
-                <h3>Response</h3>
+                <h3>{t('incidents.detail.response')}</h3>
                 <div className="incident-detail-tabs">
                   <button
                     className={responseTab === 'body' ? 'active' : undefined}
@@ -711,7 +763,7 @@ function IncidentsPage({ onOpenMonitor }: IncidentsPageProps) {
                     aria-pressed={responseTab === 'body'}
                     onClick={() => setResponseTab('body')}
                   >
-                    Body
+                    {t('incidents.detail.bodyTab')}
                   </button>
                   <button
                     className={responseTab === 'headers' ? 'active' : undefined}
@@ -719,7 +771,7 @@ function IncidentsPage({ onOpenMonitor }: IncidentsPageProps) {
                     aria-pressed={responseTab === 'headers'}
                     onClick={() => setResponseTab('headers')}
                   >
-                    Headers
+                    {t('incidents.detail.headersTab')}
                   </button>
                 </div>
               </div>
@@ -727,9 +779,13 @@ function IncidentsPage({ onOpenMonitor }: IncidentsPageProps) {
                 <>
                   <div className="incident-detail-code">{responseBodyText}</div>
                   <p className="incident-detail-note">
-                    HTML tags are stripped in preview. Download full response{' '}
-                    <button type="button" className="incident-detail-note-link" onClick={handleDownloadSelectedIncidentResponse}>
-                      here
+                    {t('incidents.detail.previewNote')}
+                    <button
+                      type="button"
+                      className="incident-detail-note-link"
+                      onClick={handleDownloadSelectedIncidentResponse}
+                    >
+                      {t('incidents.detail.previewLink')}
                     </button>
                     .
                   </p>
@@ -751,13 +807,13 @@ function IncidentsPage({ onOpenMonitor }: IncidentsPageProps) {
   return (
     <>
       <header className="incidents-header-row">
-        <h1>Incidents</h1>
+        <h1>{t('incidents.title')}</h1>
         <div className="incidents-toolbar">
           <label className="incidents-search-box">
             <Search size={16} />
             <input
               type="text"
-              placeholder="Search by name or url"
+              placeholder={t('dashboard.searchPlaceholder')}
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
             />
@@ -773,7 +829,7 @@ function IncidentsPage({ onOpenMonitor }: IncidentsPageProps) {
             >
               <span className="incidents-filter-content">
                 <Tag size={14} />
-                {selectedTag}
+                {incidentTagLabels[selectedTag]}
               </span>
               <ChevronDown size={14} />
             </button>
@@ -810,7 +866,7 @@ function IncidentsPage({ onOpenMonitor }: IncidentsPageProps) {
             >
               <span className="incidents-filter-content">
                 <ArrowUpDown size={14} />
-                {incidentSortOptionLabels[incidentSortOption]}
+                {incidentSortLabels[incidentSortOption]}
               </span>
               <ChevronDown size={14} />
             </button>
@@ -829,7 +885,7 @@ function IncidentsPage({ onOpenMonitor }: IncidentsPageProps) {
                       setIsSortMenuOpen(false);
                     }}
                   >
-                    <span>{incidentSortOptionLabels[option]}</span>
+                    <span>{incidentSortLabels[option]}</span>
                     {incidentSortOption === option ? <Check size={15} aria-hidden="true" /> : null}
                   </button>
                 ))}
@@ -846,27 +902,27 @@ function IncidentsPage({ onOpenMonitor }: IncidentsPageProps) {
               aria-expanded={isFilterMenuOpen}
             >
               <SlidersHorizontal size={14} />
-              Filter
+              {t('dashboard.filter.button')}
             </button>
 
             {isFilterMenuOpen && (
               <div className="incidents-filter-menu" role="menu">
                 <div className="incidents-filter-options">
-                  {incidentFilterOptions.map((option) => (
-                    <label key={option.id} className="incidents-filter-option">
-                      <input
-                        type="checkbox"
-                        checked={activeFilterIds.includes(option.id)}
-                        onChange={() => toggleFilterOption(option.id)}
-                      />
-                      <span>{option.label}</span>
-                    </label>
-                  ))}
-                </div>
+                {incidentFilterOptions.map((option) => (
+                  <label key={option.id} className="incidents-filter-option">
+                    <input
+                      type="checkbox"
+                      checked={activeFilterIds.includes(option.id)}
+                      onChange={() => toggleFilterOption(option.id)}
+                    />
+                    <span>{incidentFilterLabels[option.id]}</span>
+                  </label>
+                ))}
+              </div>
 
                 <button type="button" className="incidents-filter-reset-button" onClick={resetFilters}>
                   <RotateCcw size={14} />
-                  Reset
+                  {t('dashboard.filter.reset')}
                 </button>
               </div>
             )}
@@ -875,7 +931,7 @@ function IncidentsPage({ onOpenMonitor }: IncidentsPageProps) {
           <button
             className="incidents-icon-button"
             type="button"
-            aria-label="Export incidents"
+            aria-label={t('incidents.exportCsv')}
             onClick={handleExportIncidentsCsv}
             disabled={isIncidentsLoading || sortedIncidentRows.length === 0}
           >
@@ -888,21 +944,21 @@ function IncidentsPage({ onOpenMonitor }: IncidentsPageProps) {
         <table className="incidents-table">
           <thead>
             <tr>
-              <th>Status</th>
-              <th>Monitor</th>
-              <th>Roots cause</th>
-              <th>Comments</th>
-              <th>Started</th>
-              <th>Resolved</th>
-              <th>Duration</th>
-              <th>Visibility</th>
+              <th>{t('incidents.table.status')}</th>
+              <th>{t('incidents.table.monitor')}</th>
+              <th>{t('incidents.table.rootCause')}</th>
+              <th>{t('incidents.table.comments')}</th>
+              <th>{t('incidents.table.started')}</th>
+              <th>{t('incidents.table.resolved')}</th>
+              <th>{t('incidents.table.duration')}</th>
+              <th>{t('incidents.table.visibility')}</th>
             </tr>
           </thead>
           <tbody>
             {isIncidentsLoading ? (
               <tr>
                 <td colSpan={8} className="incidents-empty-row">
-                  Loading incidents...
+                  {t('common.loading')}
                 </td>
               </tr>
             ) : incidentsLoadError ? (
@@ -914,7 +970,7 @@ function IncidentsPage({ onOpenMonitor }: IncidentsPageProps) {
             ) : sortedIncidentRows.length === 0 ? (
               <tr>
                 <td colSpan={8} className="incidents-empty-row">
-                  No incidents found.
+                  {t('incidents.empty')}
                 </td>
               </tr>
             ) : (
@@ -937,16 +993,16 @@ function IncidentsPage({ onOpenMonitor }: IncidentsPageProps) {
                       <span className="incidents-status-icon" aria-hidden="true">
                         {incident.status === 'Resolved' ? <Check size={9} /> : <Radio size={9} />}
                       </span>
-                      {incident.status}
+                      {incidentStatusLabels[incident.status]}
                     </span>
                   </td>
-                  <td>{incident.monitor}</td>
+                  <td>{incident.monitor === 'Unknown monitor' ? t('incidents.unknownMonitor') : incident.monitor}</td>
                   <td>{incident.rootCause}</td>
                   <td>{incident.comments}</td>
                   <td>{incident.started}</td>
                   <td>{incident.resolved}</td>
-                  <td>{incident.duration}</td>
-                  <td>{incident.visibility}</td>
+                  <td>{incident.duration === 'Ongoing' ? t('incidents.status.ongoing') : incident.duration}</td>
+                  <td>{t('incidents.visibility.included')}</td>
                 </tr>
               ))
             )}

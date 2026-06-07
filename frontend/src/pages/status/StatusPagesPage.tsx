@@ -15,6 +15,7 @@ import {
   removeCachedPublicStatusPage,
   type StoredStatusPageSettings,
 } from "./statusPageStorage";
+import { useAppLanguage, type TranslationKey } from "../../lib/language";
 import "./status-pages-page.css";
 
 interface StatusPageRow {
@@ -50,6 +51,7 @@ type LocalStatusPageSummary = ReturnType<
 const formatMonitorSummary = (
   monitorIds: string[],
   monitorLookup: Map<string, BackendMonitor>,
+  t: (key: TranslationKey, values?: Record<string, string | number | boolean | null | undefined>) => string,
 ): string => {
   const selectedMonitors = monitorIds
     .map((monitorId) => monitorLookup.get(monitorId))
@@ -57,8 +59,8 @@ const formatMonitorSummary = (
 
   if (selectedMonitors.length === 0) {
     return monitorIds.length > 0
-      ? `${monitorIds.length} monitor${monitorIds.length > 1 ? "s" : ""} selected`
-      : "No monitors selected";
+      ? t("statusPages.summary.selectedCount", { count: monitorIds.length })
+      : t("statusPages.summary.noneSelected");
   }
 
   if (selectedMonitors.length === 1) {
@@ -68,16 +70,17 @@ const formatMonitorSummary = (
 
   const firstMonitor = selectedMonitors[0];
   const suffix =
-    selectedMonitors.length > 1 ? ` +${selectedMonitors.length - 1} more` : "";
-  return `${firstMonitor?.name || "Monitors"}${suffix}`;
+    selectedMonitors.length > 1 ? t("statusPages.summary.more", { count: selectedMonitors.length - 1 }) : "";
+  return `${firstMonitor?.name || t("statusPages.summary.monitors")}${suffix}`;
 };
 
 const mapLocalStatusPageToRow = (
   summary: LocalStatusPageSummary,
   monitorLookup: Map<string, BackendMonitor>,
+  t: (key: TranslationKey, values?: Record<string, string | number | boolean | null | undefined>) => string,
 ): StatusPageRow => {
   const settings = summary.settings as StoredStatusPageSettings;
-  const pageName = settings.pageName?.trim() || "New status page";
+  const pageName = settings.pageName?.trim() || t("statusPages.newPage");
   const accessLevel = settings.passwordEnabled
     ? "Password protected"
     : "Public";
@@ -85,7 +88,7 @@ const mapLocalStatusPageToRow = (
   return {
     id: summary.id,
     name: pageName,
-    monitorGroup: formatMonitorSummary(summary.monitorIds, monitorLookup),
+    monitorGroup: formatMonitorSummary(summary.monitorIds, monitorLookup, t),
     accessLevel,
     status: "Published",
     source: "local",
@@ -105,6 +108,7 @@ function StatusPagesPage({
   onPreviewStatusPage,
   onCreateStatusPage,
 }: StatusPagesPageProps) {
+  const { t } = useAppLanguage();
   const [statusPageRows, setStatusPageRows] = useState<StatusPageRow[]>([]);
   const [isLoadingRows, setIsLoadingRows] = useState(false);
   const [loadRowsError, setLoadRowsError] = useState<string | null>(null);
@@ -123,7 +127,7 @@ function StatusPagesPage({
     setLoadRowsError(null);
 
     try {
-      if (statusPage.source === "local") {
+          if (statusPage.source === "local") {
         try {
           await deleteStatusPage(statusPage.id, authToken ?? undefined);
         } catch (error) {
@@ -150,11 +154,11 @@ function StatusPagesPage({
       removeCachedPublicStatusPage(statusPage.id);
     } catch (error) {
       if (isApiError(error)) {
-        setLoadRowsError(error.message || "Unable to delete status page.");
+        setLoadRowsError(error.message || t("statusPages.deleteError"));
       } else if (error instanceof Error && error.message.trim() !== "") {
         setLoadRowsError(error.message);
       } else {
-        setLoadRowsError("Unable to delete status page.");
+        setLoadRowsError(t("statusPages.deleteError"));
       }
     } finally {
       setDeletingStatusPageId(null);
@@ -197,7 +201,7 @@ function StatusPagesPage({
           const response = await saveStatusPage(
             summary.id,
             {
-              pageName: summary.settings.pageName?.trim() || "Status page",
+              pageName: summary.settings.pageName?.trim() || t("statusPages.newPage"),
               monitorIds: summary.monitorIds,
               passwordEnabled: summary.settings.passwordEnabled ?? false,
               password:
@@ -233,7 +237,7 @@ function StatusPagesPage({
           response.monitors.map((monitor) => [monitor._id, monitor]),
         );
         const nextLocalStatusPageRows = refreshedLocalStatusPageSummaries.map(
-          (summary) => mapLocalStatusPageToRow(summary, monitorLookup),
+          (summary) => mapLocalStatusPageToRow(summary, monitorLookup, t),
         );
         const backendStatusPageRows = response.monitors.map(
           mapMonitorToStatusPageRow,
@@ -252,11 +256,11 @@ function StatusPagesPage({
           readLocalStatusPageSummaries();
         const refreshedLocalStatusPageRows =
           refreshedLocalStatusPageSummaries.map((summary) =>
-            mapLocalStatusPageToRow(summary, new Map()),
+            mapLocalStatusPageToRow(summary, new Map(), t),
           );
         setStatusPageRows(refreshedLocalStatusPageRows);
         if (isApiError(error)) {
-          setLoadRowsError(error.message || "Unable to load status pages.");
+          setLoadRowsError(error.message || t("statusPages.loadError"));
           return;
         }
 
@@ -265,7 +269,7 @@ function StatusPagesPage({
           return;
         }
 
-        setLoadRowsError("Unable to load status pages.");
+        setLoadRowsError(t("statusPages.loadError"));
       } finally {
         if (!cancelled) {
           setIsLoadingRows(false);
@@ -278,40 +282,36 @@ function StatusPagesPage({
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [t]);
 
   return (
     <section className="status-pages-page">
       <header className="status-pages-header">
-        <h1>Status pages</h1>
+        <h1>{t("statusPages.title")}</h1>
         <button
           className="status-pages-create-button"
           type="button"
           onClick={() => onCreateStatusPage?.()}
         >
-          Create Status page
+          {t("statusPages.create")}
         </button>
       </header>
 
       <div className="status-pages-table">
         <div className="status-pages-table-grid">
           <div className="status-pages-table-head">
-            <span>Name</span>
-            <span>Access level</span>
-            <span>Status</span>
-            <span>Actions</span>
+            <span>{t("statusPages.columns.name")}</span>
+            <span>{t("statusPages.columns.accessLevel")}</span>
+            <span>{t("statusPages.columns.status")}</span>
+            <span>{t("statusPages.columns.actions")}</span>
           </div>
 
           {isLoadingRows ? (
-            <p className="status-pages-table-feedback">
-              Loading status pages...
-            </p>
+            <p className="status-pages-table-feedback">{t("statusPages.loading")}</p>
           ) : loadRowsError ? (
             <p className="status-pages-table-feedback error">{loadRowsError}</p>
           ) : statusPageRows.length === 0 ? (
-            <p className="status-pages-table-feedback">
-              No status pages found.
-            </p>
+            <p className="status-pages-table-feedback">{t("statusPages.empty")}</p>
           ) : (
             statusPageRows.map((statusPage) => (
               <article
@@ -340,10 +340,20 @@ function StatusPagesPage({
 
                 <div className="status-pages-access-cell">
                   <UserRound size={11} />
-                  <span>{statusPage.accessLevel}</span>
+                  <span>
+                    {statusPage.accessLevel === "Public"
+                      ? t("statusPages.access.public")
+                      : t("statusPages.access.passwordProtected")}
+                  </span>
                 </div>
 
-                <p className="status-pages-status-cell">{statusPage.status}</p>
+                <p className="status-pages-status-cell">
+                  {statusPage.status === "Published"
+                    ? t("statusPages.status.published")
+                    : statusPage.status === "Unpublished"
+                      ? t("statusPages.status.unpublished")
+                      : statusPage.status}
+                </p>
 
                 <div
                   className="status-pages-actions-cell"
@@ -354,7 +364,7 @@ function StatusPagesPage({
                   <button
                     className="status-pages-action-button view"
                     type="button"
-                    aria-label="Consulter la page de status"
+                    aria-label={t("statusPages.actions.view")}
                     onClick={(event) => {
                       event.stopPropagation();
                       if (onPreviewStatusPage) {
@@ -369,7 +379,7 @@ function StatusPagesPage({
                   <button
                     className="status-pages-action-button"
                     type="button"
-                    aria-label="Open status page monitors"
+                    aria-label={t("statusPages.actions.monitors")}
                     onClick={(event) => {
                       event.stopPropagation();
                       onOpenStatusPageMonitors(statusPage.id);
@@ -382,8 +392,8 @@ function StatusPagesPage({
                     type="button"
                     aria-label={
                       statusPage.status === "Published"
-                        ? "Un-publish status page"
-                        : "Publish status page"
+                        ? t("statusPages.actions.unpublish")
+                        : t("statusPages.actions.publish")
                     }
                     onClick={(event) => {
                       event.stopPropagation();
@@ -407,7 +417,7 @@ function StatusPagesPage({
                   <button
                     className="status-pages-action-button delete"
                     type="button"
-                    aria-label="Delete status page"
+                    aria-label={t("statusPages.actions.delete")}
                     disabled={deletingStatusPageId === statusPage.id}
                     onClick={(event) => {
                       event.stopPropagation();

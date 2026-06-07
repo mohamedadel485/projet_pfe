@@ -7,6 +7,8 @@ import {
   type KeyboardEvent,
 } from "react";
 import lockIcon from "../../images/lock@2x.png";
+import LanguageSwitcher from "../../components/LanguageSwitcher";
+import { useAppLanguage } from "../../lib/language";
 import "./ConfirmationCodePage.css";
 
 interface ConfirmationCodePageProps {
@@ -17,11 +19,12 @@ interface ConfirmationCodePageProps {
 }
 
 function ConfirmationCodePage({
-  email = "username@gmail.com",
+  email = "user@example.com",
   onBack,
   onContinue,
   onResend,
 }: ConfirmationCodePageProps) {
+  const { t } = useAppLanguage();
   const [digits, setDigits] = useState(["", "", "", "", "", ""]);
   const inputRefs = useRef<Array<HTMLInputElement | null>>([]);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -77,7 +80,7 @@ function ConfirmationCodePage({
 
     const code = digits.join("");
     if (code.length !== 6) {
-      setSubmitError("Entrez le code complet");
+      setSubmitError(t("auth.enterCodeComplete"));
       return;
     }
 
@@ -97,12 +100,13 @@ function ConfirmationCodePage({
 
   return (
     <main className="confirmation-code-page">
+      <LanguageSwitcher />
       <div className="confirmation-code-shell">
         <button
           type="button"
           className="confirmation-code-back"
           onClick={onBack}
-          aria-label="Back"
+          aria-label={t("common.back")}
         >
           <ArrowLeft size={16} />
         </button>
@@ -121,12 +125,12 @@ function ConfirmationCodePage({
             />
           </div>
 
-          <h1 className="confirmation-code-title">Enter confirmation code</h1>
+          <h1 className="confirmation-code-title">{t("auth.verificationCode")}</h1>
           <p
             className="confirmation-code-subtitle"
             style={{ marginTop: "30px" }}
           >
-            We sent you a code to <strong>{email}</strong>
+            {t("auth.codeSentToEmail").replace("{email}", email)}
           </p>
 
           <form className="confirmation-code-form" onSubmit={handleSubmit}>
@@ -148,14 +152,17 @@ function ConfirmationCodePage({
                   }
                   onKeyDown={(event) => handleDigitKeyDown(index, event)}
                   onPaste={handlePaste}
-                  aria-label={`Code digit ${index + 1}`}
+                  aria-label={t("auth.codeDigit").replace(
+                    "{index}",
+                    String(index + 1),
+                  )}
                   disabled={isSubmitting || isResending}
                 />
               ))}
             </div>
 
             <p className="confirmation-code-resend">
-              Didn&apos;t receive the email?{" "}
+              {t("auth.didNotReceiveEmail")}{" "}
               <a
                 href="#"
                 onClick={async (event) => {
@@ -170,12 +177,12 @@ function ConfirmationCodePage({
                   if (error) {
                     setSubmitError(error);
                   } else {
-                    setResendFeedback("Code resent successfully.");
+                    setResendFeedback(t("auth.codeResentSuccessfully"));
                   }
                   setIsResending(false);
                 }}
               >
-                Click to resend
+                {t("auth.clickToResend")}
               </a>
             </p>
 
@@ -183,12 +190,12 @@ function ConfirmationCodePage({
             {resendFeedback ? <p>{resendFeedback}</p> : null}
 
             <button type="submit" style={{ margin: "50px 0" }} disabled={isSubmitting || isResending}>
-              {isSubmitting ? 'Verifying...' : 'Continue'}
+              {isSubmitting ? t("auth.verifying") : t("auth.continue")}
             </button>
           </form>
 
           <p className="confirmation-code-footer">
-            Privacy policy | Terms of service Status page by{" "}
+            {t("auth.footer")}
             <strong>MONITORING</strong>
           </p>
         </section>

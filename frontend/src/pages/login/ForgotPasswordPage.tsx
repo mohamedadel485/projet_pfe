@@ -1,6 +1,8 @@
 import { Eye, EyeOff } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import unlockIcon from '../../images/unlock.png';
+import LanguageSwitcher from "../../components/LanguageSwitcher";
+import { useAppLanguage } from "../../lib/language";
 import './ForgotPasswordPage.css';
 
 interface ForgotPasswordPageProps {
@@ -8,6 +10,7 @@ interface ForgotPasswordPageProps {
 }
 
 function ForgotPasswordPage({ onResetPassword }: ForgotPasswordPageProps) {
+  const { t } = useAppLanguage();
   const [email, setEmail] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -23,17 +26,17 @@ function ForgotPasswordPage({ onResetPassword }: ForgotPasswordPageProps) {
     setSubmitError(null);
 
     if (email.trim() === '') {
-      setSubmitError('Email is required');
+      setSubmitError(t("settings.errorEmailRequired"));
       return;
     }
 
     if (newPassword.length < 6) {
-      setSubmitError('Password must contain at least 6 characters');
+      setSubmitError(t("settings.errorPasswordMinLength"));
       return;
     }
 
     if (newPassword !== confirmPassword) {
-      setSubmitError('Passwords do not match');
+      setSubmitError(t("settings.errorPasswordMismatch"));
       return;
     }
 
@@ -56,6 +59,7 @@ function ForgotPasswordPage({ onResetPassword }: ForgotPasswordPageProps) {
 
   return (
     <main className="forgot-password-page">
+      <LanguageSwitcher />
       <div className="forgot-password-shell">
         <section className="forgot-password-content">
           <p className="forgot-password-brand">Monitoring</p>
@@ -64,32 +68,32 @@ function ForgotPasswordPage({ onResetPassword }: ForgotPasswordPageProps) {
             <img className="forgot-password-lock-image" src={unlockIcon} alt="" />
           </div>
 
-          <h1 className="forgot-password-title">Create a new password</h1>
+          <h1 className="forgot-password-title">{t("auth.createNewPassword")}</h1>
           <p className="forgot-password-subtitle">
-            Please choose a password that hasn&apos;t been used before. Must be <strong>at least 6 characters</strong>
+            {t("auth.createNewPasswordSubtitle")}
           </p>
 
           <form className="forgot-password-form" onSubmit={handleSubmit}>
-            <label htmlFor="forgot-email">Email</label>
+            <label htmlFor="forgot-email">{t("common.email")}</label>
             <div className="forgot-password-input-wrap">
               <input
                 id="forgot-email"
                 type="email"
                 autoComplete="email"
-                placeholder="username@gmail.com"
+                placeholder={t("auth.emailPlaceholder")}
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
                 disabled={isSubmitting}
               />
             </div>
 
-            <label htmlFor="forgot-new-password">New password</label>
+            <label htmlFor="forgot-new-password">{t("settings.newPassword")}</label>
             <div className="forgot-password-input-wrap">
               <input
                 id="forgot-new-password"
                 type={showNewPassword ? 'text' : 'password'}
                 autoComplete="new-password"
-                placeholder="XXXXXXXXXX"
+                placeholder={t("auth.passwordRequirementsPlaceholder")}
                 value={newPassword}
                 onChange={(event) => setNewPassword(event.target.value)}
                 disabled={isSubmitting}
@@ -97,7 +101,9 @@ function ForgotPasswordPage({ onResetPassword }: ForgotPasswordPageProps) {
               <button
                 type="button"
                 className="forgot-password-toggle"
-                aria-label={showNewPassword ? 'Hide password' : 'Show password'}
+                aria-label={
+                  showNewPassword ? t("auth.hidePassword") : t("auth.showPassword")
+                }
                 onClick={() => setShowNewPassword((prev) => !prev)}
                 disabled={isSubmitting}
               >
@@ -105,13 +111,15 @@ function ForgotPasswordPage({ onResetPassword }: ForgotPasswordPageProps) {
               </button>
             </div>
 
-            <label htmlFor="forgot-confirm-password">Confirm new password</label>
+            <label htmlFor="forgot-confirm-password">
+              {t("settings.confirmPassword")}
+            </label>
             <div className="forgot-password-input-wrap">
               <input
                 id="forgot-confirm-password"
                 type={showConfirmPassword ? 'text' : 'password'}
                 autoComplete="new-password"
-                placeholder="XXXXXXXXXX"
+                placeholder={t("auth.repeatPassword")}
                 value={confirmPassword}
                 onChange={(event) => setConfirmPassword(event.target.value)}
                 disabled={isSubmitting}
@@ -119,7 +127,11 @@ function ForgotPasswordPage({ onResetPassword }: ForgotPasswordPageProps) {
               <button
                 type="button"
                 className="forgot-password-toggle"
-                aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}
+                aria-label={
+                  showConfirmPassword
+                    ? t("auth.hidePassword")
+                    : t("auth.showPassword")
+                }
                 onClick={() => setShowConfirmPassword((prev) => !prev)}
                 disabled={isSubmitting}
               >
@@ -130,12 +142,13 @@ function ForgotPasswordPage({ onResetPassword }: ForgotPasswordPageProps) {
             {submitError ? <p className="login-form-error">{submitError}</p> : null}
 
             <button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? 'Sending code...' : 'Reset password'}
+              {isSubmitting ? t("auth.resetting") : t("auth.resetPassword")}
             </button>
           </form>
 
           <p className="forgot-password-footer">
-            Privacy policy | Terms of service Status page by <strong>MONITORING</strong>
+            {t("auth.footer")}
+            <strong>MONITORING</strong>
           </p>
         </section>
       </div>

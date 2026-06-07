@@ -1,5 +1,6 @@
 import { ChevronDown } from 'lucide-react';
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useAppLanguage } from '../../lib/language';
 import './InviteTeamMemberPage.css';
 
 interface InvitePayload {
@@ -32,6 +33,7 @@ function InviteTeamMemberPage({
   currentUserRole = "user",
   onInviteTeam,
 }: InviteTeamMemberPageProps) {
+  const { t } = useAppLanguage();
   const canInviteAdmins = currentUserRole === "super_admin";
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -45,11 +47,11 @@ function InviteTeamMemberPage({
     () =>
       canInviteAdmins
         ? [
-            { value: 'member', label: 'Member' },
-            { value: 'admin', label: 'Admin' },
+            { value: 'member', label: t('team.invite.member') },
+            { value: 'admin', label: t('team.invite.admin') },
           ]
-        : [{ value: 'member', label: 'Member' }],
-    [canInviteAdmins],
+        : [{ value: 'member', label: t('team.invite.member') }],
+    [canInviteAdmins, t],
   );
 
   useEffect(() => {
@@ -91,42 +93,42 @@ function InviteTeamMemberPage({
     setRole('member');
     setSelectedMonitorIds([]);
     setIsMonitorListOpen(false);
-    setSubmitSuccess(result.notice ?? 'Invitation created.');
+    setSubmitSuccess(result.notice ?? t('team.invite.successCreated'));
     setIsSubmitting(false);
   };
 
   return (
     <section className="invite-team-page">
       <article className="invite-team-card">
-        <p className="invite-team-kicker">Team members</p>
+        <p className="invite-team-kicker">{t('team.invite.kicker')}</p>
 
         <div className="invite-team-content">
           <h1 className="invite-team-title">
-            Invite <span>Team members</span>
+            {t('team.invite.titleLead')} <span>{t('team.invite.titleHighlight')}</span>
           </h1>
 
           <form className="invite-team-form" onSubmit={handleSubmit}>
-            <label htmlFor="invite-team-name">Name</label>
+            <label htmlFor="invite-team-name">{t('team.invite.nameLabel')}</label>
             <input
               id="invite-team-name"
               type="text"
-              placeholder="User name"
+              placeholder={t('team.invite.namePlaceholder')}
               value={name}
               onChange={(event) => setName(event.target.value)}
               disabled={isSubmitting}
             />
 
-            <label htmlFor="invite-team-email">Email</label>
+            <label htmlFor="invite-team-email">{t('team.invite.emailLabel')}</label>
             <input
               id="invite-team-email"
               type="email"
-              placeholder="username@gmail.com"
+              placeholder={t('team.invite.emailPlaceholder')}
               value={email}
               onChange={(event) => setEmail(event.target.value)}
               disabled={isSubmitting}
             />
 
-            <label htmlFor="invite-team-role">Permission level</label>
+            <label htmlFor="invite-team-role">{t('team.invite.roleLabel')}</label>
             <div className="invite-team-select-shell">
               <select
                 id="invite-team-role"
@@ -144,15 +146,15 @@ function InviteTeamMemberPage({
             </div>
             {!canInviteAdmins ? (
               <p className="invite-team-feedback">
-                Only the super admin can invite another admin.
+                {t('team.invite.onlySuperAdminCanInviteAdmin')}
               </p>
             ) : null}
 
-            <label htmlFor="invite-team-monitors">Monitors</label>
+            <label htmlFor="invite-team-monitors">{t('team.invite.monitorsLabel')}</label>
             <div
               className={`invite-team-multi-select ${isMonitorListOpen ? 'open' : ''}`}
               id="invite-team-monitors"
-              aria-label="Selected monitors"
+              aria-label={t('team.invite.selectedMonitors')}
               onClick={() => {
                 if (isSubmitting) return;
                 setIsMonitorListOpen((prev) => !prev);
@@ -160,7 +162,7 @@ function InviteTeamMemberPage({
             >
               <div className="invite-team-selected-chips">
                 {selectedMonitorIds.length === 0 ? (
-                  <span className="invite-team-selected-placeholder">Select monitors</span>
+                  <span className="invite-team-selected-placeholder">{t('team.invite.selectMonitors')}</span>
                 ) : (
                   selectedMonitorIds.map((monitorId) => {
                     const label = monitorOptions.find((option) => option.id === monitorId)?.name ?? monitorId;
@@ -184,7 +186,7 @@ function InviteTeamMemberPage({
               <button
                 type="button"
                 className="invite-team-multi-toggle"
-                aria-label={isMonitorListOpen ? 'Close monitors list' : 'Open monitors list'}
+                aria-label={isMonitorListOpen ? t('team.invite.closeMonitorsList') : t('team.invite.openMonitorsList')}
                 onClick={(event) => {
                   if (isSubmitting) return;
                   event.stopPropagation();
@@ -220,7 +222,7 @@ function InviteTeamMemberPage({
               className="invite-team-submit-button"
               disabled={name.trim() === '' || email.trim() === '' || isSubmitting}
             >
-              {isSubmitting ? 'Sending...' : 'Invite Team'}
+              {isSubmitting ? t('team.invite.sending') : t('team.invite.submit')}
             </button>
           </form>
         </div>
