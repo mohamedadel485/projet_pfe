@@ -12,6 +12,9 @@ export interface IInvitation extends Document {
   role?: InvitationRole;
   status: InvitationStatus;
   expiresAt: Date;
+  nom?: string;
+  dateEnvoi?: Date;
+  statut?: InvitationStatus;
   createdAt: Date;
   updatedAt: Date;
   envoyer(): Promise<IInvitation>;
@@ -71,6 +74,65 @@ const invitationSchema = new Schema<IInvitation>(
 invitationSchema.index({ token: 1 }, { unique: true });
 invitationSchema.index({ email: 1 });
 invitationSchema.index({ expiresAt: 1 });
+
+invitationSchema.virtual("nom").get(function (this: IInvitation): string {
+  return this.name ?? "";
+});
+
+invitationSchema.virtual("nom").set(function (
+  this: IInvitation,
+  value: unknown,
+): void {
+  if (typeof value === "string") {
+    this.name = value;
+  }
+});
+
+invitationSchema.virtual("statut").get(function (
+  this: IInvitation,
+): InvitationStatus {
+  return this.status;
+});
+
+invitationSchema.virtual("statut").set(function (
+  this: IInvitation,
+  value: unknown,
+): void {
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (
+      normalized === "pending" ||
+      normalized === "accepted" ||
+      normalized === "expired"
+    ) {
+      this.status = normalized as InvitationStatus;
+    }
+  }
+});
+
+invitationSchema.virtual("dateEnvoi").get(function (this: IInvitation): Date {
+  return this.createdAt;
+});
+
+invitationSchema.virtual("dateEnvoi").set(function (
+  this: IInvitation,
+  value: unknown,
+): void {
+  if (value instanceof Date) {
+    this.createdAt = value;
+    return;
+  }
+
+  if (typeof value === "string" || typeof value === "number") {
+    const parsed = new Date(value);
+    if (!Number.isNaN(parsed.getTime())) {
+      this.createdAt = parsed;
+    }
+  }
+});
+
+invitationSchema.set("toJSON", { virtuals: true });
+invitationSchema.set("toObject", { virtuals: true });
 
 invitationSchema.methods.envoyer = async function (
   this: IInvitation,

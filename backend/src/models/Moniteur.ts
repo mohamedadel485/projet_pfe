@@ -17,6 +17,55 @@ export type MonitorHttpMethod =
   | "OPTIONS";
 export type MonitorHttpMethodCompat = Lowercase<MonitorHttpMethod>;
 
+const normalizeMonitorProtocol = (value: unknown): MonitorProtocol | null => {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim().toLowerCase();
+  return ["http", "https", "ws", "wss"].includes(normalized)
+    ? (normalized as MonitorProtocol)
+    : null;
+};
+
+const normalizeMonitorHttpMethod = (
+  value: unknown,
+): MonitorHttpMethod | null => {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim().toUpperCase();
+  return [
+    "GET",
+    "POST",
+    "PUT",
+    "PATCH",
+    "DELETE",
+    "HEAD",
+    "OPTIONS",
+  ].includes(normalized)
+    ? (normalized as MonitorHttpMethod)
+    : null;
+};
+
+const normalizeMonitorStatus = (value: unknown): MonitorStatus | null => {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim().toLowerCase();
+  return ["up", "down", "paused", "pending"].includes(normalized)
+    ? (normalized as MonitorStatus)
+    : null;
+};
+
+const normalizeMonitorInterval = (value: unknown): number | null => {
+  if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+    return Math.floor(value);
+  }
+
+  if (typeof value === "string") {
+    const parsed = Number.parseInt(value, 10);
+    if (Number.isFinite(parsed) && parsed > 0) {
+      return parsed;
+    }
+  }
+
+  return null;
+};
+
 export interface IMonitor extends Document {
   name: string;
   url: string;
@@ -62,12 +111,13 @@ export interface IMonitor extends Document {
   protocole?: MonitorProtocol;
   typeHTTP?: MonitorHttpMethodCompat;
   statut?: MonitorStatus;
+  intervalle?: number;
   creer(): Promise<IMonitor>;
   modifier(updates: Partial<IMonitor>): Promise<IMonitor>;
   supprimer(): Promise<void>;
   createdAt: Date;
   updatedAt: Date;
-  deleredAt?: Date;
+  deletedAt?: Date;
 }
 
 const monitorSchema = new Schema<IMonitor>(
@@ -246,6 +296,108 @@ const monitorSchema = new Schema<IMonitor>(
 monitorSchema.index({ owner: 1 });
 monitorSchema.index({ sharedWith: 1 });
 monitorSchema.index({ status: 1 });
+
+monitorSchema.virtual("nom").get(function (this: IMonitor): string {
+  return this.name;
+});
+
+monitorSchema.virtual("nom").set(function (
+  this: IMonitor,
+  value: unknown,
+): void {
+  if (typeof value === "string") {
+    this.name = value;
+  }
+});
+
+monitorSchema.virtual("protocole").get(function (
+  this: IMonitor,
+): MonitorProtocol {
+  return this.type;
+});
+
+monitorSchema.virtual("protocole").set(function (
+  this: IMonitor,
+  value: unknown,
+): void {
+  const normalized = normalizeMonitorProtocol(value);
+  if (normalized) {
+    this.type = normalized;
+  }
+});
+
+monitorSchema.virtual("typeHTTP").get(function (
+  this: IMonitor,
+): MonitorHttpMethodCompat {
+  const method =
+    typeof this.httpMethod === "string" && this.httpMethod.trim() !== ""
+      ? this.httpMethod
+      : "GET";
+  return method.toLowerCase() as MonitorHttpMethodCompat;
+});
+
+monitorSchema.virtual("typeHTTP").set(function (
+  this: IMonitor,
+  value: unknown,
+): void {
+  const normalized = normalizeMonitorHttpMethod(value);
+  if (normalized) {
+    this.httpMethod = normalized;
+  }
+});
+
+monitorSchema.virtual("statut").get(function (this: IMonitor): MonitorStatus {
+  return this.status;
+});
+
+monitorSchema.virtual("statut").set(function (
+  this: IMonitor,
+  value: unknown,
+): void {
+  const normalized = normalizeMonitorStatus(value);
+  if (normalized) {
+    this.status = normalized;
+  }
+});
+
+monitorSchema.virtual("intervalle").get(function (this: IMonitor): number {
+  return this.interval;
+});
+
+monitorSchema.virtual("intervalle").set(function (
+  this: IMonitor,
+  value: unknown,
+): void {
+  const normalized = normalizeMonitorInterval(value);
+  if (normalized !== null) {
+    this.interval = normalized;
+  }
+});
+
+monitorSchema.set("toJSON", { virtuals: true });
+monitorSchema.set("toObject", { virtuals: true });
+
+monitorSchema.methods.creer = async function (
+  this: IMonitor,
+): Promise<IMonitor> {
+  await this.save();
+  return this;
+};
+
+monitorSchema.methods.modifier = async function (
+  this: IMonitor,
+  updates: Partial<IMonitor>,
+): Promise<IMonitor> {
+  Object.assign(this, updates);
+  await this.save();
+  return this;
+};
+
+monitorSchema.methods.supprimer = async function (
+  this: IMonitor,
+): Promise<void> {
+  await this.deleteOne();
+};
 
 export default mongoose.model<IMonitor>("Monitor", monitorSchema);
 

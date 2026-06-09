@@ -5,6 +5,9 @@ export interface IDemandeCompte extends Document {
   email: string;
   message?: string;
   status: "pending" | "approved" | "rejected";
+  nom?: string;
+  dateDemande?: Date;
+  statut?: "pending" | "approved" | "rejected";
   createdAt: Date;
   updatedAt: Date;
   approvedAt?: Date;
@@ -55,6 +58,67 @@ const demandeCompteSchema = new Schema<IDemandeCompte>(
 demandeCompteSchema.index({ email: 1 });
 demandeCompteSchema.index({ status: 1 });
 demandeCompteSchema.index({ createdAt: -1 });
+
+demandeCompteSchema.virtual("nom").get(function (this: IDemandeCompte): string {
+  return this.name;
+});
+
+demandeCompteSchema.virtual("nom").set(function (
+  this: IDemandeCompte,
+  value: unknown,
+): void {
+  if (typeof value === "string") {
+    this.name = value;
+  }
+});
+
+demandeCompteSchema.virtual("dateDemande").get(function (
+  this: IDemandeCompte,
+): Date {
+  return this.createdAt;
+});
+
+demandeCompteSchema.virtual("dateDemande").set(function (
+  this: IDemandeCompte,
+  value: unknown,
+): void {
+  if (value instanceof Date) {
+    this.createdAt = value;
+    return;
+  }
+
+  if (typeof value === "string" || typeof value === "number") {
+    const parsed = new Date(value);
+    if (!Number.isNaN(parsed.getTime())) {
+      this.createdAt = parsed;
+    }
+  }
+});
+
+demandeCompteSchema.virtual("statut").get(function (
+  this: IDemandeCompte,
+): IDemandeCompte["status"] {
+  return this.status;
+});
+
+demandeCompteSchema.virtual("statut").set(function (
+  this: IDemandeCompte,
+  value: unknown,
+): void {
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (
+      normalized === "pending" ||
+      normalized === "approved" ||
+      normalized === "rejected"
+    ) {
+      this.status = normalized as IDemandeCompte["status"];
+    }
+  }
+});
+
+demandeCompteSchema.set("toJSON", { virtuals: true });
+demandeCompteSchema.set("toObject", { virtuals: true });
 
 demandeCompteSchema.methods.accepter = async function (
   this: IDemandeCompte,

@@ -21,6 +21,17 @@ export interface IStatusPage extends Document {
   updatedAt: Date;
 }
 
+const normalizeMonitorIds = (value: unknown): string[] | null => {
+  if (!Array.isArray(value)) {
+    return null;
+  }
+
+  return value
+    .filter((item): item is string => typeof item === "string")
+    .map((item) => item.trim())
+    .filter((item) => item !== "");
+};
+
 const statusPageSchema = new Schema<IStatusPage>(
   {
     statusPageId: {
@@ -80,5 +91,73 @@ const statusPageSchema = new Schema<IStatusPage>(
 );
 
 statusPageSchema.index({ owner: 1, updatedAt: -1 });
+
+statusPageSchema.virtual("nom").get(function (this: IStatusPage): string {
+  return this.pageName;
+});
+
+statusPageSchema.virtual("nom").set(function (
+  this: IStatusPage,
+  value: unknown,
+): void {
+  if (typeof value === "string") {
+    this.pageName = value;
+  }
+});
+
+statusPageSchema.virtual("moniteurs").get(function (
+  this: IStatusPage,
+): string[] {
+  return this.monitorIds;
+});
+
+statusPageSchema.virtual("moniteurs").set(function (
+  this: IStatusPage,
+  value: unknown,
+): void {
+  const normalized = normalizeMonitorIds(value);
+  if (normalized) {
+    this.monitorIds = normalized;
+  }
+});
+
+statusPageSchema.virtual("statut").get(function (this: IStatusPage): string {
+  return this.passwordEnabled ? "protected" : "public";
+});
+
+statusPageSchema.virtual("statut").set(function (
+  this: IStatusPage,
+  value: unknown,
+): void {
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    this.passwordEnabled = normalized === "protected";
+  }
+});
+
+statusPageSchema.set("toJSON", { virtuals: true });
+statusPageSchema.set("toObject", { virtuals: true });
+
+statusPageSchema.methods.creer = async function (
+  this: IStatusPage,
+): Promise<IStatusPage> {
+  await this.save();
+  return this;
+};
+
+statusPageSchema.methods.modifier = async function (
+  this: IStatusPage,
+  updates: Partial<IStatusPage>,
+): Promise<IStatusPage> {
+  Object.assign(this, updates);
+  await this.save();
+  return this;
+};
+
+statusPageSchema.methods.supprimer = async function (
+  this: IStatusPage,
+): Promise<void> {
+  await this.deleteOne();
+};
 
 export default mongoose.model<IStatusPage>("StatusPage", statusPageSchema);

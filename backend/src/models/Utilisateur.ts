@@ -36,6 +36,7 @@ export interface IUser extends Document {
   loginOtpExpires?: Date;
   comparePassword(candidatePassword: string): Promise<boolean>;
   authenticate(candidatePassword: string): Promise<boolean>;
+  sAuthentifier(candidatePassword: string): Promise<boolean>;
   consulterProfil(): IUserPublicProfile;
   modifierProfil(updates: {
     name?: string;
@@ -45,6 +46,8 @@ export interface IUser extends Document {
   reinitialiserMotDePasse(newPassword: string): Promise<IUser>;
   consulterMaintenance(): Promise<IMaintenance[]>;
   superviserIntegration(): Promise<IIntegration[]>;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 const userSchema = new Schema<IUser>(
@@ -125,6 +128,41 @@ userSchema.virtual("motDePasse").set(function (
   }
 });
 
+userSchema.virtual("DateDeCreation").get(function (this: IUser): Date {
+  return this.createdAt;
+});
+
+userSchema.virtual("DateDeCreation").set(function (
+  this: IUser,
+  value: unknown,
+): void {
+  if (value instanceof Date) {
+    this.createdAt = value;
+    return;
+  }
+  if (typeof value === "string" || typeof value === "number") {
+    const parsed = new Date(value);
+    if (!Number.isNaN(parsed.getTime())) {
+      this.createdAt = parsed;
+    }
+  }
+});
+
+userSchema.virtual("Actif").get(function (this: IUser): boolean {
+  return this.isActive;
+});
+
+userSchema.virtual("Actif").set(function (this: IUser, value: unknown): void {
+  if (typeof value === "boolean") {
+    this.isActive = value;
+    return;
+  }
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    this.isActive = normalized !== "inactive" && normalized !== "false";
+  }
+});
+
 userSchema.set("toJSON", { virtuals: true });
 userSchema.set("toObject", { virtuals: true });
 
@@ -149,6 +187,13 @@ userSchema.methods.comparePassword = async function (
 };
 
 userSchema.methods.authenticate = async function (
+  this: IUser,
+  candidatePassword: string,
+): Promise<boolean> {
+  return this.comparePassword(candidatePassword);
+};
+
+userSchema.methods.sAuthentifier = async function (
   this: IUser,
   candidatePassword: string,
 ): Promise<boolean> {
