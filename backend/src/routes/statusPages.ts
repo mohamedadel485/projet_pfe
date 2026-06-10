@@ -1,6 +1,9 @@
 import { Router, Request, Response } from 'express';
 import { body, validationResult } from 'express-validator';
 import bcrypt from 'bcryptjs';
+import multer from 'multer';
+import fs from 'fs';
+import path from 'path';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import StatusPage from '../models/StatusPage';
 import Monitor from '../models/Moniteur';
@@ -10,19 +13,124 @@ import Incident from '../models/Incident';
 const router = Router();
 
 const SALT_ROUNDS = 10;
+const uploadsRoot = path.resolve(__dirname, '..', '..', 'uploads');
+const statusPageLogosDir = path.join(uploadsRoot, 'status-pages');
+
+if (!fs.existsSync(statusPageLogosDir)) {
+  try {
+    fs.mkdirSync(statusPageLogosDir, { recursive: true });
+  } catch {
+    // Ignore directory creation issues and let the upload fail naturally later.
+  }
+}
+
+const logoStorage = multer.diskStorage({
+  destination: (_req: any, _file: any, cb: any) => cb(null, statusPageLogosDir),
+  filename: (_req: any, file: any, cb: any) => {
+    const ext = path.extname(file?.originalname || '') || '';
+    const safeName = `${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`;
+    cb(null, safeName);
+  },
+});
+
+const upload = multer({ storage: logoStorage });
+
 const generateStatusPageId = (): string =>
   `status-page-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 
 const normalizeMonitorIds = (value: unknown): string[] => {
-  if (!Array.isArray(value)) return [];
+  let normalizedValue = value;
+
+  if (typeof normalizedValue === 'string') {
+    const trimmedValue = normalizedValue.trim();
+    if (trimmedValue === '') return [];
+
+    try {
+      normalizedValue = JSON.parse(trimmedValue);
+    } catch {
+      return [];
+    }
+  }
+
+  if (!Array.isArray(normalizedValue)) return [];
+
   return Array.from(
     new Set(
-      value
+      normalizedValue
         .filter((monitorId): monitorId is string => typeof monitorId === 'string')
         .map((monitorId) => monitorId.trim())
         .filter((monitorId) => monitorId !== '')
     )
   );
+};
+
+const parseBooleanField = (value: unknown): boolean => {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const normalizedValue = value.trim().toLowerCase();
+    return normalizedValue === 'true' || normalizedValue === '1' || normalizedValue === 'yes';
+  }
+
+  return false;
+};
+
+const getRequestBaseUrl = (req: Request): string => `${req.protocol}://${req.get('host')}`;
+
+const resolvePublicAssetUrl = (baseUrl: string, assetPath?: string): string | undefined => {
+  if (typeof assetPath !== 'string') return undefined;
+
+  const trimmedAssetPath = assetPath.trim();
+  if (trimmedAssetPath === '') return undefined;
+
+  if (/^https?:\/\//i.test(trimmedAssetPath)) {
+    return trimmedAssetPath;
+  }
+
+  try {
+    return new URL(trimmedAssetPath, baseUrl).toString();
+  } catch {
+    return trimmedAssetPath;
+  }
+};
+
+const resolveStoredLogoFilePath = (logoPath?: string | null): string | null => {
+  if (typeof logoPath !== 'string') return null;
+
+  const trimmedLogoPath = logoPath.trim();
+  if (trimmedLogoPath === '') return null;
+
+  const pathname = /^https?:\/\//i.test(trimmedLogoPath)
+    ? (() => {
+        try {
+          return new URL(trimmedLogoPath).pathname;
+        } catch {
+          return '';
+        }
+      })()
+    : trimmedLogoPath;
+
+  if (pathname === '') return null;
+
+  const relativePath = pathname.replace(/^\/?uploads\//, '');
+  if (relativePath === pathname) return null;
+
+  return path.join(uploadsRoot, relativePath);
+};
+
+const deleteStoredStatusPageLogoFile = (logoPath?: string | null): void => {
+  const logoFilePath = resolveStoredLogoFilePath(logoPath);
+  if (!logoFilePath) return;
+
+  try {
+    if (fs.existsSync(logoFilePath)) {
+      fs.unlinkSync(logoFilePath);
+    }
+  } catch {
+    // Ignore file removal failures to keep the API resilient.
+  }
 };
 
 const buildPublicStatusPagePayload = async (statusPage: {
@@ -33,9 +141,10 @@ const buildPublicStatusPagePayload = async (statusPage: {
   owner: unknown;
   customDomain?: string;
   logoName?: string;
+  logoPath?: string;
   density?: 'wide' | 'compact';
   alignment?: 'left' | 'center';
-}) => {
+}, baseUrl: string) => {
   const monitors = await Monitor.find({
     _id: { $in: statusPage.monitorIds },
     owner: statusPage.owner,
@@ -83,6 +192,7 @@ const buildPublicStatusPagePayload = async (statusPage: {
       monitors,
       customDomain: statusPage.customDomain,
       logoName: statusPage.logoName,
+      logoUrl: resolvePublicAssetUrl(baseUrl, statusPage.logoPath),
       density: statusPage.density,
       alignment: statusPage.alignment,
     },
@@ -90,6 +200,34 @@ const buildPublicStatusPagePayload = async (statusPage: {
     incidentsByMonitorId,
   };
 };
+
+const buildPublicStatusPagePreviewPayload = (
+  statusPage: {
+    statusPageId: string;
+    pageName: string;
+    passwordEnabled: boolean;
+    customDomain?: string;
+    logoName?: string;
+    logoPath?: string;
+    density?: 'wide' | 'compact';
+    alignment?: 'left' | 'center';
+  },
+  baseUrl: string,
+) => ({
+  statusPage: {
+    id: statusPage.statusPageId,
+    pageName: statusPage.pageName,
+    passwordEnabled: true,
+    monitors: [],
+    customDomain: statusPage.customDomain,
+    logoName: statusPage.logoName,
+    logoUrl: resolvePublicAssetUrl(baseUrl, statusPage.logoPath),
+    density: statusPage.density,
+    alignment: statusPage.alignment,
+  },
+  logsByMonitorId: {},
+  incidentsByMonitorId: {},
+});
 
 const buildPublicPayloadFromSingleMonitor = async (monitor: {
   _id: unknown;
@@ -149,9 +287,9 @@ const buildPublicPayloadFromSingleMonitor = async (monitor: {
 router.put(
   '/:id',
   authenticate,
+  upload.single('logo'),
   [
     body('pageName').notEmpty().trim(),
-    body('monitorIds').isArray(),
     body('passwordEnabled').optional().isBoolean(),
     body('password').optional().isString(),
     body('customDomain').optional().isString(),
@@ -174,6 +312,7 @@ router.put(
       }
 
       const monitorIds = normalizeMonitorIds(req.body.monitorIds);
+
       const ownedMonitors = await Monitor.find({
         _id: { $in: monitorIds },
         owner: req.user!._id,
@@ -181,7 +320,7 @@ router.put(
       const ownedMonitorIdSet = new Set(ownedMonitors.map((monitor) => monitor._id.toString()));
       const allowedMonitorIds = monitorIds.filter((monitorId) => ownedMonitorIdSet.has(monitorId));
 
-      const passwordEnabled = Boolean(req.body.passwordEnabled);
+      const passwordEnabled = parseBooleanField(req.body.passwordEnabled);
       const rawPassword = typeof req.body.password === 'string' ? req.body.password.trim() : '';
       if (passwordEnabled && rawPassword === '') {
         res.status(400).json({ error: 'Mot de passe requis quand la protection est activee' });
@@ -190,9 +329,9 @@ router.put(
 
       const nextPageName = String(req.body.pageName ?? '').trim();
       const nextCustomDomain = typeof req.body.customDomain === 'string' ? req.body.customDomain.trim() : '';
-      const nextLogoName = typeof req.body.logoName === 'string' ? req.body.logoName.trim() : '';
       const nextDensity = req.body.density === 'compact' ? 'compact' : 'wide';
       const nextAlignment = req.body.alignment === 'center' ? 'center' : 'left';
+      const uploadedLogo = req.file as { originalname?: string; filename?: string } | undefined;
 
       const existing = await StatusPage.findOne({
         statusPageId,
@@ -203,6 +342,19 @@ router.put(
           ? await bcrypt.hash(rawPassword, SALT_ROUNDS)
           : existing?.passwordHash
         : undefined;
+      const nextLogoNameCandidate =
+        typeof req.body.logoName === 'string' ? req.body.logoName.trim() : '';
+      const nextLogoName =
+        nextLogoNameCandidate !== ''
+          ? nextLogoNameCandidate
+          : uploadedLogo
+            ? uploadedLogo.originalname?.trim() || uploadedLogo.filename?.trim() || existing?.logoName
+            : existing?.logoName;
+      let nextLogoPath = existing?.logoPath;
+
+      if (uploadedLogo?.filename) {
+        nextLogoPath = `/uploads/status-pages/${uploadedLogo.filename}`;
+      }
 
       const existingStatusPage = await StatusPage.findOne({ statusPageId });
       let resolvedStatusPageId = statusPageId;
@@ -225,6 +377,7 @@ router.put(
             passwordHash: nextPasswordHash,
             customDomain: nextCustomDomain || undefined,
             logoName: nextLogoName || undefined,
+            logoPath: nextLogoPath || undefined,
             density: nextDensity,
             alignment: nextAlignment,
           },
@@ -236,6 +389,10 @@ router.put(
         { upsert: true, new: true }
       );
 
+      if (uploadedLogo?.filename && existing?.logoPath && existing.logoPath !== statusPage.logoPath) {
+        deleteStoredStatusPageLogoFile(existing.logoPath);
+      }
+
       res.json({
         message: 'Status page sauvegardee avec succes',
         statusPage: {
@@ -245,6 +402,7 @@ router.put(
           passwordEnabled: statusPage.passwordEnabled,
           customDomain: statusPage.customDomain,
           logoName: statusPage.logoName,
+          logoUrl: resolvePublicAssetUrl(getRequestBaseUrl(req), statusPage.logoPath),
           density: statusPage.density,
           alignment: statusPage.alignment,
         },
@@ -271,6 +429,8 @@ router.delete(
         res.status(404).json({ error: 'Status page non trouvee' });
         return;
       }
+
+      deleteStoredStatusPageLogoFile((deleted as { logoPath?: string | null }).logoPath);
 
       res.json({ message: 'Status page supprimee avec succes' });
     } catch (error) {
@@ -299,11 +459,11 @@ router.get('/:id/public', async (req: Request, res: Response): Promise<void> => 
     }
 
     if (statusPage.passwordEnabled) {
-      res.status(401).json({ error: 'Status page protegee par mot de passe' });
+      res.json(buildPublicStatusPagePreviewPayload(statusPage, getRequestBaseUrl(req)));
       return;
     }
 
-    const payload = await buildPublicStatusPagePayload(statusPage);
+    const payload = await buildPublicStatusPagePayload(statusPage, getRequestBaseUrl(req));
     res.json(payload);
   } catch (error) {
     console.error('Erreur recuperation status page publique:', error);
@@ -332,7 +492,7 @@ router.post(
       }
 
       if (!statusPage.passwordEnabled) {
-        const payload = await buildPublicStatusPagePayload(statusPage);
+        const payload = await buildPublicStatusPagePayload(statusPage, getRequestBaseUrl(req));
         res.json(payload);
         return;
       }
@@ -348,7 +508,7 @@ router.post(
         return;
       }
 
-      const payload = await buildPublicStatusPagePayload(statusPage);
+      const payload = await buildPublicStatusPagePayload(statusPage, getRequestBaseUrl(req));
       res.json(payload);
     } catch (error) {
       console.error('Erreur unlock status page:', error);

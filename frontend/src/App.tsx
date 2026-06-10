@@ -3838,6 +3838,8 @@ function App() {
       ) : selectedMonitor ? (
           <MonitorDetailsPage
             monitor={selectedMonitor}
+            currentUserAvatarUrl={profileAvatarUrl}
+            currentUserInitials={userInitials}
             onBack={() => {
               navigateTo("/monitoring");
             }}

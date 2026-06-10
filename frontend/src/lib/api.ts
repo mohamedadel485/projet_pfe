@@ -234,6 +234,7 @@ export interface PublicStatusPageResponse {
     monitors: BackendMonitor[];
     customDomain?: string;
     logoName?: string;
+    logoUrl?: string;
     density?: "wide" | "compact";
     alignment?: "left" | "center";
   };
@@ -248,6 +249,7 @@ export interface SaveStatusPageInput {
   password?: string;
   customDomain?: string;
   logoName?: string;
+  logoFile?: File | null;
   density?: "wide" | "compact";
   alignment?: "left" | "center";
 }
@@ -261,6 +263,7 @@ export interface SaveStatusPageResponse {
     passwordEnabled: boolean;
     customDomain?: string;
     logoName?: string;
+    logoUrl?: string;
     density?: "wide" | "compact";
     alignment?: "left" | "center";
   };
@@ -717,6 +720,8 @@ const request = async <T>(
       ? options.token
       : null;
   const hasBody = options?.body !== undefined;
+  const isFormDataBody =
+    typeof FormData !== "undefined" && options?.body instanceof FormData;
   const endpoint = buildEndpoint(path);
   const requestTimeoutMs = options?.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
   const isMaintenancePath = path.startsWith("/maintenances");
@@ -733,11 +738,15 @@ const request = async <T>(
     cache: "no-store",
     credentials: options?.credentials ?? "include",
     headers: {
-      ...(hasBody ? { "Content-Type": "application/json" } : {}),
+      ...(hasBody && !isFormDataBody ? { "Content-Type": "application/json" } : {}),
       "Cache-Control": "no-store",
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
-    body: hasBody ? JSON.stringify(options?.body) : undefined,
+    body: hasBody
+      ? isFormDataBody
+        ? (options?.body as FormData)
+        : JSON.stringify(options?.body)
+      : undefined,
     signal: options?.signal,
   };
   const requestMethod = requestInit.method ?? "GET";
@@ -1154,6 +1163,25 @@ export const fetchPublicStatusPage = (
     { credentials: "omit" },
   );
 
+const buildStatusPageFormData = (payload: SaveStatusPageInput): FormData => {
+  const formData = new FormData();
+
+  formData.append("pageName", payload.pageName);
+  formData.append("monitorIds", JSON.stringify(payload.monitorIds ?? []));
+  formData.append("passwordEnabled", String(Boolean(payload.passwordEnabled)));
+  formData.append("password", payload.password ?? "");
+  formData.append("customDomain", payload.customDomain ?? "");
+  formData.append("logoName", payload.logoName ?? "");
+  formData.append("density", payload.density ?? "wide");
+  formData.append("alignment", payload.alignment ?? "left");
+
+  if (payload.logoFile) {
+    formData.append("logo", payload.logoFile);
+  }
+
+  return formData;
+};
+
 export const saveStatusPage = (
   statusPageId: string,
   payload: SaveStatusPageInput,
@@ -1164,7 +1192,7 @@ export const saveStatusPage = (
     {
       method: "PUT",
       token,
-      body: payload,
+      body: payload.logoFile ? buildStatusPageFormData(payload) : payload,
     },
   );
 

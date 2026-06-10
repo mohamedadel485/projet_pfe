@@ -569,8 +569,13 @@ function StatusPagePublicPage({
       ? storedStatusPageSettings.passwordEnabled
       : savedPassword.trim().length > 0;
   const configuredPassword = configuredPasswordEnabled ? savedPassword : '';
+  const configuredDensity = storedStatusPageSettings.density === 'compact' ? 'compact' : 'wide';
+  const configuredAlignment = storedStatusPageSettings.alignment === 'center' ? 'center' : 'left';
 
   const [pageName, setPageName] = useState(configuredPageName);
+  const [pageLogoUrl, setPageLogoUrl] = useState('');
+  const [pageDensity, setPageDensity] = useState<'wide' | 'compact'>(configuredDensity);
+  const [pageAlignment, setPageAlignment] = useState<'left' | 'center'>(configuredAlignment);
   const [passwordInput, setPasswordInput] = useState('');
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [unlockedPassword, setUnlockedPassword] = useState<string | null>(configuredPassword.trim() ? null : configuredPassword);
@@ -588,6 +593,15 @@ function StatusPagePublicPage({
       storedStatusPageSettings.pageName?.trim() ||
       response.statusPage?.pageName?.trim() ||
       (nextPublishedMonitors.length === 1 ? nextPublishedMonitors[0].name : t('statusPublic.serviceStatus'));
+    const nextLogoUrl = response.statusPage?.logoUrl?.trim() || '';
+    const nextDensity =
+      response.statusPage?.density === 'compact' || response.statusPage?.density === 'wide'
+        ? response.statusPage.density
+        : configuredDensity;
+    const nextAlignment =
+      response.statusPage?.alignment === 'center' || response.statusPage?.alignment === 'left'
+        ? response.statusPage.alignment
+        : configuredAlignment;
 
     const nextLogsByMonitorId = Object.fromEntries(
       nextPublishedMonitors.map((monitor) => {
@@ -603,6 +617,9 @@ function StatusPagePublicPage({
     );
 
     setPageName(nextPageName);
+    setPageLogoUrl(nextLogoUrl);
+    setPageDensity(nextDensity);
+    setPageAlignment(nextAlignment);
     setPublishedMonitors(nextPublishedMonitors);
     setMonitorLogsById(nextLogsByMonitorId);
     setMonitorIncidentsById(nextIncidentsByMonitorId);
@@ -626,12 +643,15 @@ function StatusPagePublicPage({
 
   useEffect(() => {
     setPageName(configuredPageName);
+    setPageLogoUrl('');
+    setPageDensity(configuredDensity);
+    setPageAlignment(configuredAlignment);
     setPasswordInput('');
     setPasswordError(null);
     setUnlockedPassword(configuredPassword.trim() ? null : configuredPassword);
     setBackendPasswordProtected(false);
     setBackendPasswordUnlocked(false);
-  }, [configuredPageName, configuredPassword, statusPageId]);
+  }, [configuredAlignment, configuredDensity, configuredPageName, configuredPassword, statusPageId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -784,6 +804,8 @@ function StatusPagePublicPage({
     configuredPasswordEnabled,
     dateLocale,
     isLocalStatusPage,
+    configuredAlignment,
+    configuredDensity,
     statusPageId,
     storedStatusPageMonitorIds,
     storedStatusPageSettings.pageName,
@@ -1132,13 +1154,20 @@ function StatusPagePublicPage({
   };
 
   return (
-    <section className="status-page-public-page">
+    <section
+      className={`status-page-public-page status-public-density-${pageDensity} status-public-alignment-${pageAlignment}`}
+    >
       {isLocked ? (
         <>
           <section className="status-public-hero">
             <div className="status-public-hero-inner">
               <div className="status-public-hero-side">
-                <p className="status-public-page-name">{pageName}</p>
+                <div className="status-public-brand">
+                  <div className="status-public-brand-mark" aria-hidden="true">
+                    {pageLogoUrl ? <img src={pageLogoUrl} alt="" /> : <span>{pageName.charAt(0).toUpperCase() || 'S'}</span>}
+                  </div>
+                  <p className="status-public-page-name">{pageName}</p>
+                </div>
               </div>
               <div className="status-public-hero-side status-public-hero-right">
                 <h1>{t('statusPublic.serviceStatus')}</h1>
@@ -1200,7 +1229,12 @@ function StatusPagePublicPage({
           <section className="status-public-hero">
             <div className="status-public-hero-inner">
               <div className="status-public-hero-side">
-                <p className="status-public-page-name">{pageName}</p>
+                <div className="status-public-brand">
+                  <div className="status-public-brand-mark" aria-hidden="true">
+                    {pageLogoUrl ? <img src={pageLogoUrl} alt="" /> : <span>{pageName.charAt(0).toUpperCase() || 'S'}</span>}
+                  </div>
+                  <p className="status-public-page-name">{pageName}</p>
+                </div>
               </div>
               <div className="status-public-hero-side status-public-hero-right">
                 <h1>{t('statusPublic.serviceStatus')}</h1>

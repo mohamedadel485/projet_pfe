@@ -9,6 +9,7 @@ export interface IStatusPage extends Document {
   passwordHash?: string;
   customDomain?: string;
   logoName?: string;
+  logoPath?: string;
   density?: "wide" | "compact";
   alignment?: "left" | "center";
   nom?: string;
@@ -71,6 +72,10 @@ const statusPageSchema = new Schema<IStatusPage>(
       trim: true,
     },
     logoName: {
+      type: String,
+      trim: true,
+    },
+    logoPath: {
       type: String,
       trim: true,
     },

@@ -12,7 +12,6 @@ import {
   Minus,
   MoreVertical,
   Upload,
-  Users,
 } from "lucide-react";
 import {
   fetchIncidents,
@@ -31,6 +30,7 @@ import {
 } from "../../lib/monitorHistory";
 import { ensureChartsRegistered } from "../../lib/charts";
 import { useAppLanguage } from "../../lib/language";
+import uptimeWLogo from "../../images/uptimeW.png";
 import "./MonitorDetailsPage.css";
 
 interface MonitorDetails {
@@ -63,6 +63,8 @@ interface MonitorDetailsPageProps {
   actionFeedback?: string | null;
   refreshSignal?: number;
   isActionPending?: boolean;
+  currentUserAvatarUrl?: string;
+  currentUserInitials?: string;
 }
 
 type ResponseStats = {
@@ -293,9 +295,16 @@ function MonitorDetailsPage({
   actionFeedback,
   refreshSignal = 0,
   isActionPending = false,
+  currentUserAvatarUrl,
+  currentUserInitials,
 }: MonitorDetailsPageProps) {
   const { language, t, isRtl } = useAppLanguage();
   const locale = useMemo(() => getLocale(language), [language]);
+  const avatarCacheSeparator = currentUserAvatarUrl?.includes("?") ? "&" : "?";
+  const currentUserAvatarSrc = currentUserAvatarUrl
+    ? `${currentUserAvatarUrl}${avatarCacheSeparator}t=${Date.now()}`
+    : undefined;
+  const currentUserFallback = currentUserInitials?.trim() || "-";
   const [logs, setLogs] = useState<BackendMonitorLog[]>([]);
   const [incidents, setIncidents] = useState<BackendIncident[]>([]);
   const [maintenances, setMaintenances] = useState<BackendMaintenance[]>([]);
@@ -967,7 +976,7 @@ function MonitorDetailsPage({
       <header className="monitor-details-header-card">
         <div className="monitor-details-title-wrap">
           <div className="monitor-details-logo">
-            <span />
+            <img src={uptimeWLogo} alt="" />
           </div>
           <div className="monitor-details-copy">
             <h2>{monitor.name}</h2>
@@ -1342,10 +1351,12 @@ function MonitorDetailsPage({
               </button>
             </div>
             <div className="notify-row">
-              <span className="avatar">A</span>
-              <span className="avatar">B</span>
-              <span className="avatar users-icon">
-                <Users size={12} />
+              <span className="notify-logo" aria-hidden="true">
+                {currentUserAvatarSrc ? (
+                  <img src={currentUserAvatarSrc} alt="" />
+                ) : (
+                  <span>{currentUserFallback}</span>
+                )}
               </span>
             </div>
           </article>

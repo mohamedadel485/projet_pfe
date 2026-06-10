@@ -137,6 +137,7 @@ function StatusPageInfoPage({
   const [saveNotice, setSaveNotice] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [hydratedStatusPageId, setHydratedStatusPageId] = useState(statusPageId);
+  const [logoFile, setLogoFile] = useState<File | null>(null);
   const logoInputRef = useRef<HTMLInputElement | null>(null);
   const densityOptions =
     language === 'fr'
@@ -183,6 +184,11 @@ function StatusPageInfoPage({
     setSelectedMonitorIds(readSelectedMonitorIds(statusPageId, monitors));
     setSaveNotice(null);
     setHydratedStatusPageId(statusPageId);
+    setLogoFile(null);
+
+    if (logoInputRef.current) {
+      logoInputRef.current.value = '';
+    }
   }, [monitorIdsKey, monitors, statusPageId, statusPageName]);
 
   useEffect(() => {
@@ -229,6 +235,7 @@ function StatusPageInfoPage({
     const selectedFile = event.target.files?.[0];
     if (!selectedFile) return;
 
+    setLogoFile(selectedFile);
     setFormValues((currentValues) => ({
       ...currentValues,
       logoName: selectedFile.name,
@@ -306,6 +313,7 @@ function StatusPageInfoPage({
         password: nextStoredSettings.passwordEnabled ? nextStoredSettings.password.trim() : '',
         customDomain: nextStoredSettings.customDomain.trim(),
         logoName: nextStoredSettings.logoName.trim(),
+        logoFile,
         density: nextStoredSettings.density,
         alignment: nextStoredSettings.alignment,
       }, authToken ?? undefined);
@@ -325,6 +333,10 @@ function StatusPageInfoPage({
           ? t('statusPageInfo.notice.createdAndPublished')
           : t('statusPageInfo.notice.published'),
       );
+      setLogoFile(null);
+      if (logoInputRef.current) {
+        logoInputRef.current.value = '';
+      }
       if (isNewStatusPage) {
         onBackToStatusPages();
       }

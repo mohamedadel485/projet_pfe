@@ -60,28 +60,14 @@
   display: grid;
   place-items: center;
   background: #cfe0ff;
+  overflow: hidden;
 }
 
-.monitor-details-logo span {
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: #8fb2ed;
-  display: inline-block;
-  position: relative;
-}
-
-.monitor-details-logo span::before {
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -40%);
-  width: 0;
-  height: 0;
-  border-left: 3px solid transparent;
-  border-right: 3px solid transparent;
-  border-bottom: 5px solid #fff;
+.monitor-details-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
 .monitor-details-copy h2 {
@@ -1121,21 +1107,30 @@
   gap: 5px;
 }
 
-.avatar {
-  width: 22px;
-  height: 22px;
+.notify-logo {
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
-  background: linear-gradient(145deg, #203d6d, #4c77be);
+  overflow: hidden;
+  background: linear-gradient(145deg, #0e1f3d, #3f6bc0);
   color: #fff;
-  font-size: 0.62rem;
+  border: 1px solid #d8e3f4;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  font-size: 0.65rem;
+  font-weight: 700;
 }
 
-.users-icon {
-  background: #ecf2fe;
-  color: #4a6ea7;
+.notify-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.notify-logo span {
+  line-height: 1;
 }
 
 .monitor-details-incidents {
