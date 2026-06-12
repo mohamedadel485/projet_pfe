@@ -464,17 +464,26 @@ function EditMonitorPage({
                     <input type="checkbox" defaultChecked />
                     <span>{t('newMonitor.notificationChannels.email')}</span>
                   </label>
-                  <label className="edit-monitor-notify-item">
-                    <input type="checkbox" />
-                    <span>{t('newMonitor.notificationChannels.sms')}</span>
+                  <label className="edit-monitor-notify-item edit-monitor-notify-item-premium">
+                    <input type="checkbox" disabled />
+                    <span className="edit-monitor-notify-label">
+                      <span>{t('newMonitor.notificationChannels.sms')}</span>
+                      <span className="edit-monitor-premium-badge">{t('editMonitor.premium')}</span>
+                    </span>
                   </label>
-                  <label className="edit-monitor-notify-item">
-                    <input type="checkbox" />
-                    <span>{t('newMonitor.notificationChannels.voice')}</span>
+                  <label className="edit-monitor-notify-item edit-monitor-notify-item-premium">
+                    <input type="checkbox" disabled />
+                    <span className="edit-monitor-notify-label">
+                      <span>{t('newMonitor.notificationChannels.voice')}</span>
+                      <span className="edit-monitor-premium-badge">{t('editMonitor.premium')}</span>
+                    </span>
                   </label>
-                  <label className="edit-monitor-notify-item">
-                    <input type="checkbox" />
-                    <span>{t('newMonitor.notificationChannels.push')}</span>
+                  <label className="edit-monitor-notify-item edit-monitor-notify-item-premium">
+                    <input type="checkbox" disabled />
+                    <span className="edit-monitor-notify-label">
+                      <span>{t('newMonitor.notificationChannels.push')}</span>
+                      <span className="edit-monitor-premium-badge">{t('editMonitor.premium')}</span>
+                    </span>
                   </label>
                 </div>
 

@@ -222,7 +222,7 @@ const translations = {
     "settings.sectionThemeHint": "Light or dark",
     "settings.themeSubtitle": "Choose the overall look that suits you best.",
     "settings.themeTitle": "App theme",
-    "settings.title": "Profile, password, theme, and language",
+    "settings.title": "Profile, password, and theme",
     "settings.successAvatarUpdated": "Avatar updated.",
     "settings.successAvatarReset": "Image reset.",
     "settings.successPasswordChanged": "Password changed successfully.",
@@ -490,6 +490,7 @@ const translations = {
     "editMonitor.saveChanges": "Save changes",
     "editMonitor.notifyTeamMembers": "Notify team members",
     "editMonitor.manageTeam": "Manage team",
+    "editMonitor.premium": "Premium",
     "editMonitor.monitorAccess": "Monitor access",
     "editMonitor.monitorAccessDescription": "Manage who can view and edit this monitor.",
     "editMonitor.access.users.one": "1 user",
@@ -1784,6 +1785,7 @@ const translations = {
     "editMonitor.saveChanges": "Enregistrer les modifications",
     "editMonitor.notifyTeamMembers": "Notifier les membres de l'équipe",
     "editMonitor.manageTeam": "Gérer l'équipe",
+    "editMonitor.premium": "Premium",
     "editMonitor.monitorAccess": "Accès au moniteur",
     "editMonitor.monitorAccessDescription":
       "Gérez qui peut voir et modifier ce moniteur.",
@@ -3113,6 +3115,7 @@ const translations = {
     "editMonitor.saveChanges": "حفظ التغييرات",
     "editMonitor.notifyTeamMembers": "إشعار أعضاء الفريق",
     "editMonitor.manageTeam": "إدارة الفريق",
+    "editMonitor.premium": "مميز",
     "editMonitor.monitorAccess": "وصول المراقب",
     "editMonitor.monitorAccessDescription":
       "إدارة من يمكنه عرض هذا المراقب وتعديله.",

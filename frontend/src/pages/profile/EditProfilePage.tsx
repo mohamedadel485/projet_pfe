@@ -14,7 +14,7 @@ import LanguageSwitcher from "../../components/LanguageSwitcher";
 
 const THEME_CACHE_KEY = "uptimewarden_theme";
 type AppTheme = "light" | "dark";
-type SettingsSection = "profile" | "password" | "theme" | "language";
+type SettingsSection = "profile" | "password" | "theme";
 
 interface Props {
   authToken?: string | null;
@@ -33,7 +33,7 @@ const EditProfilePage: React.FC<Props> = ({
   onBack,
   onUpdateUser,
 }) => {
-  const { language, setLanguage, t } = useAppLanguage();
+  const { t } = useAppLanguage();
   const [name, setName] = useState(currentUser?.name ?? "");
   const [email, setEmail] = useState(currentUser?.email ?? "");
   const [saving, setSaving] = useState(false);
@@ -349,14 +349,6 @@ const EditProfilePage: React.FC<Props> = ({
               <span>{t("settings.sectionTheme")}</span>
               <small>{t("settings.sectionThemeHint")}</small>
             </button>
-            <button
-              type="button"
-              className={`settings-sidebar-item ${activeSection === "language" ? "active" : ""}`}
-              onClick={() => setActiveSection("language")}
-            >
-              <span>{t("settings.sectionLanguage")}</span>
-              <small>{t("settings.sectionLanguageHint")}</small>
-            </button>
           </nav>
         </aside>
 
@@ -555,7 +547,7 @@ const EditProfilePage: React.FC<Props> = ({
                 </div>
               </form>
             </div>
-          ) : activeSection === "theme" ? (
+          ) : (
             <div className="settings-section-stack">
               <div className="settings-section-header">
                 <h2>{t("settings.appTheme")}</h2>
@@ -576,7 +568,6 @@ const EditProfilePage: React.FC<Props> = ({
                   <strong>{t("settings.light")}</strong>
                   <span>{t("settings.lightDescription")}</span>
                 </button>
-
                 <button
                   type="button"
                   className={`settings-theme-card ${appTheme === "dark" ? "active" : ""}`}
@@ -591,45 +582,6 @@ const EditProfilePage: React.FC<Props> = ({
                   <span>{t("settings.darkDescription")}</span>
                 </button>
               </div>
-            </div>
-          ) : (
-            <div className="settings-section-stack">
-              <div className="settings-section-header">
-                <h2>{t("settings.languageTitle")}</h2>
-                <p>{t("settings.languageSubtitle")}</p>
-              </div>
-
-              <div className="settings-theme-grid">
-                <button
-                  type="button"
-                  className={`settings-theme-card ${language === "fr" ? "active" : ""}`}
-                  onClick={() => setLanguage("fr")}
-                  aria-pressed={language === "fr"}
-                >
-                  <span
-                    className="settings-theme-preview settings-theme-preview-light"
-                    aria-hidden="true"
-                  />
-                  <strong>{t("settings.languageFrench")}</strong>
-                  <span>{t("settings.languageFrenchDescription")}</span>
-                </button>
-
-                <button
-                  type="button"
-                  className={`settings-theme-card ${language === "ar" ? "active" : ""}`}
-                  onClick={() => setLanguage("ar")}
-                  aria-pressed={language === "ar"}
-                >
-                  <span
-                    className="settings-theme-preview settings-theme-preview-dark"
-                    aria-hidden="true"
-                  />
-                  <strong>{t("settings.languageArabic")}</strong>
-                  <span>{t("settings.languageArabicDescription")}</span>
-                </button>
-              </div>
-
-              <p className="profile-tip">{t("settings.languageNote")}</p>
             </div>
           )}
         </section>

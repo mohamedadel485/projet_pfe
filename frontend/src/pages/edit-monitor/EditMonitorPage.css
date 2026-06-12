@@ -276,6 +276,38 @@
   margin: 0;
 }
 
+.edit-monitor-notify-item-premium {
+  cursor: not-allowed;
+  background: linear-gradient(180deg, #ffffff 0%, #fbfcff 100%);
+}
+
+.edit-monitor-notify-item-premium input {
+  cursor: not-allowed;
+}
+
+.edit-monitor-notify-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.edit-monitor-premium-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 8px;
+  border: 1px solid #f1d08a;
+  border-radius: 999px;
+  background: #fff4d4;
+  color: #9c6700;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
 .edit-monitor-access-panel {
   margin-top: 14px;
   border: 1px solid #dde7f8;
