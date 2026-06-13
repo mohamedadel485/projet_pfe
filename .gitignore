@@ -1,0 +1,14 @@
+backend/uploads/
+
+# Dependencies
+node_modules/
+
+# Environment secrets
+.env
+.env.*
+!.env.example
+
+# Local runtime data
+.mongo-data/
+.mongo-log/
+.pm2/

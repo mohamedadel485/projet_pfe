@@ -1,0 +1,551 @@
+{
+  "info": {
+    "name": "Uptime Monitor API",
+    "description": "Collection complète pour tester l'API Uptime Monitor",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:5000/api",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "monitor_id",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Register (First Admin)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@example.com\",\n  \"password\": \"password123\",\n  \"name\": \"Admin User\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/register",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "register"]
+            }
+          }
+        },
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const response = pm.response.json();",
+                  "pm.collectionVariables.set(\"token\", response.token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@example.com\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "login"]
+            }
+          }
+        },
+        {
+          "name": "Get My Profile",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/auth/me",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "me"]
+            }
+          }
+        },
+        {
+          "name": "Accept Invitation",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"invitation_token_here\",\n  \"password\": \"password123\",\n  \"name\": \"New User\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/accept-invitation",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "accept-invitation"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Invitations",
+      "item": [
+        {
+          "name": "Create Invitation",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"newuser@example.com\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/invitations",
+              "host": ["{{base_url}}"],
+              "path": ["invitations"]
+            }
+          }
+        },
+        {
+          "name": "List Invitations",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/invitations",
+              "host": ["{{base_url}}"],
+              "path": ["invitations"]
+            }
+          }
+        },
+        {
+          "name": "Check Invitation by Token",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/invitations/:token",
+              "host": ["{{base_url}}"],
+              "path": ["invitations", ":token"]
+            }
+          }
+        },
+        {
+          "name": "Resend Invitation",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/invitations/:id/resend",
+              "host": ["{{base_url}}"],
+              "path": ["invitations", ":id", "resend"]
+            }
+          }
+        },
+        {
+          "name": "Delete Invitation",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/invitations/:id",
+              "host": ["{{base_url}}"],
+              "path": ["invitations", ":id"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Users",
+      "item": [
+        {
+          "name": "List Users",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/users",
+              "host": ["{{base_url}}"],
+              "path": ["users"]
+            }
+          }
+        },
+        {
+          "name": "Get User",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/users/:id",
+              "host": ["{{base_url}}"],
+              "path": ["users", ":id"]
+            }
+          }
+        },
+        {
+          "name": "Update User",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Name\",\n  \"isActive\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/users/:id",
+              "host": ["{{base_url}}"],
+              "path": ["users", ":id"]
+            }
+          }
+        },
+        {
+          "name": "Delete User",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/users/:id",
+              "host": ["{{base_url}}"],
+              "path": ["users", ":id"]
+            }
+          }
+        },
+        {
+          "name": "Get User Stats",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/users/stats/overview",
+              "host": ["{{base_url}}"],
+              "path": ["users", "stats", "overview"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Monitors",
+      "item": [
+        {
+          "name": "Create Monitor",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const response = pm.response.json();",
+                  "if (response.monitor && response.monitor._id) {",
+                  "  pm.collectionVariables.set(\"monitor_id\", response.monitor._id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Mon Site Web\",\n  \"url\": \"https://example.com\",\n  \"type\": \"https\",\n  \"interval\": 5,\n  \"timeout\": 30,\n  \"httpMethod\": \"GET\",\n  \"expectedStatusCode\": 200\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/monitors",
+              "host": ["{{base_url}}"],
+              "path": ["monitors"]
+            }
+          }
+        },
+        {
+          "name": "List Monitors",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/monitors",
+              "host": ["{{base_url}}"],
+              "path": ["monitors"]
+            }
+          }
+        },
+        {
+          "name": "Get Monitor",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/monitors/{{monitor_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["monitors", "{{monitor_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Update Monitor",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Nouveau nom\",\n  \"interval\": 10\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/monitors/{{monitor_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["monitors", "{{monitor_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Delete Monitor",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/monitors/{{monitor_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["monitors", "{{monitor_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Pause Monitor",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/monitors/{{monitor_id}}/pause",
+              "host": ["{{base_url}}"],
+              "path": ["monitors", "{{monitor_id}}", "pause"]
+            }
+          }
+        },
+        {
+          "name": "Resume Monitor",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/monitors/{{monitor_id}}/resume",
+              "host": ["{{base_url}}"],
+              "path": ["monitors", "{{monitor_id}}", "resume"]
+            }
+          }
+        },
+        {
+          "name": "Check Monitor Now",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/monitors/{{monitor_id}}/check",
+              "host": ["{{base_url}}"],
+              "path": ["monitors", "{{monitor_id}}", "check"]
+            }
+          }
+        },
+        {
+          "name": "Get Monitor Logs",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/monitors/{{monitor_id}}/logs?limit=50&page=1",
+              "host": ["{{base_url}}"],
+              "path": ["monitors", "{{monitor_id}}", "logs"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "50"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Share Monitor",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"user_id_here\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/monitors/{{monitor_id}}/share",
+              "host": ["{{base_url}}"],
+              "path": ["monitors", "{{monitor_id}}", "share"]
+            }
+          }
+        },
+        {
+          "name": "Unshare Monitor",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/monitors/{{monitor_id}}/share/:userId",
+              "host": ["{{base_url}}"],
+              "path": ["monitors", "{{monitor_id}}", "share", ":userId"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
