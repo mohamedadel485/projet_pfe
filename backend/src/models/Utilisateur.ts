@@ -12,6 +12,7 @@ export interface IUserPublicProfile {
   id: string;
   email: string;
   name: string;
+  role: UserRole;
   avatar: string | null;
   status: UserStatus;
 }
@@ -21,6 +22,7 @@ export interface IUser extends Document {
   password: string;
   name: string;
   avatar?: string | null;
+  role: UserRole;
   isActive: boolean;
   nom?: string;
   motDePasse?: string;
@@ -54,6 +56,11 @@ const userSchema = new Schema<IUser>(
     password: { type: String, required: true },
     name: { type: String, required: true },
     avatar: { type: String, default: null },
+    role: {
+      type: String,
+      enum: ["super_admin", "admin", "user"],
+      default: "user",
+    },
     isActive: { type: Boolean, default: true },
     invitedBy: { type: Schema.Types.ObjectId, ref: "Utilisateur" },
     invitationToken: { type: String },
@@ -200,6 +207,7 @@ userSchema.methods.consulterProfil = function (
     id: this._id.toString(),
     email: this.email,
     name: this.name,
+    role: this.role,
     avatar: this.avatar || null,
     status: this.isActive ? "active" : "inactive",
   };
