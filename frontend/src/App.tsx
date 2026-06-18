@@ -2445,10 +2445,15 @@ function App() {
 
       if (
         Object.keys(payload).length === 0 ||
-        (payload.name === targetUser?.name &&
-          payload.email === targetUser?.email &&
-          payload.role === targetUser?.role &&
-          payload.isActive === targetUser?.isActive)
+        !(
+          (payload.name !== undefined &&
+            payload.name !== (targetUser?.name ?? "").trim()) ||
+          (payload.email !== undefined &&
+            payload.email !== (targetUser?.email ?? "").trim()) ||
+          (payload.role !== undefined && payload.role !== targetUser?.role) ||
+          (payload.isActive !== undefined &&
+            payload.isActive !== targetUser?.isActive)
+        )
       ) {
         return null;
       }

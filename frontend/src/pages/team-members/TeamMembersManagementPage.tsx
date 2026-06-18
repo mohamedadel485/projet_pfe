@@ -11,6 +11,8 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { useAppLanguage } from "../../lib/language";
+import { canManageUser as canManageTargetUser } from "../../lib/roles";
+import type { UserRole } from "../../lib/api";
 
 interface TeamMember {
   id: string;
@@ -88,10 +90,8 @@ function TeamMembersManagementPage({
   const [editingIsActive, setEditingIsActive] = useState(true);
   const [editError, setEditError] = useState<string | null>(null);
   const [editSaving, setEditSaving] = useState(false);
-  const [editingImmutableContact, setEditingImmutableContact] = useState(false);
   const pendingRequests = accountRequests.filter((r) => r.status === "pending");
   const showInlineAccountRequests = false;
-  const isCurrentUserSuperAdmin = currentUserRole === "super_admin";
 
   // Sort users: super admin first, then by name
   const sortedUsers = [...users].sort((a, b) => {
@@ -133,14 +133,6 @@ function TeamMembersManagementPage({
     );
     setEditingIsActive(user.isActive);
     setEditError(null);
-    const normalizedRole = String(user.role ?? "").toLowerCase();
-    const isTargetSuperAdmin =
-      normalizedRole === "super" ||
-      normalizedRole === "superadmin" ||
-      normalizedRole === "super_admin" ||
-      user.name?.toLowerCase().includes("super_admin");
-    const isTargetAdmin = normalizedRole === "admin";
-    setEditingImmutableContact(isTargetSuperAdmin || isTargetAdmin);
   };
 
   const closeEditUserModal = () => {
@@ -155,28 +147,11 @@ function TeamMembersManagementPage({
 
   const handleSaveEditUser = async () => {
     if (!editingUserId) return;
-    const trimmedName = editingName.trim();
-    const trimmedEmail = editingEmail.trim();
-
-    if (trimmedName === "") {
-      setEditError(t("team.management.editErrorName"));
-      return;
-    }
-    if (trimmedEmail === "") {
-      setEditError(t("team.management.editErrorEmail"));
-      return;
-    }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
-      setEditError(t("team.management.editErrorInvalidEmail"));
-      return;
-    }
 
     setEditSaving(true);
     setEditError(null);
     try {
       const errorMessage = await onUpdateUser(editingUserId, {
-        name: trimmedName,
-        email: trimmedEmail,
         role: editingRole,
         isActive: editingIsActive,
       });
@@ -253,11 +228,12 @@ function TeamMembersManagementPage({
                 normalizedRole === "superadmin" ||
                 normalizedRole === "super_admin" ||
                 user.name?.toLowerCase().includes("super_admin");
-              const isTargetAdmin = normalizedRole === "admin";
+              const targetRole = normalizedRole === "admin" ? "admin" : normalizedRole === "super_admin" || normalizedRole === "super" || normalizedRole === "superadmin" ? "super_admin" : "user";
+              const managerRole = (currentUserRole === "super_admin" || currentUserRole === "admin" ? currentUserRole : "user") as UserRole;
               const canManageUser =
                 user.id !== currentUserId &&
                 !isTargetSuperAdmin &&
-                (isCurrentUserSuperAdmin || !isTargetAdmin);
+                canManageTargetUser(managerRole, targetRole as UserRole);
 
               return (
                 <div
@@ -269,7 +245,7 @@ function TeamMembersManagementPage({
                   <span className="cell-role">
                     {isTargetSuperAdmin ? (
                       <span className="role-text role-super">{t("team.management.roleSuperAdmin")}</span>
-                    ) : isTargetAdmin ? (
+                    ) : targetRole === "admin" ? (
                       <span className="role-text role-admin">{t("team.management.roleAdmin")}</span>
                     ) : (
                       <span className="role-text">{t("team.management.roleMember")}</span>
@@ -289,7 +265,11 @@ function TeamMembersManagementPage({
                           type="button"
                           className="btn-icon"
                           onClick={() => openEditUserModal(user)}
-                          title={t("team.management.editUserTitle")}
+                          title={
+                            targetRole === "admin"
+                              ? t("team.management.editAdminTitle")
+                              : t("team.management.editUserTitle")
+                          }
                         >
                           <MoreVertical size={16} />
                         </button>
@@ -324,7 +304,11 @@ function TeamMembersManagementPage({
             onClick={(event) => event.stopPropagation()}
           >
             <div className="modal-header">
-              <h2>{t("team.management.editUserTitle")}</h2>
+              <h2>
+                {editingRole === "admin"
+                  ? t("team.management.editAdminTitle")
+                  : t("team.management.editUserTitle")}
+              </h2>
               <button
                 type="button"
                 className="modal-close"
@@ -335,35 +319,35 @@ function TeamMembersManagementPage({
             </div>
 
             <div className="modal-body">
-              {!editingImmutableContact ? (
-                <>
-                  <div className="form-section">
-                    <label className="form-label" htmlFor="team-user-name">
-                      {t("common.name")}
-                    </label>
-                    <input
-                      id="team-user-name"
-                      className="form-input"
-                      type="text"
-                      value={editingName}
-                      onChange={(event) => setEditingName(event.target.value)}
-                    />
-                  </div>
+              <div className="form-section">
+                <label className="form-label" htmlFor="team-user-name">
+                  {t("common.name")}
+                </label>
+                <input
+                  id="team-user-name"
+                  className="form-input form-input-readonly"
+                  type="text"
+                  value={editingName}
+                  readOnly
+                  tabIndex={-1}
+                  aria-readonly="true"
+                />
+              </div>
 
-                  <div className="form-section">
-                    <label className="form-label" htmlFor="team-user-email">
-                      {t("common.email")}
-                    </label>
-                    <input
-                      id="team-user-email"
-                      className="form-input"
-                      type="email"
-                      value={editingEmail}
-                      onChange={(event) => setEditingEmail(event.target.value)}
-                    />
-                  </div>
-                </>
-              ) : null}
+              <div className="form-section">
+                <label className="form-label" htmlFor="team-user-email">
+                  {t("common.email")}
+                </label>
+                <input
+                  id="team-user-email"
+                  className="form-input form-input-readonly"
+                  type="email"
+                  value={editingEmail}
+                  readOnly
+                  tabIndex={-1}
+                  aria-readonly="true"
+                />
+              </div>
 
               <div className="form-section">
                 <label className="form-label">{t("common.role")}</label>

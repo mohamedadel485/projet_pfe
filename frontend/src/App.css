@@ -3226,6 +3226,17 @@ input {
   border-color: #97b6f2;
 }
 
+.form-input-readonly {
+  background: #f8fafc;
+  color: #475569;
+  cursor: default;
+}
+
+.form-input-readonly:focus {
+  box-shadow: none;
+  border-color: #d7e2f2;
+}
+
 .form-error {
   margin-top: 6px;
   color: #a33f3f;
