@@ -1,18 +1,22 @@
 import { useEffect, useState } from "react";
 import { Eye, PauseCircle, Target, Trash2, UserRound } from "lucide-react";
 import {
-  deleteMonitor,
   deleteStatusPage,
   fetchMonitors,
+  fetchStatusPages,
   isApiError,
   saveStatusPage,
+  updateStatusPagePublish,
   type BackendMonitor,
+  type BackendStatusPage,
 } from "../../lib/api";
 import {
+  cacheStoredStatusPageFromBackend,
+  cleanupLegacyMonitorStatusPageEntries,
   readLocalStatusPageSummaries,
-  promoteStatusPageDraft,
   removeStatusPage,
   removeCachedPublicStatusPage,
+  syncStoredStatusPageFromBackend,
   type StoredStatusPageSettings,
 } from "./statusPageStorage";
 import { useAppLanguage, type TranslationKey } from "../../lib/language";
@@ -35,12 +39,16 @@ interface StatusPagesPageProps {
   onCreateStatusPage?: () => void;
 }
 
-const mapMonitorToStatusPageRow = (monitor: BackendMonitor): StatusPageRow => ({
-  id: monitor._id,
-  name: monitor.name,
-  monitorGroup: monitor.url,
-  accessLevel: "Public",
-  status: monitor.status === "paused" ? "Unpublished" : "Published",
+const mapBackendStatusPageToRow = (
+  statusPage: BackendStatusPage,
+  monitorLookup: Map<string, BackendMonitor>,
+  t: (key: TranslationKey, values?: Record<string, string | number | boolean | null | undefined>) => string,
+): StatusPageRow => ({
+  id: statusPage.id,
+  name: statusPage.pageName?.trim() || t("statusPages.newPage"),
+  monitorGroup: formatMonitorSummary(statusPage.monitorIds ?? [], monitorLookup, t),
+  accessLevel: statusPage.passwordEnabled ? "Password protected" : "Public",
+  status: statusPage.isPublished === false ? "Unpublished" : "Published",
   source: "backend",
 });
 
@@ -90,13 +98,10 @@ const mapLocalStatusPageToRow = (
     name: pageName,
     monitorGroup: formatMonitorSummary(summary.monitorIds, monitorLookup, t),
     accessLevel,
-    status: "Published",
+    status: settings.isPublished === false ? "Unpublished" : "Published",
     source: "local",
   };
 };
-
-const shouldRemoveStaleLocalStatusPage = (error: unknown): boolean =>
-  isApiError(error) && [403, 404, 410].includes(error.status);
 
 const shouldIgnoreMissingStatusPageDeleteError = (error: unknown): boolean =>
   isApiError(error) && [404, 410].includes(error.status);
@@ -113,6 +118,9 @@ function StatusPagesPage({
   const [isLoadingRows, setIsLoadingRows] = useState(false);
   const [loadRowsError, setLoadRowsError] = useState<string | null>(null);
   const [deletingStatusPageId, setDeletingStatusPageId] = useState<
+    string | null
+  >(null);
+  const [publishingStatusPageId, setPublishingStatusPageId] = useState<
     string | null
   >(null);
 
@@ -145,10 +153,11 @@ function StatusPagesPage({
       }
 
       if (statusPage.source === "backend") {
-        await deleteMonitor(statusPage.id, authToken ?? undefined);
+        await deleteStatusPage(statusPage.id, authToken ?? undefined);
         setStatusPageRows((currentRows) =>
           currentRows.filter((row) => row.id !== statusPage.id),
         );
+        removeStatusPage(statusPage.id);
       }
 
       removeCachedPublicStatusPage(statusPage.id);
@@ -165,91 +174,147 @@ function StatusPagesPage({
     }
   };
 
+  const handleTogglePublishStatus = async (statusPage: StatusPageRow) => {
+    if (!statusPage.id || publishingStatusPageId) return;
+
+    const nextIsPublished = statusPage.status !== "Published";
+    const previousStatus = statusPage.status;
+
+    setPublishingStatusPageId(statusPage.id);
+    setLoadRowsError(null);
+    setStatusPageRows((currentRows) =>
+      currentRows.map((row) =>
+        row.id === statusPage.id
+          ? {
+              ...row,
+              status: nextIsPublished ? "Published" : "Unpublished",
+            }
+          : row,
+      ),
+    );
+
+    try {
+      if (statusPage.source === "backend") {
+        await updateStatusPagePublish(
+          statusPage.id,
+          nextIsPublished,
+          authToken ?? undefined,
+        );
+        syncStoredStatusPageFromBackend(statusPage.id, {
+          isPublished: nextIsPublished,
+        });
+        if (!nextIsPublished) {
+          removeCachedPublicStatusPage(statusPage.id);
+        }
+        return;
+      }
+
+      const currentSettings = readLocalStatusPageSummaries().find(
+        (summary) => summary.id === statusPage.id,
+      )?.settings;
+
+      if (currentSettings) {
+        syncStoredStatusPageFromBackend(statusPage.id, {
+          ...currentSettings,
+          isPublished: nextIsPublished,
+        });
+      }
+
+      await saveStatusPage(
+        statusPage.id,
+        {
+          pageName: statusPage.name,
+          monitorIds:
+            readLocalStatusPageSummaries().find(
+              (summary) => summary.id === statusPage.id,
+            )?.monitorIds ?? [],
+          passwordEnabled: currentSettings?.passwordEnabled ?? false,
+          password:
+            (currentSettings?.passwordEnabled ?? false)
+              ? (currentSettings?.password || "").trim()
+              : "",
+          customDomain: currentSettings?.customDomain?.trim(),
+          logoName: currentSettings?.logoName?.trim(),
+          density: currentSettings?.density,
+          alignment: currentSettings?.alignment,
+          isPublished: nextIsPublished,
+        },
+        authToken ?? undefined,
+      );
+
+      if (!nextIsPublished) {
+        removeCachedPublicStatusPage(statusPage.id);
+      }
+    } catch (error) {
+      setStatusPageRows((currentRows) =>
+        currentRows.map((row) =>
+          row.id === statusPage.id ? { ...row, status: previousStatus } : row,
+        ),
+      );
+
+      if (isApiError(error)) {
+        setLoadRowsError(error.message || t("statusPages.publishError"));
+      } else if (error instanceof Error && error.message.trim() !== "") {
+        setLoadRowsError(error.message);
+      } else {
+        setLoadRowsError(t("statusPages.publishError"));
+      }
+    } finally {
+      setPublishingStatusPageId(null);
+    }
+  };
+
   useEffect(() => {
     let cancelled = false;
 
     const loadStatusPageRows = async () => {
       setIsLoadingRows(true);
       setLoadRowsError(null);
-      const localStatusPageSummaries = readLocalStatusPageSummaries();
-      const pruneStaleLocalStatusPages = (
-        syncResults: PromiseSettledResult<unknown>[],
-      ) => {
-        const staleStatusPageIds = new Set<string>();
 
-        syncResults.forEach((result, index) => {
-          if (
-            result.status !== "rejected" ||
-            !shouldRemoveStaleLocalStatusPage(result.reason)
-          ) {
-            return;
-          }
-
-          const staleStatusPageId = localStatusPageSummaries[index]?.id?.trim();
-          if (staleStatusPageId) {
-            staleStatusPageIds.add(staleStatusPageId);
-          }
-        });
-
-        staleStatusPageIds.forEach((statusPageId) => {
-          removeStatusPage(statusPageId);
-        });
-      };
-
-      const localStatusPageSync = Promise.allSettled(
-        localStatusPageSummaries.map(async (summary) => {
-          const response = await saveStatusPage(
-            summary.id,
-            {
-              pageName: summary.settings.pageName?.trim() || t("statusPages.newPage"),
-              monitorIds: summary.monitorIds,
-              passwordEnabled: summary.settings.passwordEnabled ?? false,
-              password:
-                (summary.settings.passwordEnabled ?? false)
-                  ? (summary.settings.password || "").trim()
-                  : "",
-              customDomain: summary.settings.customDomain?.trim(),
-              logoName: summary.settings.logoName?.trim(),
-              density: summary.settings.density,
-              alignment: summary.settings.alignment,
-            },
-            authToken ?? undefined,
-          );
-
-          const resolvedStatusPageId = response.statusPage.id?.trim();
-          if (resolvedStatusPageId && resolvedStatusPageId !== summary.id) {
-            promoteStatusPageDraft(summary.id, resolvedStatusPageId);
-          }
-
-          return response;
-        }),
-      );
+      let backendStatusPages: BackendStatusPage[] = [];
 
       try {
-        const response = await fetchMonitors();
-        const localStatusPageSyncResults = await localStatusPageSync;
-        pruneStaleLocalStatusPages(localStatusPageSyncResults);
+        try {
+          const statusPagesResponse = await fetchStatusPages(authToken ?? undefined);
+          backendStatusPages = statusPagesResponse.statusPages ?? [];
+        } catch (statusPagesError) {
+          if (!isApiError(statusPagesError) || statusPagesError.status !== 404) {
+            throw statusPagesError;
+          }
+        }
+
+        const backendStatusPageIds = new Set(
+          backendStatusPages.map((statusPage) => statusPage.id),
+        );
+        backendStatusPages.forEach((statusPage) => {
+          cacheStoredStatusPageFromBackend(statusPage.id, statusPage);
+        });
+
+        const monitorsResponse = await fetchMonitors();
+        cleanupLegacyMonitorStatusPageEntries(
+          monitorsResponse.monitors.map((monitor) => monitor._id),
+        );
         if (cancelled) return;
 
-        const refreshedLocalStatusPageSummaries =
-          readLocalStatusPageSummaries();
-        const monitorLookup = new Map(
-          response.monitors.map((monitor) => [monitor._id, monitor]),
+        const localStatusPageSummaries = readLocalStatusPageSummaries().filter(
+          (summary) => !backendStatusPageIds.has(summary.id),
         );
-        const nextLocalStatusPageRows = refreshedLocalStatusPageSummaries.map(
+        const monitorLookup = new Map(
+          monitorsResponse.monitors.map((monitor) => [monitor._id, monitor]),
+        );
+        const nextLocalStatusPageRows = localStatusPageSummaries.map(
           (summary) => mapLocalStatusPageToRow(summary, monitorLookup, t),
         );
-        const backendStatusPageRows = response.monitors.map(
-          mapMonitorToStatusPageRow,
+        const backendStatusPageRows = backendStatusPages.map(
+          (statusPage) => mapBackendStatusPageToRow(statusPage, monitorLookup, t),
         );
 
         setStatusPageRows([
           ...nextLocalStatusPageRows,
           ...backendStatusPageRows,
         ]);
+        setLoadRowsError(null);
       } catch (error) {
-        const localStatusPageSyncResults = await localStatusPageSync;
-        pruneStaleLocalStatusPages(localStatusPageSyncResults);
         if (cancelled) return;
 
         const refreshedLocalStatusPageSummaries =
@@ -279,10 +344,18 @@ function StatusPagesPage({
 
     void loadStatusPageRows();
 
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void loadStatusPageRows();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
     return () => {
       cancelled = true;
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [t]);
+  }, [authToken, t]);
 
   return (
     <section className="status-pages-page">
@@ -397,20 +470,9 @@ function StatusPagesPage({
                     }
                     onClick={(event) => {
                       event.stopPropagation();
-                      setStatusPageRows((currentRows) =>
-                        currentRows.map((row) =>
-                          row.id === statusPage.id
-                            ? {
-                                ...row,
-                                status:
-                                  row.status === "Published"
-                                    ? "Unpublished"
-                                    : "Published",
-                              }
-                            : row,
-                        ),
-                      );
+                      void handleTogglePublishStatus(statusPage);
                     }}
+                    disabled={publishingStatusPageId === statusPage.id}
                   >
                     <PauseCircle size={12} />
                   </button>

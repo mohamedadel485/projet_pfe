@@ -10,6 +10,7 @@ import monitorService from '../services/monitorService';
 import integrationService from '../services/integrationService';
 import predictionService from '../services/predictionService';
 import { AuthRequest } from '../middleware/auth';
+import { ensureStatusPageForMonitor } from './statusPageController';
 
 const METHODS_WITHOUT_BODY = new Set(['HEAD', 'GET', 'DELETE', 'OPTIONS']);
 
@@ -98,6 +99,12 @@ const monitorController = {
 
       const monitor = new Monitor(monitorData);
       await monitor.save();
+
+      try {
+        await ensureStatusPageForMonitor(monitor, req.user!._id);
+      } catch (error) {
+        console.warn('Erreur creation status page (creation monitor):', error);
+      }
 
       try {
         const firstResult = await monitorService.checkMonitor(monitor);

@@ -7,6 +7,7 @@ export interface IStatusPage extends Document {
   monitorIds: string[];
   passwordEnabled: boolean;
   passwordHash?: string;
+  isPublished: boolean;
   customDomain?: string;
   logoName?: string;
   logoPath?: string;
@@ -62,6 +63,10 @@ const statusPageSchema = new Schema<IStatusPage>(
     passwordEnabled: {
       type: Boolean,
       default: false,
+    },
+    isPublished: {
+      type: Boolean,
+      default: true,
     },
     passwordHash: {
       type: String,

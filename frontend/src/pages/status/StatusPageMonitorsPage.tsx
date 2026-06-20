@@ -54,8 +54,8 @@ const readStoredSelectedMonitorIds = (
     validMonitorIds.has(monitorId),
   );
 
-  if (nextSelectedMonitorIds.length === 0 && !isNewStatusPage && validMonitorIds.has(statusPageId)) {
-    nextSelectedMonitorIds = [statusPageId];
+  if (nextSelectedMonitorIds.length === 0 && isNewStatusPage && monitors.length > 0) {
+    return monitors.map((monitor) => monitor.id);
   }
 
   return nextSelectedMonitorIds;

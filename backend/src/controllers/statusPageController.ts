@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { validationResult } from 'express-validator';
 import bcrypt from 'bcryptjs';
 import fs from 'fs';
+import jwt from 'jsonwebtoken';
 import path from 'path';
 import { AuthRequest } from '../middleware/auth';
 import { uploadsRoot } from '../middleware/upload';
@@ -9,11 +10,142 @@ import StatusPage from '../models/StatusPage';
 import Monitor from '../models/Moniteur';
 import MonitorLog from '../models/MonitorLog';
 import Incident from '../models/Incident';
+import Utilisateur from '../models/Utilisateur';
+import { getAuthTokenFromRequest, jwtSecret } from '../utils/authTokenHelpers';
 
 const SALT_ROUNDS = 10;
 
 const generateStatusPageId = (): string =>
   `status-page-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+
+const collectCoveredMonitorIds = (
+  statusPages: Array<{ statusPageId?: string; monitorIds?: string[] }>,
+  ownedMonitorIds: Set<string>,
+): Set<string> => {
+  const coveredMonitorIds = new Set<string>();
+
+  for (const statusPage of statusPages) {
+    const statusPageId = typeof statusPage.statusPageId === 'string' ? statusPage.statusPageId.trim() : '';
+    if (statusPageId !== '' && ownedMonitorIds.has(statusPageId)) {
+      coveredMonitorIds.add(statusPageId);
+    }
+
+    for (const monitorId of statusPage.monitorIds ?? []) {
+      if (typeof monitorId !== 'string') continue;
+      const trimmedMonitorId = monitorId.trim();
+      if (trimmedMonitorId !== '') {
+        coveredMonitorIds.add(trimmedMonitorId);
+      }
+    }
+  }
+
+  return coveredMonitorIds;
+};
+
+const generateUniqueStatusPageId = async (): Promise<string> => {
+  let statusPageId = generateStatusPageId();
+  while (await StatusPage.exists({ statusPageId })) {
+    statusPageId = generateStatusPageId();
+  }
+  return statusPageId;
+};
+
+export const ensureStatusPageForMonitor = async (
+  monitor: { _id: unknown; name?: string },
+  ownerId: unknown,
+): Promise<void> => {
+  const monitorId = String(monitor._id ?? '').trim();
+  if (!monitorId) return;
+
+  const pageName = String(monitor.name ?? '').trim() || 'Status page';
+
+  const legacyPage = await StatusPage.findOne({
+    owner: ownerId,
+    statusPageId: monitorId,
+  });
+
+  if (legacyPage) {
+    const linkedMonitorIds = Array.isArray(legacyPage.monitorIds)
+      ? legacyPage.monitorIds.map((id) => String(id).trim()).filter(Boolean)
+      : [];
+
+    if (!linkedMonitorIds.includes(monitorId)) {
+      await StatusPage.updateOne(
+        { _id: legacyPage._id },
+        { $set: { pageName, monitorIds: [monitorId] } },
+      );
+    }
+    return;
+  }
+
+  const alreadyLinked = await StatusPage.exists({
+    owner: ownerId,
+    monitorIds: monitorId,
+  });
+
+  if (alreadyLinked) return;
+
+  const statusPageId = await generateUniqueStatusPageId();
+
+  await StatusPage.create({
+    statusPageId,
+    owner: ownerId,
+    pageName,
+    monitorIds: [monitorId],
+    passwordEnabled: false,
+    isPublished: false,
+    density: 'wide',
+    alignment: 'left',
+  });
+};
+
+export const ensureStatusPagesForOwnedMonitors = async (ownerId: unknown): Promise<void> => {
+  const [monitors, statusPages] = await Promise.all([
+    Monitor.find({ owner: ownerId }).select('_id name').lean(),
+    StatusPage.find({ owner: ownerId }).select('statusPageId monitorIds').lean(),
+  ]);
+
+  if (monitors.length === 0) return;
+
+  const ownedMonitorIds = new Set(monitors.map((monitor) => monitor._id.toString()));
+  const coveredMonitorIds = collectCoveredMonitorIds(statusPages, ownedMonitorIds);
+
+  const repairLegacyPages: Array<Promise<unknown>> = [];
+  for (const statusPage of statusPages) {
+    const statusPageId = typeof statusPage.statusPageId === 'string' ? statusPage.statusPageId.trim() : '';
+    if (statusPageId === '' || !ownedMonitorIds.has(statusPageId)) continue;
+
+    const monitorIds = Array.isArray(statusPage.monitorIds)
+      ? statusPage.monitorIds.filter((monitorId): monitorId is string => typeof monitorId === 'string')
+      : [];
+
+    if (monitorIds.includes(statusPageId)) continue;
+
+    repairLegacyPages.push(
+      StatusPage.updateOne(
+        { owner: ownerId, statusPageId },
+        { $addToSet: { monitorIds: statusPageId } },
+      ),
+    );
+  }
+
+  if (repairLegacyPages.length > 0) {
+    await Promise.all(repairLegacyPages);
+    coveredMonitorIds.clear();
+    const refreshedStatusPages = await StatusPage.find({ owner: ownerId })
+      .select('statusPageId monitorIds')
+      .lean();
+    collectCoveredMonitorIds(refreshedStatusPages, ownedMonitorIds).forEach((monitorId) => {
+      coveredMonitorIds.add(monitorId);
+    });
+  }
+
+  const missingMonitors = monitors.filter((monitor) => !coveredMonitorIds.has(monitor._id.toString()));
+
+  await Promise.all(
+    missingMonitors.map((monitor) => ensureStatusPageForMonitor(monitor, ownerId)),
+  );
+};
 
 const normalizeMonitorIds = (value: unknown): string[] => {
   let normalizedValue = value;
@@ -110,6 +242,27 @@ const deleteStoredStatusPageLogoFile = (logoPath?: string | null): void => {
   }
 };
 
+const getOptionalAuthenticatedUser = async (req: Request) => {
+  const token = getAuthTokenFromRequest(req);
+  if (!token || !jwtSecret) return null;
+
+  try {
+    const decoded = jwt.verify(token, jwtSecret) as { userId?: string };
+    if (typeof decoded !== 'object' || decoded === null || typeof decoded.userId !== 'string') {
+      return null;
+    }
+
+    const user = await Utilisateur.findById(decoded.userId).select('-password');
+    if (!user || !user.isActive) {
+      return null;
+    }
+
+    return user;
+  } catch {
+    return null;
+  }
+};
+
 const buildPublicStatusPagePayload = async (statusPage: {
   statusPageId: string;
   pageName: string;
@@ -121,6 +274,7 @@ const buildPublicStatusPagePayload = async (statusPage: {
   logoPath?: string;
   density?: 'wide' | 'compact';
   alignment?: 'left' | 'center';
+  isPublished?: boolean;
 }, baseUrl: string) => {
   const monitors = await Monitor.find({
     _id: { $in: statusPage.monitorIds },
@@ -166,7 +320,9 @@ const buildPublicStatusPagePayload = async (statusPage: {
       id: statusPage.statusPageId,
       pageName: statusPage.pageName,
       passwordEnabled: statusPage.passwordEnabled,
+      isPublished: statusPage.isPublished ?? true,
       monitors,
+      viewerCanBypassPassword: false,
       customDomain: statusPage.customDomain,
       logoName: statusPage.logoName,
       logoUrl: resolvePublicAssetUrl(baseUrl, statusPage.logoPath),
@@ -188,6 +344,7 @@ const buildPublicStatusPagePreviewPayload = (
     logoPath?: string;
     density?: 'wide' | 'compact';
     alignment?: 'left' | 'center';
+    isPublished?: boolean;
   },
   baseUrl: string,
 ) => ({
@@ -195,7 +352,9 @@ const buildPublicStatusPagePreviewPayload = (
     id: statusPage.statusPageId,
     pageName: statusPage.pageName,
     passwordEnabled: true,
+    isPublished: statusPage.isPublished ?? true,
     monitors: [],
+    viewerCanBypassPassword: false,
     customDomain: statusPage.customDomain,
     logoName: statusPage.logoName,
     logoUrl: resolvePublicAssetUrl(baseUrl, statusPage.logoPath),
@@ -215,7 +374,9 @@ const buildPublicPayloadFromSingleMonitor = async (monitor: {
     id: string;
     pageName: string;
     passwordEnabled: boolean;
+    isPublished: boolean;
     monitors: unknown[];
+    viewerCanBypassPassword: boolean;
     customDomain?: string;
     logoName?: string;
     density?: 'wide' | 'compact';
@@ -252,7 +413,9 @@ const buildPublicPayloadFromSingleMonitor = async (monitor: {
       id: monitorId,
       pageName: fullMonitor.name,
       passwordEnabled: false,
+      isPublished: true,
       monitors: [fullMonitor],
+      viewerCanBypassPassword: false,
       density: 'wide',
       alignment: 'left',
     },
@@ -287,21 +450,24 @@ const statusPageController = {
 
       const passwordEnabled = parseBooleanField(req.body.passwordEnabled);
       const rawPassword = typeof req.body.password === 'string' ? req.body.password.trim() : '';
-      if (passwordEnabled && rawPassword === '') {
-        res.status(400).json({ error: 'Mot de passe requis quand la protection est activee' });
-        return;
-      }
 
       const nextPageName = String(req.body.pageName ?? '').trim();
       const nextCustomDomain = typeof req.body.customDomain === 'string' ? req.body.customDomain.trim() : '';
       const nextDensity = req.body.density === 'compact' ? 'compact' : 'wide';
       const nextAlignment = req.body.alignment === 'center' ? 'center' : 'left';
+      const nextIsPublished =
+        req.body.isPublished === undefined ? undefined : parseBooleanField(req.body.isPublished);
       const uploadedLogo = req.file as { originalname?: string; filename?: string } | undefined;
 
       const existing = await StatusPage.findOne({
         statusPageId,
         owner: req.user!._id,
       });
+
+      if (passwordEnabled && rawPassword === '' && !existing?.passwordHash) {
+        res.status(400).json({ error: 'Mot de passe requis quand la protection est activee' });
+        return;
+      }
       const nextPasswordHash = passwordEnabled
         ? rawPassword
           ? await bcrypt.hash(rawPassword, SALT_ROUNDS)
@@ -344,6 +510,7 @@ const statusPageController = {
             logoPath: nextLogoPath || undefined,
             density: nextDensity,
             alignment: nextAlignment,
+            ...(nextIsPublished === undefined ? {} : { isPublished: nextIsPublished }),
           },
           $setOnInsert: {
             statusPageId: resolvedStatusPageId,
@@ -364,6 +531,7 @@ const statusPageController = {
           pageName: statusPage.pageName,
           monitorIds: statusPage.monitorIds,
           passwordEnabled: statusPage.passwordEnabled,
+          isPublished: statusPage.isPublished ?? true,
           customDomain: statusPage.customDomain,
           logoName: statusPage.logoName,
           logoUrl: resolvePublicAssetUrl(getRequestBaseUrl(req), statusPage.logoPath),
@@ -374,6 +542,37 @@ const statusPageController = {
     } catch (error) {
       console.error('Erreur sauvegarde status page:', error);
       res.status(500).json({ error: 'Erreur lors de la sauvegarde de la status page' });
+    }
+  },
+
+  list: async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+      await ensureStatusPagesForOwnedMonitors(req.user!._id);
+
+      const statusPages = await StatusPage.find({ owner: req.user!._id })
+        .sort({ updatedAt: -1 })
+        .lean();
+
+      const baseUrl = getRequestBaseUrl(req);
+
+      res.json({
+        statusPages: statusPages.map((statusPage) => ({
+          id: statusPage.statusPageId,
+          pageName: statusPage.pageName,
+          monitorIds: statusPage.monitorIds,
+          passwordEnabled: statusPage.passwordEnabled,
+          isPublished: statusPage.isPublished ?? true,
+          customDomain: statusPage.customDomain,
+          logoName: statusPage.logoName,
+          logoUrl: resolvePublicAssetUrl(baseUrl, statusPage.logoPath),
+          density: statusPage.density,
+          alignment: statusPage.alignment,
+          updatedAt: statusPage.updatedAt,
+        })),
+      });
+    } catch (error) {
+      console.error('Erreur recuperation status pages:', error);
+      res.status(500).json({ error: 'Erreur lors de la recuperation des status pages' });
     }
   },
 
@@ -399,10 +598,45 @@ const statusPageController = {
     }
   },
 
+  setPublished: async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        res.status(400).json({ errors: errors.array() });
+        return;
+      }
+
+      const statusPageId = String(req.params.id ?? '').trim();
+      const isPublished = parseBooleanField(req.body.isPublished);
+      const statusPage = await StatusPage.findOneAndUpdate(
+        { statusPageId, owner: req.user!._id },
+        { $set: { isPublished } },
+        { new: true },
+      );
+
+      if (!statusPage) {
+        res.status(404).json({ error: 'Status page non trouvee' });
+        return;
+      }
+
+      res.json({
+        message: isPublished ? 'Status page publiee avec succes' : 'Status page depubliee avec succes',
+        statusPage: {
+          id: statusPage.statusPageId,
+          isPublished: statusPage.isPublished ?? true,
+        },
+      });
+    } catch (error) {
+      console.error('Erreur publication status page:', error);
+      res.status(500).json({ error: 'Erreur lors de la mise a jour du statut de publication' });
+    }
+  },
+
   getPublic: async (req: Request, res: Response): Promise<void> => {
     try {
       const statusPageId = String(req.params.id ?? '').trim();
       const statusPage = await StatusPage.findOne({ statusPageId }).lean();
+      const viewerUser = await getOptionalAuthenticatedUser(req);
 
       if (!statusPage) {
         const monitorFallback = await Monitor.findById(statusPageId).lean();
@@ -416,12 +650,32 @@ const statusPageController = {
         return;
       }
 
+      const viewerIsOwner = viewerUser
+        ? String(viewerUser._id) === String(statusPage.owner)
+        : false;
+
+      if (statusPage.isPublished === false && !viewerIsOwner) {
+        res.status(410).json({ error: 'Status page non publiee' });
+        return;
+      }
+
       if (statusPage.passwordEnabled) {
+        if (viewerIsOwner) {
+          const payload = await buildPublicStatusPagePayload(
+            statusPage,
+            getRequestBaseUrl(req),
+          );
+          payload.statusPage.viewerCanBypassPassword = true;
+          res.json(payload);
+          return;
+        }
+
         res.json(buildPublicStatusPagePreviewPayload(statusPage, getRequestBaseUrl(req)));
         return;
       }
 
       const payload = await buildPublicStatusPagePayload(statusPage, getRequestBaseUrl(req));
+      payload.statusPage.viewerCanBypassPassword = viewerIsOwner;
       res.json(payload);
     } catch (error) {
       console.error('Erreur recuperation status page publique:', error);
@@ -440,9 +694,26 @@ const statusPageController = {
       const statusPageId = String(req.params.id ?? '').trim();
       const password = String(req.body.password ?? '');
       const statusPage = await StatusPage.findOne({ statusPageId });
+      const viewerUser = await getOptionalAuthenticatedUser(req);
 
       if (!statusPage) {
         res.status(404).json({ error: 'Status page non trouvee' });
+        return;
+      }
+
+      const viewerIsOwner = viewerUser
+        ? String(viewerUser._id) === String(statusPage.owner)
+        : false;
+
+      if (statusPage.isPublished === false && !viewerIsOwner) {
+        res.status(410).json({ error: 'Status page non publiee' });
+        return;
+      }
+
+      if (viewerIsOwner) {
+        const payload = await buildPublicStatusPagePayload(statusPage, getRequestBaseUrl(req));
+        payload.statusPage.viewerCanBypassPassword = true;
+        res.json(payload);
         return;
       }
 

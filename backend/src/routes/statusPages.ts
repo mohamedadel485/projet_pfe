@@ -6,6 +6,8 @@ import statusPageController from '../controllers/statusPageController';
 
 const router = Router();
 
+router.get('/', authenticate, statusPageController.list);
+
 router.put(
   '/:id',
   authenticate,
@@ -23,6 +25,13 @@ router.put(
 );
 
 router.delete('/:id', authenticate, statusPageController.delete);
+
+router.patch(
+  '/:id/publish',
+  authenticate,
+  [body('isPublished').isBoolean()],
+  statusPageController.setPublished,
+);
 
 router.get('/:id/public', statusPageController.getPublic);
 

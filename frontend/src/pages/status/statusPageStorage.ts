@@ -9,6 +9,7 @@ export interface StoredStatusPageSettings {
   logoName?: string;
   password?: string;
   passwordEnabled?: boolean;
+  isPublished?: boolean;
   density?: StatusPageDensity;
   alignment?: StatusPageAlignment;
 }
@@ -211,6 +212,87 @@ export const removeCachedPublicStatusPage = (statusPageId: string): void => {
   } catch {
     // Ignore storage failures and keep the UI usable.
   }
+};
+
+const applyStoredStatusPageSnapshot = (
+  statusPageId: string,
+  backendStatusPage: {
+    pageName?: string;
+    monitorIds?: string[];
+    passwordEnabled?: boolean;
+    isPublished?: boolean;
+    customDomain?: string;
+    logoName?: string;
+    density?: StatusPageDensity;
+    alignment?: StatusPageAlignment;
+  },
+): void => {
+  const currentSettings = readStoredStatusPageSettings(statusPageId);
+
+  writeStoredStatusPageSettings(statusPageId, {
+    ...currentSettings,
+    pageName: backendStatusPage.pageName ?? currentSettings.pageName,
+    customDomain: backendStatusPage.customDomain ?? currentSettings.customDomain,
+    logoName: backendStatusPage.logoName ?? currentSettings.logoName,
+    passwordEnabled: backendStatusPage.passwordEnabled ?? currentSettings.passwordEnabled,
+    isPublished: backendStatusPage.isPublished ?? currentSettings.isPublished,
+    density: backendStatusPage.density ?? currentSettings.density,
+    alignment: backendStatusPage.alignment ?? currentSettings.alignment,
+  });
+
+  if (Array.isArray(backendStatusPage.monitorIds)) {
+    writeStoredStatusPageMonitorIds(statusPageId, backendStatusPage.monitorIds);
+  }
+};
+
+export const syncStoredStatusPageFromBackend = (
+  statusPageId: string,
+  backendStatusPage: {
+    pageName?: string;
+    monitorIds?: string[];
+    passwordEnabled?: boolean;
+    isPublished?: boolean;
+    customDomain?: string;
+    logoName?: string;
+    density?: StatusPageDensity;
+    alignment?: StatusPageAlignment;
+  },
+): void => {
+  applyStoredStatusPageSnapshot(statusPageId, backendStatusPage);
+  registerStatusPage(statusPageId);
+};
+
+export const cacheStoredStatusPageFromBackend = (
+  statusPageId: string,
+  backendStatusPage: {
+    pageName?: string;
+    monitorIds?: string[];
+    passwordEnabled?: boolean;
+    isPublished?: boolean;
+    customDomain?: string;
+    logoName?: string;
+    density?: StatusPageDensity;
+    alignment?: StatusPageAlignment;
+  },
+): void => {
+  applyStoredStatusPageSnapshot(statusPageId, backendStatusPage);
+};
+
+export const cleanupLegacyMonitorStatusPageEntries = (monitorIds: string[]): void => {
+  const monitorIdSet = new Set(
+    monitorIds
+      .filter((monitorId): monitorId is string => typeof monitorId === 'string')
+      .map((monitorId) => monitorId.trim())
+      .filter((monitorId) => monitorId !== ''),
+  );
+
+  if (monitorIdSet.size === 0) return;
+
+  readStatusPageRegistry().forEach((statusPageId) => {
+    if (monitorIdSet.has(statusPageId)) {
+      removeStatusPage(statusPageId);
+    }
+  });
 };
 
 export const promoteStatusPageDraft = (

@@ -54,6 +54,7 @@ import {
   fetchInvitations,
   fetchMe,
   fetchMonitors,
+  fetchStatusPages,
   fetchUsers,
   isApiError,
   login,
@@ -1908,6 +1909,11 @@ function App() {
       try {
         await createMonitor(payload, authToken);
         await refreshMonitors(authToken);
+        try {
+          await fetchStatusPages(authToken);
+        } catch {
+          // Status page sync is best-effort after monitor creation.
+        }
         navigateTo("/monitoring");
         return null;
       } catch (error) {
@@ -1963,6 +1969,11 @@ function App() {
         }
 
         await refreshMonitors(authToken);
+        try {
+          await fetchStatusPages(authToken);
+        } catch {
+          // Status page sync is best-effort after batch monitor creation.
+        }
         const currentRole = currentUser?.role;
         if (isCurrentUserAdmin && currentRole) {
           await refreshTeamSummary(authToken, currentRole);

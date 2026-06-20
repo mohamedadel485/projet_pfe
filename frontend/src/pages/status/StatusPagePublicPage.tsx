@@ -4,7 +4,6 @@ import { Line } from 'react-chartjs-2';
 import {
   fetchPublicStatusPage,
   isApiError,
-  saveStatusPage,
   unlockPublicStatusPage,
   type BackendIncident,
   type BackendMonitor,
@@ -18,6 +17,7 @@ import {
   readStoredStatusPageMonitorIds,
   readStoredStatusPageSettings,
   readLocalStatusPageSummaries,
+  removeCachedPublicStatusPage,
   writeCachedPublicStatusPage,
 } from './statusPageStorage';
 import './status-page-public-page.css';
@@ -249,6 +249,14 @@ const mergePublicStatusPageResponses = (responses: PublicStatusPageResponse[]): 
     logsByMonitorId,
     incidentsByMonitorId,
   };
+};
+
+const canUseCachedPublicStatusPage = (response: PublicStatusPageResponse): boolean => {
+  if (!response.statusPage?.passwordEnabled) {
+    return true;
+  }
+
+  return (response.statusPage.monitors?.length ?? 0) === 0;
 };
 
 const buildUptimeBars = (logsNewestFirst: BackendMonitorLog[], monitorStatus: BackendMonitor['status']): Array<'up' | 'down'> => {
@@ -581,6 +589,7 @@ function StatusPagePublicPage({
   const [unlockedPassword, setUnlockedPassword] = useState<string | null>(configuredPassword.trim() ? null : configuredPassword);
   const [backendPasswordProtected, setBackendPasswordProtected] = useState(false);
   const [backendPasswordUnlocked, setBackendPasswordUnlocked] = useState(false);
+  const [backendViewerCanBypassPassword, setBackendViewerCanBypassPassword] = useState(false);
   const [publishedMonitors, setPublishedMonitors] = useState<BackendMonitor[]>([]);
   const [monitorLogsById, setMonitorLogsById] = useState<Record<string, BackendMonitorLog[]>>({});
   const [monitorIncidentsById, setMonitorIncidentsById] = useState<Record<string, BackendIncident[]>>({});
@@ -624,8 +633,14 @@ function StatusPagePublicPage({
     setMonitorLogsById(nextLogsByMonitorId);
     setMonitorIncidentsById(nextIncidentsByMonitorId);
     setBackendPasswordProtected(Boolean(response.statusPage?.passwordEnabled));
+    setBackendViewerCanBypassPassword(Boolean(response.statusPage?.viewerCanBypassPassword));
     if (!response.statusPage?.passwordEnabled) {
       setBackendPasswordUnlocked(false);
+    }
+
+    if (response.statusPage?.isPublished === false) {
+      removeCachedPublicStatusPage(statusPageId);
+      return;
     }
 
     writeCachedPublicStatusPage(statusPageId, {
@@ -651,6 +666,7 @@ function StatusPagePublicPage({
     setUnlockedPassword(configuredPassword.trim() ? null : configuredPassword);
     setBackendPasswordProtected(false);
     setBackendPasswordUnlocked(false);
+    setBackendViewerCanBypassPassword(false);
   }, [configuredAlignment, configuredDensity, configuredPageName, configuredPassword, statusPageId]);
 
   useEffect(() => {
@@ -659,21 +675,12 @@ function StatusPagePublicPage({
     const loadPublicStatusData = async () => {
       const cachedPublicStatusPage = readCachedPublicStatusPage(statusPageId);
 
-      if (configuredPassword.trim() && unlockedPassword !== configuredPassword) {
-        setIsLoading(false);
-        setLoadError(null);
-        setPublishedMonitors([]);
-        setMonitorLogsById({});
-        setMonitorIncidentsById({});
-        return;
-      }
-
       setIsLoading(true);
       setLoadError(null);
 
       const loadLocalDraftStatusPageData = async (): Promise<boolean> => {
         if (storedStatusPageMonitorIds.length === 0) {
-          if (cachedPublicStatusPage) {
+          if (cachedPublicStatusPage && canUseCachedPublicStatusPage(cachedPublicStatusPage)) {
             syncPublicStatusPageState(cachedPublicStatusPage);
             return true;
           }
@@ -686,7 +693,7 @@ function StatusPagePublicPage({
         }
 
         const publicStatusPageResponses = await Promise.allSettled(
-          storedStatusPageMonitorIds.map((monitorId) => fetchPublicStatusPage(monitorId)),
+          storedStatusPageMonitorIds.map((monitorId) => fetchPublicStatusPage(monitorId, authToken ?? undefined)),
         );
         if (cancelled) return true;
 
@@ -695,7 +702,7 @@ function StatusPagePublicPage({
           .map((result) => result.value);
 
         if (successfulResponses.length === 0) {
-          if (cachedPublicStatusPage) {
+          if (cachedPublicStatusPage && canUseCachedPublicStatusPage(cachedPublicStatusPage)) {
             syncPublicStatusPageState(cachedPublicStatusPage);
             return true;
           }
@@ -727,32 +734,28 @@ function StatusPagePublicPage({
           incidentsByMonitorId: mergedDraftData.incidentsByMonitorId,
         });
 
-        if (statusPageId !== 'new') {
-          void saveStatusPage(
-            statusPageId,
-            {
-              pageName: nextPageName,
-              monitorIds: mergedDraftData.monitors.map((monitor) => monitor._id),
-              passwordEnabled: configuredPasswordEnabled,
-              password: configuredPasswordEnabled ? savedPassword.trim() : '',
-              customDomain: storedStatusPageSettings.customDomain?.trim(),
-              logoName: storedStatusPageSettings.logoName?.trim(),
-              density: storedStatusPageSettings.density,
-              alignment: storedStatusPageSettings.alignment,
-            },
-            authToken ?? undefined,
-          ).catch(() => undefined);
-        }
-
         return true;
       };
 
       try {
-        const publicStatusPageResponse = await fetchPublicStatusPage(statusPageId);
+        const publicStatusPageResponse = await fetchPublicStatusPage(statusPageId, authToken ?? undefined);
         if (cancelled) return;
         syncPublicStatusPageState(publicStatusPageResponse);
       } catch (error) {
         if (cancelled) return;
+
+        if (isApiError(error) && error.status === 410) {
+          removeCachedPublicStatusPage(statusPageId);
+          setLoadError(t('statusPublic.errors.unpublished'));
+          setPublishedMonitors([]);
+          setMonitorLogsById({});
+          setMonitorIncidentsById({});
+          setBackendPasswordProtected(false);
+          setBackendPasswordUnlocked(false);
+          setBackendViewerCanBypassPassword(false);
+          setUnlockedPassword(configuredPassword);
+          return;
+        }
 
         if (isApiError(error) && error.status === 404 && isLocalStatusPage) {
           const handledLocally = await loadLocalDraftStatusPageData();
@@ -761,7 +764,7 @@ function StatusPagePublicPage({
           }
         }
 
-        if (cachedPublicStatusPage) {
+        if (cachedPublicStatusPage && canUseCachedPublicStatusPage(cachedPublicStatusPage)) {
           syncPublicStatusPageState(cachedPublicStatusPage);
           return;
         }
@@ -814,7 +817,8 @@ function StatusPagePublicPage({
   ]);
 
   const hasLocalPassword = configuredPassword.trim() !== '';
-  const isPasswordRequired = hasLocalPassword || backendPasswordProtected;
+  const isPasswordRequired =
+    !backendViewerCanBypassPassword && (hasLocalPassword || backendPasswordProtected);
   const isPasswordUnlocked =
     !isPasswordRequired || (hasLocalPassword && unlockedPassword === configuredPassword) || backendPasswordUnlocked;
   const isLocked = isPasswordRequired && !isPasswordUnlocked;

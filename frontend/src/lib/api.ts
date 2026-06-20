@@ -232,7 +232,9 @@ export interface PublicStatusPageResponse {
     id: string;
     pageName: string;
     passwordEnabled: boolean;
+    isPublished?: boolean;
     monitors: BackendMonitor[];
+    viewerCanBypassPassword?: boolean;
     customDomain?: string;
     logoName?: string;
     logoUrl?: string;
@@ -247,6 +249,7 @@ export interface SaveStatusPageInput {
   pageName: string;
   monitorIds: string[];
   passwordEnabled?: boolean;
+  isPublished?: boolean;
   password?: string;
   customDomain?: string;
   logoName?: string;
@@ -262,12 +265,31 @@ export interface SaveStatusPageResponse {
     pageName: string;
     monitorIds: string[];
     passwordEnabled: boolean;
+    isPublished?: boolean;
     customDomain?: string;
     logoName?: string;
     logoUrl?: string;
     density?: "wide" | "compact";
     alignment?: "left" | "center";
   };
+}
+
+export interface BackendStatusPage {
+  id: string;
+  pageName: string;
+  monitorIds: string[];
+  passwordEnabled: boolean;
+  isPublished?: boolean;
+  customDomain?: string;
+  logoName?: string;
+  logoUrl?: string;
+  density?: "wide" | "compact";
+  alignment?: "left" | "center";
+  updatedAt?: string;
+}
+
+export interface StatusPageListResponse {
+  statusPages: BackendStatusPage[];
 }
 
 export interface CreateMonitorInput {
@@ -730,6 +752,7 @@ const request = async <T>(
   const isMaintenancePath = path.startsWith("/maintenances");
   const isAuthPath = path.startsWith("/auth/");
   const isAuthRegisterPath = path.startsWith("/auth/register");
+  const isStatusPagesPath = path.startsWith("/status-pages");
   const isRelativeApiBase = !isHttpUrl(API_BASE_URL);
   const directBackendTargets = LOCAL_DIRECT_BACKEND_FALLBACKS.filter(
     (target) => buildDirectBackendEndpoint(target, path) !== endpoint,
@@ -847,6 +870,7 @@ const request = async <T>(
       (response.status >= 500 ||
         response.status === 405 ||
         (isMaintenancePath && response.status === 404) ||
+        (isStatusPagesPath && response.status === 404) ||
         (isAuthPath && response.status === 404) ||
         (isAuthRegisterPath && response.status === 403));
 
@@ -1160,11 +1184,17 @@ export const fetchMonitorPrediction = (
 
 export const fetchPublicStatusPage = (
   statusPageId: string,
+  token?: string,
 ): Promise<PublicStatusPageResponse> =>
   request<PublicStatusPageResponse>(
     `/status-pages/${encodeURIComponent(statusPageId)}/public`,
-    { credentials: "omit" },
+    { token },
   );
+
+export const fetchStatusPages = (
+  token?: string,
+): Promise<StatusPageListResponse> =>
+  request<StatusPageListResponse>("/status-pages", { token });
 
 const buildStatusPageFormData = (payload: SaveStatusPageInput): FormData => {
   const formData = new FormData();
@@ -1172,6 +1202,9 @@ const buildStatusPageFormData = (payload: SaveStatusPageInput): FormData => {
   formData.append("pageName", payload.pageName);
   formData.append("monitorIds", JSON.stringify(payload.monitorIds ?? []));
   formData.append("passwordEnabled", String(Boolean(payload.passwordEnabled)));
+  if (payload.isPublished !== undefined) {
+    formData.append("isPublished", String(Boolean(payload.isPublished)));
+  }
   formData.append("password", payload.password ?? "");
   formData.append("customDomain", payload.customDomain ?? "");
   formData.append("logoName", payload.logoName ?? "");
@@ -1208,6 +1241,20 @@ export const deleteStatusPage = (
     {
       method: "DELETE",
       token,
+    },
+  );
+
+export const updateStatusPagePublish = (
+  statusPageId: string,
+  isPublished: boolean,
+  token?: string,
+): Promise<{ message: string; statusPage: { id: string; isPublished: boolean } }> =>
+  request<{ message: string; statusPage: { id: string; isPublished: boolean } }>(
+    `/status-pages/${encodeURIComponent(statusPageId)}/publish`,
+    {
+      method: "PATCH",
+      token,
+      body: { isPublished },
     },
   );
 

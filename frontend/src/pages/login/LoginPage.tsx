@@ -556,10 +556,7 @@ function LoginPage({
                   {forgotStep === 2 && (
                     <>
                       <p className="login-modal-description">
-                        {t("auth.codeSentDescription").replace(
-                          "{email}",
-                          forgotEmail,
-                        )}
+                        {t("auth.codeSentDescription")}
                       </p>
                       <label
                         className="login-modal-label"

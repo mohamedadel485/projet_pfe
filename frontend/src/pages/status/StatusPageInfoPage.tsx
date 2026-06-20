@@ -1,6 +1,6 @@
 import { ChevronRight, Upload } from 'lucide-react';
 import { type ChangeEvent, useEffect, useRef, useState } from 'react';
-import { isApiError, saveStatusPage } from '../../lib/api';
+import { isApiError, saveStatusPage, fetchStatusPages } from '../../lib/api';
 import { useAppLanguage } from '../../lib/language';
 import type { StatusPageMonitorOption } from './StatusPageMonitorsPage';
 import {
@@ -9,6 +9,7 @@ import {
   removeStatusPage,
   readStoredStatusPageMonitorIds,
   readStoredStatusPageSettings,
+  syncStoredStatusPageFromBackend,
   type StoredStatusPageSettings,
   writeStoredStatusPageMonitorIds,
   writeStoredStatusPageSettings,
@@ -110,8 +111,8 @@ const readSelectedMonitorIds = (statusPageId: string, monitors: StatusPageMonito
   const storedMonitorIds = readStoredStatusPageMonitorIds(statusPageId);
   const nextSelectedMonitorIds = storedMonitorIds.filter((monitorId) => validMonitorIds.has(monitorId));
 
-  if (nextSelectedMonitorIds.length === 0 && statusPageId !== 'new' && validMonitorIds.has(statusPageId)) {
-    return [statusPageId];
+  if (nextSelectedMonitorIds.length === 0 && statusPageId === 'new' && monitors.length > 0) {
+    return monitors.map((monitor) => monitor.id);
   }
 
   return nextSelectedMonitorIds;
@@ -192,6 +193,60 @@ function StatusPageInfoPage({
   }, [monitorIdsKey, monitors, statusPageId, statusPageName]);
 
   useEffect(() => {
+    if (isNewStatusPage || !authToken) return;
+
+    let cancelled = false;
+
+    const hydrateFromBackend = async () => {
+      try {
+        const response = await fetchStatusPages(authToken);
+        const backendStatusPage = response.statusPages.find(
+          (statusPage) => statusPage.id === statusPageId,
+        );
+
+        if (!backendStatusPage || cancelled) return;
+
+        syncStoredStatusPageFromBackend(statusPageId, backendStatusPage);
+
+        setStoredSettings((currentSettings) => ({
+          ...currentSettings,
+          pageName: backendStatusPage.pageName ?? currentSettings.pageName,
+          customDomain: backendStatusPage.customDomain ?? currentSettings.customDomain,
+          logoName: backendStatusPage.logoName ?? currentSettings.logoName,
+          passwordEnabled: backendStatusPage.passwordEnabled,
+          isPublished: backendStatusPage.isPublished ?? true,
+          density: backendStatusPage.density === 'compact' ? 'compact' : 'wide',
+          alignment: backendStatusPage.alignment === 'center' ? 'center' : 'left',
+        }));
+        setFormValues((currentValues) => ({
+          ...currentValues,
+          pageName: backendStatusPage.pageName?.trim() || currentValues.pageName,
+          customDomain: backendStatusPage.customDomain ?? currentValues.customDomain,
+          logoName: backendStatusPage.logoName ?? currentValues.logoName,
+          passwordEnabled: backendStatusPage.passwordEnabled,
+          density: backendStatusPage.density === 'compact' ? 'compact' : currentValues.density,
+          alignment: backendStatusPage.alignment === 'center' ? 'center' : currentValues.alignment,
+        }));
+        setSelectedMonitorIds(
+          backendStatusPage.monitorIds?.length
+            ? backendStatusPage.monitorIds.filter((monitorId) =>
+                monitors.some((monitor) => monitor.id === monitorId),
+              )
+            : readSelectedMonitorIds(statusPageId, monitors),
+        );
+      } catch {
+        // Keep local draft values when backend hydration fails.
+      }
+    };
+
+    void hydrateFromBackend();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authToken, isNewStatusPage, monitors, statusPageId]);
+
+  useEffect(() => {
     if (hydratedStatusPageId !== statusPageId) return;
 
     writeStoredStatusPageSettings(statusPageId, {
@@ -201,6 +256,7 @@ function StatusPageInfoPage({
       logoName: formValues.logoName,
       password: formValues.password,
       passwordEnabled: formValues.passwordEnabled,
+      isPublished: storedSettings.isPublished !== false,
       density: formValues.density,
       alignment: formValues.alignment,
     });
@@ -316,6 +372,7 @@ function StatusPageInfoPage({
         logoFile,
         density: nextStoredSettings.density,
         alignment: nextStoredSettings.alignment,
+        isPublished: storedSettings.isPublished !== false,
       }, authToken ?? undefined);
 
       const resolvedStatusPageId =
@@ -327,6 +384,12 @@ function StatusPageInfoPage({
       } else if (resolvedStatusPageId !== statusPageId) {
         promoteStatusPageDraft(statusPageId, resolvedStatusPageId);
       }
+
+      syncStoredStatusPageFromBackend(resolvedStatusPageId, {
+        ...nextStoredSettings,
+        monitorIds: nextMonitorIds,
+        isPublished: storedSettings.isPublished !== false,
+      });
 
       setSaveNotice(
         isNewStatusPage
